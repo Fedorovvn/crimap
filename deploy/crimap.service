@@ -1,0 +1,25 @@
+[Unit]
+Description=Crimap incident map
+After=network.target
+
+[Service]
+Type=simple
+User=crimap
+Group=crimap
+WorkingDirectory=/srv/crimap/app
+Environment=NODE_ENV=production
+Environment=SITE_TARGET=vps
+Environment=DATABASE_PATH=/srv/crimap/data/incidents.sqlite
+ExecStart=/srv/crimap/runtime/node/bin/node /srv/crimap/app/node_modules/vinext/dist/cli.js start --hostname 127.0.0.1 --port 8082
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+UMask=0027
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/crimap/data /srv/crimap/app/dist
+
+[Install]
+WantedBy=multi-user.target

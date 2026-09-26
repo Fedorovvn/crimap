@@ -1,0 +1,68 @@
+{
+  "initialPrompts": {
+    "mode": "built-in image_gen",
+    "assets": [
+      {
+        "name": "adult-male",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One adult male silhouette bust, simple short hair and adult head/shoulder proportions.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-3474d841-3b1d-4dd2-99d6-073fdf563b55.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/adult-male.png"
+      },
+      {
+        "name": "adult-female",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One adult female silhouette bust, simple shoulder-length hair and adult head/shoulder proportions.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-4f03b8ec-1564-46d1-87df-deb3a549614a.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/adult-female.png"
+      },
+      {
+        "name": "elderly-male",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One elderly male silhouette bust, receding short hair, mature head outline and gently rounded shoulders.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-06abbd82-11ff-44aa-af83-4710126ddc43.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/elderly-male.png"
+      },
+      {
+        "name": "elderly-female",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One elderly female silhouette bust, simple small hair bun and mature head outline, gently rounded shoulders.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-13a0b8cf-a5d2-4627-b1f8-7287588c300e.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/elderly-female.png"
+      },
+      {
+        "name": "boy-child",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One boy child silhouette bust, small rounded head and narrow child-sized shoulders, short youthful haircut.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-7c46e7f9-cc35-4b61-8694-b5a8c79a22a1.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/boy-child.png"
+      },
+      {
+        "name": "girl-child",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One girl child silhouette bust, small rounded head and narrow child-sized shoulders, simple youthful bob haircut.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-d2d7ea24-da6e-411a-9539-29d59ffed984.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/girl-child.png"
+      },
+      {
+        "name": "neutral-child",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One gender-neutral child silhouette bust, small rounded head and narrow child-sized shoulders, simple neutral youthful haircut.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-a46ff6c9-d6c9-404b-9e8a-76f592b40aed.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/neutral-child.png"
+      },
+      {
+        "name": "unknown-person",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: One gender-neutral person of unknown age, a conventional anonymous avatar bust with a smooth rounded head and simple shoulders, no age-specific cues.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-3524f548-3ba5-4c1f-bd86-c76d34d3738f.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/unknown-person.png"
+      },
+      {
+        "name": "group",
+        "prompt": "Use case: stylized-concept\nAsset type: original square raster avatar for Budapest Signal participant selection UI, to be cropped into circles at 64–80 pixels.\nStyle: sophisticated minimal flat silhouette, solid charcoal #303731 on a uniform solid pale muted sage #d7e2d8 background. Clean softly shaped contours, smooth edges, no gradients, shadows, outlines, texture, lighting, or realism.\nComposition: centered head and shoulders filling approximately 75% of the square, front-facing, generous even margins, entire top of head visible, calm ordinary appearance. A single image, not a contact sheet.\nConstraints: no facial features, eyes, nose, mouth, inner details, ethnicity cues, text, symbols, logos, badges, borders, menacing clothing, hats, or criminal stereotypes.\nSubject: A group of exactly three overlapping anonymous silhouette busts, one central foreground bust and two slightly smaller behind; conventional smooth rounded avatar heads, simple shoulders, gender-neutral and age-neutral.",
+        "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-2f4b98f4-1077-4820-bbd9-55bc2ba7db55.png",
+        "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/group.png"
+      }
+    ]
+  },
+  "finalElderlyMaleEdit": {
+    "mode": "built-in image_gen",
+    "path": "C:/Users/fedor/Documents/Codex/2026-09-26/new-chat/work/participant-assets/elderly-male-v2.png",
+    "source": "C:\\Users\\fedor\\.codex\\generated_images\\01a0de3c-82f2-7371-9687-007a687117db\\exec-dea625cf-12b4-4074-9261-00ccd4be59ff.png",
+    "prompt": "Use case: precise-object-edit. Edit target: this elderly male silhouette avatar. Change only the top and side hair outline: a smooth bald domed crown with no hair across the top, and sparse short wisps of hair only at the sides just above the ears, unmistakably elderly male. Keep the entire face and bust completely solid charcoal with no face features or interior lines. Preserve the matching pale muted sage background, clean flat silhouette style, centered front-facing bust, square format, shoulder shape and everything else. No text, symbols, glasses, facial details or shadows."
+  },
+  "tool": "Built-in ImageGen"
+}

@@ -1,0 +1,41 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1790338327959,
+      "tag": "0000_lyrical_vargas",
+      "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1790432288666,
+      "tag": "0001_redundant_the_phantom",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1790435029187,
+      "tag": "0002_incident_participants",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1790440000000,
+      "tag": "0003_incident_context",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1790441000000,
+      "tag": "0004_incident_legal",
+      "breakpoints": true
+    }
+  ]
+}

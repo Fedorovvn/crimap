@@ -1,0 +1,17 @@
+{
+  "mode": "built-in image_gen",
+  "assets": [
+    {
+      "name": "elderly-male",
+      "prompt": "Use case: precise-object-edit. Asset type: square website avatar PNG. Input image 1 is the edit target. Style: flat two-color charcoal silhouette (#2f352f) on solid sage #d7e2d8 background. Entire torso fills every pixel along the bottom edge including both bottom corners; wide shoulders run off side edges in the lower image, so later circular clipping leaves no lower gaps. No circle, border, gradients, texture, shading, text, symbols, watermarks, or internal face details. Keep a clean legible silhouette at 56px. Preserve the existing elderly man right-facing side profile, nose, hair and broad-shouldered torso. Enlarge ONLY the beard into a clearly visible, fuller beard that projects considerably below the chin, with natural modest tufts. Beard should be about twice the vertical depth of the current small beard; recognizable at 56px. Natural elderly man, not a caricature. Preserve overall head position and composition."
+    },
+    {
+      "name": "person-neutral",
+      "prompt": "Use case: precise-object-edit. Asset type: square website avatar PNG. Input image 1 is the edit target. Style: flat two-color charcoal silhouette (#2f352f) on solid sage #d7e2d8 background. Entire torso fills every pixel along the bottom edge including both bottom corners; wide shoulders run off side edges in the lower image, so later circular clipping leaves no lower gaps. No circle, border, gradients, texture, shading, text, symbols, watermarks, or internal face details. Keep a clean legible silhouette at 56px. Replace the detailed side-profile head and question mark with a completely featureless front-facing anonymous adult head and shoulders. Head is a perfectly smooth simple vertical oval, centered symmetrically. NO nose, lips, chin profile, ears, hair, hairstyle, eyes or question mark. A short smooth neck joins oval head to broad generic shoulders. Gender-neutral, no gender-coded clothing or details. Solid uninterrupted charcoal head, neck and torso. Neutral anonymous avatar icon."
+    },
+    {
+      "name": "child-neutral",
+      "prompt": "Use case: precise-object-edit. Asset type: square website avatar PNG. Input image 1 is the edit target. Style: flat two-color charcoal silhouette (#2f352f) on solid sage #d7e2d8 background. Entire torso fills every pixel along the bottom edge including both bottom corners; wide shoulders run off side edges in the lower image, so later circular clipping leaves no lower gaps. No circle, border, gradients, texture, shading, text, symbols, watermarks, or internal face details. Keep a clean legible silhouette at 56px. Replace the detailed side-profile head, hairstyle and question mark with a completely featureless front-facing anonymous CHILD head and shoulders. Head is a perfectly smooth simple oval, centered symmetrically, relatively larger and rounder than adult with smaller childlike shoulders and short small neck. Torso still widens to fill both lower corners and whole bottom edge. NO nose, lips, chin profile, ears, hair, hairstyle, eyes, question mark or other symbols. No gender coding. Solid uninterrupted charcoal head, neck and torso. Neutral anonymous child avatar icon."
+    }
+  ]
+}
