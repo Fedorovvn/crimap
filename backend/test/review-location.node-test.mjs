@@ -11,6 +11,13 @@ const anchor={label:'Wesselényi utca Erzsébet körút',kind:'stop',documentId:
 const feature=(value='tram_stop',postcode='1073',coordinates=[19.0688684,47.5003839])=>({properties:{name:'Wesselényi utca / Erzsébet körút',osm_key:'railway',osm_value:value,osm_type:'N',osm_id:826166180,city:'Budapest',countrycode:'HU',postcode},geometry:{type:'Point',coordinates}});
 const base={verdict:'revise',summary:'Проверка места',issues:[],requests:[]};
 
+test('headquarters resolution verifies the official address then real map coordinates, not a namesake branch',async()=>{
+  const s=new Store(':memory:'),requests=[];
+  const a={label:'Országos Mentőszolgálat',kind:'landmark',documentId:'1',quote:'Tragédia történt az Országos Mentőszolgálat székházában.'};
+  const g=new Geocoder(s,{delayMs:0,request:async url=>{requests.push(url);return url.includes('mentok.hu')?{status:200,body:'<p>1055 Budapest, Markó utca 22.</p>'}:{status:200,body:JSON.stringify({features:[{properties:{street:'Markó utca',housenumber:'22',osm_type:'N',osm_id:123,city:'Budapest',countrycode:'HU',postcode:'1055'},geometry:{coordinates:[19.049,47.509]}}]})};}});
+  try{const result=await g.landmarks(a,{city:'Budapest'});assert.equal(result.length,1);assert.equal(result[0].officialReference.address,'Markó utca 22');assert.equal(result[0].precision,'landmark');assert.equal(requests.length,2);assert.ok(requests[0].startsWith('https://www.mentok.hu/'));}finally{s.close();}
+});
+
 test('Pro location tools require original quotes, observed candidates and a bounded search',()=>{
   const docs=[{id:'1',text:quote}], lookup={enabled:true};
   assert.equal(checkReview({...base,locationResolution:{action:'search',queries:[anchor]}},docs,{locationLookup:lookup}).locationResolution.action,'search');
@@ -49,7 +56,7 @@ async function fixture({failSearch=false,empty=false,changeRevision=false}={}) {
     return opts.validate({...base,verdict:action.action==='keep'?'pass':'revise',locationResolution:action});
   }};
   const pipeline=new Pipeline(store,{reader:{read:async()=>({url:'https://www.police.hu/test',body:`<article>${quote}</article>`})},model:flash,reviewer:pro,preparation:new Preparation(store,{geocoder})});
-  await pipeline.ingest('https://www.police.hu/test');await pipeline.prepare(1);await pipeline.translate(1);await pipeline.localize(1);
+  await pipeline.ingest('https://www.police.hu/test');await pipeline.prepare(1);
   return {store,pipeline,stats:()=>({calls,searches})};
 }
 
@@ -61,7 +68,7 @@ test('final Pro review replaces district point with stop, invalidates approval a
     const row=store.event(1);assert.equal(row.state,'draft');assert.equal(row.canonical.location.latitude,47.5003839);assert.equal(row.canonical.location.precision,'landmark');
     assert.equal(store.db.prepare('SELECT count(*) n FROM quality_reviews WHERE event_id=1 AND revision=3').get().n,0);
     assert.equal(store.db.prepare("SELECT count(*) n FROM translations WHERE event_id=1 AND revision=3").get().n,0);
-    await pipeline.translate(1);await pipeline.localize(1);assert.equal((await pipeline.review(1,3)).verdict,'pass');
+    assert.equal((await pipeline.review(1,3)).verdict,'pass');await pipeline.translate(1);await pipeline.localize(1);
     assert.deepEqual(stats(),{calls:3,searches:1});
     const prep=JSON.parse(store.db.prepare('SELECT payload FROM preparation WHERE event_id=1 AND revision=3').get().payload);
     assert.equal(prep.geocoding.anchor.quote,quote);assert.equal(prep.locationReview.applied,true);

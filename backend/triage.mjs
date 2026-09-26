@@ -7,6 +7,12 @@ const traffic=/baleset|karambol|utkoz|koccan|gazol|crash|collision|traffic accid
 const minor=/senki (?:nem|sem) serult meg|szemelyi serules (?:nem tortent|nelkul)|kizarolag anyagi kar|csak anyagi kar|csak konnyu serul|kizarolag konnyu serul|no one was injured|there were no injuries|only minor injuries/;
 export function cheapDecision(title,text='',{complete=false}={}) {
   const t=norm(title+'\n'+text),head=norm(title);
+  const missing=/eltunt|eltunes|eltunese|nyoma veszett|ismeretlen helyre tavoz|missing (?:person|girl|boy|woman|man|child)|пропал|пропавш/;
+  const crime=/emberrab|elrabol|gyilk|emberoles|megol|holttest|kesel|megszur|assault|murder|kidnap/;
+  if(missing.test(head)&&!crime.test(t))return {decision:'drop',reason:'Розыск пропавших людей временно вне тематики',signals:[]};
+  // Vehicle fire alone is not a green flag. Leave uncertain cases to Flash.
+  const vehicleFire=/(?:auto|gepkocsi|jarmu|kamion|truck|car|vehicle)/.test(head)&&/kigyull|kiegett|lang|tuz|fire|burn/.test(head);
+  if(vehicleFire)return {decision:'ambiguous',reason:'Проверить последствия пожара автомобиля: одного возгорания недостаточно',signals:positiveSignals(t)};
   // Positive incident signals take precedence over generic road/transport words.
   const signals=positiveSignals(t);
   if(signals.some(s=>['violence','unusual','rescueAndDanger'].includes(s)))return {decision:'keep',reason:'Зелёные флаги: преступление, розыск, спасение или необычный инцидент',signals};

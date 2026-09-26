@@ -1,0 +1,10 @@
+[
+  {
+    "name":"Országos Mentőszolgálat",
+    "rolePattern":"szekhaz|headquarters|foigazgatosag",
+    "address":"Markó utca 22",
+    "district":"V. kerület",
+    "sourceUrl":"https://www.mentok.hu/en/contact/",
+    "verifiedAt":"2026-09-27"
+  }
+]

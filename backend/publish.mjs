@@ -19,6 +19,7 @@ export function migratePublic(path){
 export function publish(store,eventId,path,{includeContext=false,includeLegal=false,reviewer}={}){
   if(!reviewer?.trim())throw new Error('A named reviewer is required for publication');
   const row=store.event(eventId);if(!row)throw new Error('Unknown event');
+  if(row.merged_into||row.state==='excluded')throw new Error('Event is merged or excluded');
   const review=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(eventId,row.revision);
   if(!review||JSON.parse(review.payload).verdict!=='pass')throw new Error('Current revision needs a passing quality review');
   const translation=store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(eventId,row.revision);
@@ -50,7 +51,7 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     const translations=languages?Object.fromEntries(Object.entries(languages).map(([language,strings])=>[language,Object.fromEntries(Object.entries(strings).filter(([text])=>publicTexts.has(text)))])):undefined;
     db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision,translations}));
     db.exec('COMMIT');
-    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=? WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
+    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=?,withdrawn_at=NULL WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
     if(store.db.isTransaction)record();else store.transaction(record);return id;
   }catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}finally{db.close();}
 }

@@ -35,6 +35,7 @@ export class Store {
     if(!this.db.prepare('PRAGMA table_info(jobs)').all().some(c=>c.name==='rerun'))this.db.exec('ALTER TABLE jobs ADD COLUMN rerun INTEGER NOT NULL DEFAULT 0');
     for(const table of ['events','usage'])if(!this.db.prepare(`PRAGMA table_info(${table})`).all().some(c=>c.name==='campaign_id'))this.db.exec(`ALTER TABLE ${table} ADD COLUMN campaign_id TEXT`);
     if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name==='auto_repairs'))this.db.exec('ALTER TABLE events ADD COLUMN auto_repairs INTEGER NOT NULL DEFAULT 0');
+    for(const column of ['merged_into INTEGER','withdrawn_at TEXT'])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
   }
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const out=fn();this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
   log(action,subject,detail){this.db.prepare('INSERT INTO audit(action,subject,detail,created_at) VALUES(?,?,?,?)').run(action,String(subject??''),JSON.stringify(detail),new Date().toISOString());}

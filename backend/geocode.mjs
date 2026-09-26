@@ -1,5 +1,7 @@
 import { requestPage } from './network.mjs';
 import { hash } from './store.mjs';
+import {readFileSync} from 'node:fs';
+const institutions=JSON.parse(readFileSync(new URL('./institution-addresses.json',import.meta.url),'utf8'));
 export const normalizePlace=s=>String(s??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const romans=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX','XXI','XXII','XXIII'];
 export function districtNumber(s){const m=String(s??'').match(/(?:^|\b)([IVX]+|\d{1,2})\.?\s*(?:ker|district|[·(—-]|$)/i);if(!m)return null;const n=/^\d+$/.test(m[1])?Number(m[1]):romans.indexOf(m[1].toUpperCase())+1;return n>=1&&n<=23?n:null;}
@@ -30,7 +32,8 @@ export function choosePlace(features,location,mode='address'){
       if(!roadMatch&&!placeMatch)continue;
       // An intersection must match both street names. A result for one street is not the junction.
       if(/keresztez|intersection|\s[–&]\s/i.test(location.label))continue;
-      const house=p.housenumber&&new RegExp('(?:^| )'+normalizePlace(p.housenumber).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?: |$)').test(label);
+      const range=String(p.housenumber??'').match(/^(\d+)\s*[-–]\s*(\d+)$/),number=location.label.match(/\b(\d+)\s*$/)?.[1];
+      const house=p.housenumber&&(new RegExp('(?:^| )'+normalizePlace(p.housenumber).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?: |$)').test(label)||range&&number&&Number(range[2])-Number(range[1])<=10&&Number(number)>=Number(range[1])&&Number(number)<=Number(range[2]));
       precision=location.precision==='exact'&&house?'exact':'street';
       score=(house?20:10)+(district&&candidateDistrict===district?5:0);
     }
@@ -64,6 +67,22 @@ export class Geocoder{
     this.store.db.prepare('INSERT OR REPLACE INTO geocode_cache VALUES(?,?,?)').run(key,JSON.stringify(data.features),new Date().toISOString());return data.features;
   }
   async landmarks(anchor, location) {
+    const known=institutions.find(p=>normalizePlace(anchor.quote).includes(normalizePlace(p.name))&&new RegExp(p.rolePattern).test(normalizePlace(anchor.quote))&&normalizePlace(anchor.label).includes(normalizePlace(p.name)));
+    if(known){
+      // Addresses come from a curated official directory, not model memory.
+      // Re-read the page before proposing this relation to the Pro reviewer.
+      const page=await this.request(known.sourceUrl,{maxBytes:1500000});
+      const plain=normalizePlace(String(page.body??'').replace(/<[^>]*>/g,' '));
+      if(page.status===200&&plain.includes(normalizePlace(known.address))){
+        const features=await this.query(`${known.address}, Budapest`);
+        const named=features.filter(f=>normalizePlace(f.properties?.name).startsWith(normalizePlace(known.name)));
+        const found=choosePlace(named.length?named:features,{label:known.address,district:known.district,precision:'exact'});
+        if(found&&found.precision==='exact'){
+          const candidate={...found,precision:'landmark',label:`${known.name}, ${known.address}`,officialReference:known};
+          return [{...candidate,id:hash(candidate).slice(0,20)}];
+        }
+      }
+    }
     const features = await this.query(`${anchor.label}, ${location.district??''}, Budapest`);
     if (['street','address'].includes(anchor.kind)) {
       const found = choosePlace(features, {...location,label:anchor.label,precision:anchor.kind==='address'?'exact':'street'});

@@ -1,4 +1,4 @@
-import { asc, desc, eq } from "drizzle-orm";
+import { asc, desc, eq, sql } from "drizzle-orm";
 import { ensureStarterIncidents, getDb, getIncidentParticipants, getIncidentContext, getIncidentLegal, getIncidentMetadata } from "../db";
 import { incidentMedia, incidents, incidentSources, incidentUpdates } from "../db/schema";
 import starterTranslations from "../db/starter-translations.json";
@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function Home() {
   await ensureStarterIncidents();
   const db = getDb();
-  const rows = await db.select().from(incidents).orderBy(desc(incidents.occurredAt));
+  const rows = await db.select().from(incidents).where(sql`NOT EXISTS (SELECT 1 FROM incident_metadata m WHERE m.incident_id = ${incidents.id} AND json_extract(m.details, '$.hidden') = 1)`).orderBy(desc(incidents.occurredAt));
 
   const initialIncidents: IncidentView[] = await Promise.all(
     rows.map(async (incident) => {

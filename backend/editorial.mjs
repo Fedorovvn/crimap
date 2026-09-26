@@ -18,6 +18,8 @@ export function currentPublic(path, slug) {
   try {
     const event = db.prepare('SELECT * FROM incidents WHERE slug=?').get(slug);
     if (!event) return null;
+    const metadata=db.prepare('SELECT details FROM incident_metadata WHERE incident_id=?').get(event.id);
+    if(metadata&&JSON.parse(metadata.details).hidden)return null;
     const counts = {};
     for (const kind of ['sources','updates','media','participants','context','legal']) {
       counts[kind] = db.prepare(`SELECT count(*) n FROM incident_${kind} WHERE incident_id=?`).get(event.id).n;
@@ -36,6 +38,8 @@ export function eventDetail(store, id, publicPath) {
   const preparation=prepared?JSON.parse(prepared.payload):null;
   const languages=siteTranslations(store,id,row.revision);
   const blockers = [];
+  if(row.merged_into)blockers.push(`Объединено с событием №${row.merged_into}`);
+  if(row.state==='excluded')blockers.push('Событие исключено из текущей тематики');
   if (!russian) blockers.push('Нет русского перевода текущей версии');
   if (quality?.payload.verdict !== 'pass') blockers.push('Нужна успешная проверка Pro текущей версии');
   if (!row.canonical.occurredAt) blockers.push('Нужно уточнить дату события');

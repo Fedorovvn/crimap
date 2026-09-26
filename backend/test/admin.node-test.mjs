@@ -63,7 +63,26 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
       assert.equal((await request('events/1/publish',{revision:3,approvalToken:detail.approvalToken,confirm:true})).status,200);
       assert.equal(publicDb.prepare('SELECT count(*) n FROM incidents').get().n,1);
       assert.equal(publicDb.prepare('SELECT count(*) n FROM incident_media').get().n,2);
+      assert.equal((await request('events/1/withdraw',{revision:2,confirm:true})).status,409);
+      assert.equal((await request('events/1/withdraw',{revision:3})).status,400);
+      assert.equal((await request('events/1/withdraw',{revision:3,confirm:true})).status,200);
+      assert.ok(s.event(1).withdrawn_at);assert.equal(s.event(1).published_revision,null);
+      assert.equal(publicDb.prepare("SELECT count(*) n FROM incidents i WHERE NOT EXISTS (SELECT 1 FROM incident_metadata m WHERE m.incident_id=i.id AND json_extract(m.details,'$.hidden')=1)").get().n,0);
+      detail=await(await request('events/1')).json();assert.equal(detail.published,null);
+      assert.equal((await request('events/1/publish',{revision:3,approvalToken:detail.approvalToken,confirm:true})).status,200);
+      assert.equal(s.event(1).withdrawn_at,null);assert.equal(s.event(1).public_id,1);
+      assert.equal(publicDb.prepare("SELECT json_extract(details,'$.hidden') hidden FROM incident_metadata WHERE incident_id=1").get().hidden,null);
+
     }finally{publicDb.close();}
+
+    s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);
+    s.enqueue('article','paused',{campaignId:'archive'});s.db.prepare("UPDATE jobs SET state='paused' WHERE job_key='paused'").run();
+    assert.equal((await request('campaigns/archive/budget',{budget:10})).status,200);
+    assert.equal(s.db.prepare("SELECT budget_usd FROM campaigns WHERE id='archive'").get().budget_usd,10);
+    assert.equal(s.db.prepare("SELECT state FROM jobs WHERE job_key='paused'").get().state,'queued');
+    assert.equal((await request('campaigns/archive/budget',{budget:-1})).status,400);
+    s.reserveCost('review','fixture','budget-check',4,.5,now,'archive');
+    assert.equal((await request('campaigns/archive/budget',{budget:3})).status,409);
     assert.equal((await request('logout',{})).status,200);assert.equal((await request('events')).status,401);
   }finally{await new Promise(resolve=>server.close(resolve));s.close();rmSync(dir,{recursive:true,force:true});}
 });

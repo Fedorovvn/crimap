@@ -6,6 +6,7 @@ import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 import { catalog } from './sources.mjs';
+import {changeBudget,withdraw} from './admin-actions.mjs';
 import { eventFacets } from './admin-facets.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
@@ -60,7 +61,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         store.db.prepare('DELETE FROM admin_sessions WHERE token_hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});
       }
       if(path==='/admin/api/events'&&req.method==='GET'){
-        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.first_seen_at,e.review_reason,e.canonical,
+        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.first_seen_at,e.review_reason,e.canonical,e.withdrawn_at,
           t.payload IS NOT NULL hasRussian,
           EXISTS(SELECT 1 FROM preparation p WHERE p.event_id=e.id AND p.revision=e.revision) prepared,
           EXISTS(SELECT 1 FROM site_translations l WHERE l.event_id=e.id AND l.revision=e.revision) localized,
@@ -68,7 +69,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
           coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title,
           json_extract(q.payload,'$.verdict') verdict, json_extract(e.canonical,'$.type') eventType
           FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'
-          LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision ORDER BY e.first_seen_at DESC`).all().map(({canonical,hasRussian,prepared,localized,hasDocuments,...row})=>{
+          LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision WHERE e.merged_into IS NULL AND e.state!='excluded' ORDER BY e.first_seen_at DESC`).all().map(({canonical,hasRussian,prepared,localized,hasDocuments,...row})=>{
             const event=JSON.parse(canonical);
             return {...row,searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
           });
@@ -86,7 +87,9 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
           usage:store.db.prepare('SELECT count(*) calls,coalesce(sum(coalesce(cost_usd,reserved_usd)),0) usd FROM usage WHERE created_at>=?').get(new Date().toISOString().slice(0,10)),
         });
       }
-      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish))?$/);
+      const campaign=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/budget$/);
+      if(campaign&&req.method==='POST')return send(200,changeBudget(store,decodeURIComponent(campaign[1]),body.budget,reviewer));
+      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw))?$/);
       if(!match)fail(404,'Не найдено');
       const id=Number(match[1]),action=match[2];
       if(!action&&req.method==='GET')return send(200,eventDetail(store,id,publicPath));
@@ -94,6 +97,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(action==='save')return send(200,reviseEvent(store,id,body,reviewer));
       const event=eventDetail(store,id,publicPath);
       if(body.revision!==event.revision)fail(409,'Есть новая версия события. Обновите страницу.');
+      if(action==='withdraw'){if(body.confirm!==true)fail(400,'Подтвердите снятие с публикации');return send(200,withdraw(store,id,publicPath,{revision:body.revision,reviewer}));}
       if(action==='publish'){
         const publicId=store.transaction(()=>{
           const current=eventDetail(store,id,publicPath);
@@ -104,7 +108,6 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         });
         return send(200,{publicId});
       }
-      if(action==='review'&&!event.russian)fail(422,'Сначала нужен русский перевод');
       if(action==='translate'&&event.russian)fail(409,'Перевод уже есть. Для повторного перевода сохраните новую версию через редактор.');
       store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id});
       store.log('editorial-queue',id,{action,reviewer,revision:event.revision});
