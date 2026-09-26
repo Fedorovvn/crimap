@@ -91,9 +91,9 @@ export class Geocoder{
     if(anchor.kind==='intersection'||['road','tram','rail','waterfront'].includes(anchor.surface)){
       const seed=features.find(f=>{
         const p=f.properties??{},[lon,lat]=f.geometry?.coordinates??[];
-        const name=normalizePlace(p.name??p.street),label=normalizePlace(mapLabel);
+        const names=[p.name,p.street].map(normalizePlace),label=normalizePlace(mapLabel);
         const district=districtNumber(location.district),candidateDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
-        return bounds(lat,lon)&&String(p.countrycode).toUpperCase()==='HU'&&[p.city,p.state].some(v=>normalizePlace(v)==='budapest')&&(!district||!candidateDistrict||district===candidateDistrict)&&name.length>4&&(label.includes(name)||name.startsWith(label));
+        return bounds(lat,lon)&&String(p.countrycode).toUpperCase()==='HU'&&[p.city,p.state].some(v=>normalizePlace(v)==='budapest')&&(!district||!candidateDistrict||district===candidateDistrict)&&names.some(name=>name.length>4&&(label.includes(name)||name.startsWith(label)));
       });
       if(seed){
         const [longitude,latitude]=seed.geometry.coordinates;

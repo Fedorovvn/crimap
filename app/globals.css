@@ -863,6 +863,8 @@ body {
 [data-theme='day'] .incident-signal--injury { color: #855d00; background: #fff0bb; }
 
 /* Keep the feed scrollbar quiet in both themes, without a native white track. */
+html { scrollbar-width: thin; scrollbar-color: #52605a #15181d; }
+html:has(.signal-shell[data-theme="day"]) { scrollbar-color: #a4b0aa #f5f6f2; }
 .mobile-incident-list {
   scrollbar-width: thin;
   scrollbar-color: color-mix(in srgb, var(--muted-text) 42%, transparent) transparent;
