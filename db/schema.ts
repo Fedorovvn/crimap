@@ -63,7 +63,7 @@ export const incidentSources = sqliteTable(
     note: text("note").notNull(),
   },
   (table) => [
-    uniqueIndex("incident_sources_url_unique").on(table.sourceUrl),
+    uniqueIndex("incident_sources_event_url_unique").on(table.incidentId, table.sourceUrl),
     index("idx_incident_sources_incident_id").on(table.incidentId),
   ],
 );
@@ -101,7 +101,7 @@ export const incidentMedia = sqliteTable(
     isSensitive: integer("is_sensitive", { mode: "boolean" }).notNull().default(false),
   },
   (table) => [
-    uniqueIndex("incident_media_image_url_unique").on(table.imageUrl),
+    uniqueIndex("incident_media_event_image_unique").on(table.incidentId, table.imageUrl),
     index("idx_incident_media_incident_id").on(table.incidentId),
   ],
 );

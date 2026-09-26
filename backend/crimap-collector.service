@@ -1,0 +1,29 @@
+[Unit]
+Description=Crimap news collector and event scheduler
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=crimap
+Group=crimap
+WorkingDirectory=/srv/crimap/app
+EnvironmentFile=/etc/crimap/collector.env
+ExecStart=/srv/crimap/runtime/node/bin/node backend/cli.mjs worker
+Restart=on-failure
+RestartSec=15
+TimeoutStopSec=120
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/srv/crimap/data
+MemoryMax=512M
+CPUQuota=40%
+Nice=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target

@@ -14,7 +14,7 @@ export const REFERENCE_TIME = new Date("2026-09-25T00:00:00+02:00").getTime();
 export function filterIncidents<T extends TimedIncident>(
   incidents: T[],
   hours: number,
-  now = REFERENCE_TIME,
+  now = Date.now(),
 ) {
   return incidents.filter((incident) => {
     const age = now - new Date(incident.occurredAt).getTime();

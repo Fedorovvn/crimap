@@ -1,6 +1,7 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { REFERENCE_TIME } from "./incidents-model";
 import { getIncidentSignals, getIncidentType, IncidentsView, type IncidentView } from "./incidents-view";
 
 const incidents: IncidentView[] = [
@@ -102,6 +103,9 @@ const incidents: IncidentView[] = [
     ],
   },
 ];
+
+beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); });
+afterEach(() => { vi.restoreAllMocks(); });
 
 afterEach(() => {
   cleanup();

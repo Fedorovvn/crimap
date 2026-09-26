@@ -1,0 +1,144 @@
+[
+  {
+    "key": "demo-unknown",
+    "role": "involved",
+    "label": "Условный участник",
+    "status": "unknown",
+    "profile": {
+      "kind": "person"
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-child",
+    "role": "victim",
+    "label": "Условный участник",
+    "status": "injured",
+    "profile": {
+      "kind": "person",
+      "ageGroup": "child"
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-boy",
+    "role": "victim",
+    "label": "Условный участник",
+    "status": "unknown",
+    "profile": {
+      "kind": "person",
+      "gender": "male",
+      "age": 12
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-girl",
+    "role": "victim",
+    "label": "Условный участник",
+    "status": "unknown",
+    "profile": {
+      "kind": "person",
+      "gender": "female",
+      "ageGroup": "child"
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-older",
+    "role": "victim",
+    "label": "Условный участник",
+    "status": "deceased",
+    "profile": {
+      "kind": "person",
+      "gender": "male",
+      "age": 65
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-woman",
+    "role": "involved",
+    "label": "Условный участник",
+    "status": "released",
+    "profile": {
+      "kind": "person",
+      "gender": "female",
+      "age": 30,
+      "citizenship": {
+        "code": "HU",
+        "name": "Венгрия"
+      }
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-small-group",
+    "role": "suspect",
+    "label": "Условный участник",
+    "status": "detained",
+    "profile": {
+      "kind": "group",
+      "count": 4
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-large-group",
+    "role": "suspect",
+    "label": "Условный участник",
+    "status": "wanted",
+    "profile": {
+      "kind": "group",
+      "count": 5,
+      "leader": {
+        "person": {
+          "kind": "person",
+          "name": "Условный лидер",
+          "gender": "male",
+          "ageGroup": "adult"
+        },
+        "status": "in-custody",
+        "sourceUrl": "https://example.com/demo-leader"
+      }
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  },
+  {
+    "key": "demo-unknown-count",
+    "role": "involved",
+    "label": "Условный участник",
+    "status": "unknown",
+    "profile": {
+      "kind": "group"
+    },
+    "note": "Синтетический пример структуры, не сведения о реальном человеке.",
+    "sourceUrl": "https://example.com/demo-source",
+    "sourceLabel": "Условный источник",
+    "asOf": "2026-09-24T10:00:00Z"
+  }
+]

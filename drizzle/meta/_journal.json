@@ -36,6 +36,13 @@
       "when": 1790441000000,
       "tag": "0004_incident_legal",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1790442000000,
+      "tag": "0005_collector_metadata",
+      "breakpoints": true
     }
   ]
 }

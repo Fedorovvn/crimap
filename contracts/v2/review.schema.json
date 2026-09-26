@@ -1,0 +1,121 @@
+{
+  "$ref": "#/definitions/review",
+  "definitions": {
+    "review": {
+      "type": "object",
+      "properties": {
+        "verdict": {
+          "type": "string",
+          "enum": [
+            "pass",
+            "revise",
+            "reject"
+          ]
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000
+        },
+        "issues": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "severity": {
+                "type": "string",
+                "enum": [
+                  "error",
+                  "warning"
+                ]
+              },
+              "field": {
+                "$ref": "#/definitions/review/properties/summary"
+              },
+              "reason": {
+                "$ref": "#/definitions/review/properties/summary"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/definitions/review/properties/summary"
+              },
+              "quoteOrigin": {
+                "type": "string",
+                "enum": [
+                  "source",
+                  "english",
+                  "russian"
+                ]
+              }
+            },
+            "required": [
+              "severity",
+              "field",
+              "reason"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 30
+        },
+        "requests": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "properties": {
+              "kind": {
+                "type": "string",
+                "enum": [
+                  "field",
+                  "incident-type",
+                  "participant-status",
+                  "source-type",
+                  "display"
+                ]
+              },
+              "proposedKey": {
+                "type": "string",
+                "pattern": "^[a-z][a-z0-9_.-]{0,99}$"
+              },
+              "label": {
+                "type": "string",
+                "minLength": 1,
+                "maxLength": 12000
+              },
+              "reason": {
+                "$ref": "#/definitions/review/properties/requests/items/properties/label"
+              },
+              "example": {
+                "$ref": "#/definitions/review/properties/requests/items/properties/label"
+              },
+              "documentId": {
+                "type": "string"
+              },
+              "quote": {
+                "$ref": "#/definitions/review/properties/requests/items/properties/label"
+              }
+            },
+            "required": [
+              "kind",
+              "proposedKey",
+              "label",
+              "reason",
+              "example"
+            ],
+            "additionalProperties": false
+          },
+          "maxItems": 10
+        }
+      },
+      "required": [
+        "verdict",
+        "summary",
+        "issues",
+        "requests"
+      ],
+      "additionalProperties": false
+    }
+  },
+  "$schema": "http://json-schema.org/draft-07/schema#"
+}

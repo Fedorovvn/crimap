@@ -829,3 +829,6 @@ body {
 .signal-map .leaflet-tooltip-top::before {
   border-top-color: var(--map-overlay);
 }
+
+.incident-signal--injury { color: #f3d178; background: #3b3320; }
+[data-theme='day'] .incident-signal--injury { color: #855d00; background: #fff0bb; }

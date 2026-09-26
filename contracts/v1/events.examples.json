@@ -1,0 +1,420 @@
+[
+  {
+    "id": 2,
+    "slug": "akacfa-homicide",
+    "title": "Убийство на Akácfa utca",
+    "category": "Насильственное преступление",
+    "status": "Подозреваемые задержаны",
+    "verification": "Официальный источник",
+    "district": "VII · Erzsébetváros",
+    "locationLabel": "Akácfa utca",
+    "locationPrecision": "Улица; точный номер не раскрыт",
+    "latitude": 47.4992,
+    "longitude": 19.0664,
+    "occurredAt": "2026-09-18T01:40:00+02:00",
+    "summary": "По данным BRFK, 36-летнего мужчину избили на Akácfa utca; он умер на месте, несмотря на помощь медиков. Позже полиция сообщила о задержании двух подозреваемых. Расследование продолжается.",
+    "updatedAt": "2026-09-21T09:52:00+02:00",
+    "sources": [
+      {
+        "id": 3,
+        "incidentId": 2,
+        "sourceType": "Официально",
+        "outlet": "BRFK / police.hu",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+        "publishedAt": "2026-09-21T09:52:00+02:00",
+        "note": "Обновление о задержании двух подозреваемых."
+      },
+      {
+        "id": 8,
+        "incidentId": 2,
+        "sourceType": "Неофициально",
+        "outlet": "Index.hu / MTI",
+        "sourceUrl": "https://index.hu/belfold/2026/09/18/budapest-gyilkossag-bokszolo-tamadok-azonositas-rendorseg/",
+        "publishedAt": "2026-09-18T12:00:00+02:00",
+        "note": "Фото следственных действий на Akácfa utca; Mihádák Zoltán / MTI."
+      },
+      {
+        "id": 2,
+        "incidentId": 2,
+        "sourceType": "Официально",
+        "outlet": "BRFK / police.hu",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-1",
+        "publishedAt": "2026-09-18T09:12:00+02:00",
+        "note": "Первое официальное сообщение."
+      }
+    ],
+    "updates": [
+      {
+        "id": 3,
+        "incidentId": 2,
+        "publishedAt": "2026-09-18T09:12:00+02:00",
+        "title": "На Akácfa utca погиб мужчина",
+        "detail": "Полиция начала расследование по подозрению в убийстве.",
+        "verification": "Официальный источник"
+      },
+      {
+        "id": 4,
+        "incidentId": 2,
+        "publishedAt": "2026-09-21T09:52:00+02:00",
+        "title": "Двое подозреваемых задержаны",
+        "detail": "BRFK сообщила, что двоих мужчин задержали, допросили как подозреваемых и ходатайствовали об их заключении под стражу.",
+        "verification": "Официальный источник"
+      }
+    ],
+    "media": [
+      {
+        "id": 2,
+        "incidentId": 2,
+        "imageUrl": "https://kep.cdn.index.hu/1/0/7161/71616/716163/71616355_5280089_17953875d8d6b7716988fbf1c14f3f84_wm.jpg",
+        "sourceUrl": "https://index.hu/belfold/2026/09/18/budapest-gyilkossag-bokszolo-tamadok-azonositas-rendorseg/",
+        "outlet": "Index.hu",
+        "credit": "Mihádák Zoltán / MTI",
+        "caption": "Следователи на Akácfa utca; часть места происшествия закрыта экраном.",
+        "isSensitive": true
+      }
+    ],
+    "participants": [
+      {
+        "key": "victim",
+        "role": "victim",
+        "label": "Потерпевший",
+        "status": "deceased",
+        "profile": {
+          "kind": "person",
+          "gender": "male",
+          "age": 36
+        },
+        "note": "Умер на месте, несмотря на помощь медиков.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-1",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-18T09:12:00+02:00"
+      },
+      {
+        "key": "suspect-40",
+        "role": "suspect",
+        "label": "40-летний подозреваемый",
+        "status": "detained",
+        "profile": {
+          "kind": "person",
+          "gender": "male",
+          "age": 40
+        },
+        "note": "По сообщению BRFK, допрошен по подозрению в убийстве. Полиция ходатайствовала о заключении под стражу.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-21T09:52:00+02:00"
+      },
+      {
+        "key": "suspect-48",
+        "role": "suspect",
+        "label": "48-летний подозреваемый",
+        "status": "detained",
+        "profile": {
+          "kind": "person",
+          "gender": "male",
+          "age": 48
+        },
+        "note": "По сообщению BRFK, допрошен по подозрению в покушении на причинение тяжких телесных повреждений.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-21T09:52:00+02:00"
+      }
+    ],
+    "context": [
+      {
+        "key": "victim-housing-report",
+        "subject": {
+          "kind": "participant",
+          "participantKey": "victim"
+        },
+        "topic": "housing-status",
+        "text": "По сообщению Index со слов знакомого погибшего, мужчина предположительно не имел постоянного жилья.",
+        "origin": "source",
+        "verification": "unverified",
+        "reviewStatus": "approved",
+        "evidence": [
+          {
+            "kind": "media",
+            "label": "Index.hu",
+            "url": "https://index.hu/belfold/2026/09/18/budapest-gyilkossag-bokszolo-tamadok-azonositas-rendorseg/",
+            "relation": "supports",
+            "attribution": "со слов знакомого погибшего; личность собеседника не раскрыта"
+          }
+        ],
+        "asOf": "2026-09-26T00:00:00+02:00"
+      },
+      {
+        "key": "victim-boxing-report",
+        "subject": {
+          "kind": "participant",
+          "participantKey": "victim"
+        },
+        "topic": "occupation",
+        "text": "Знакомый погибшего, на которого ссылается Index, рассказал, что мужчина раньше занимался боксом.",
+        "origin": "source",
+        "verification": "unverified",
+        "reviewStatus": "approved",
+        "evidence": [
+          {
+            "kind": "media",
+            "label": "Index.hu",
+            "url": "https://index.hu/belfold/2026/09/18/budapest-gyilkossag-bokszolo-tamadok-azonositas-rendorseg/",
+            "relation": "supports",
+            "attribution": "со слов знакомого погибшего; личность собеседника не раскрыта"
+          }
+        ],
+        "asOf": "2026-09-26T00:00:00+02:00"
+      }
+    ],
+    "legal": [
+      {
+        "jurisdiction": "HU",
+        "qualification": "official",
+        "stage": "investigation",
+        "statuteMatch": "editorial",
+        "reviewStatus": "approved",
+        "checkedAt": "2026-09-26T12:00:00+02:00",
+        "key": "suspect-40-homicide",
+        "subjectLabel": "40-летний подозреваемый",
+        "offense": "убийство",
+        "source": {
+          "kind": "official",
+          "label": "BRFK / police.hu",
+          "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+          "publishedAt": "2026-09-21T09:52:00+02:00"
+        },
+        "statutes": [
+          {
+            "code": "criminal",
+            "act": "2012. évi C. törvény",
+            "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+            "versionDate": "2026-08-26",
+            "section": "§ 160 (1)"
+          }
+        ],
+        "penalties": [
+          {
+            "kind": "imprisonment",
+            "min": 5,
+            "max": 15,
+            "unit": "years"
+          }
+        ],
+        "condition": "Если будет применён основной состав убийства. Часть статьи в сообщении полиции не названа; квалифицирующие обстоятельства могут изменить санкцию.",
+        "participantKey": "suspect-40"
+      },
+      {
+        "jurisdiction": "HU",
+        "qualification": "official",
+        "stage": "investigation",
+        "statuteMatch": "editorial",
+        "reviewStatus": "approved",
+        "checkedAt": "2026-09-26T12:00:00+02:00",
+        "key": "suspect-48-attempt",
+        "subjectLabel": "48-летний подозреваемый",
+        "offense": "покушение на причинение тяжких телесных повреждений",
+        "source": {
+          "kind": "official",
+          "label": "BRFK / police.hu",
+          "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+          "publishedAt": "2026-09-21T09:52:00+02:00"
+        },
+        "statutes": [
+          {
+            "code": "criminal",
+            "act": "2012. évi C. törvény",
+            "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+            "versionDate": "2026-08-26",
+            "section": "§ 164 (3)"
+          },
+          {
+            "code": "criminal",
+            "act": "2012. évi C. törvény",
+            "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+            "versionDate": "2026-08-26",
+            "section": "§ 10 (2)"
+          }
+        ],
+        "penalties": [
+          {
+            "kind": "imprisonment",
+            "max": 3,
+            "unit": "years"
+          }
+        ],
+        "condition": "Для основного состава; при покушении применяется санкция оконченного преступления. Часть статьи в сообщении полиции не названа.",
+        "participantKey": "suspect-48"
+      }
+    ]
+  },
+  {
+    "id": 1,
+    "slug": "soroksari-fatal-crash",
+    "title": "Смертельное столкновение на Soroksári út",
+    "category": "ДТП",
+    "status": "В расследовании",
+    "verification": "Официальный источник",
+    "district": "IX · Ferencváros",
+    "locationLabel": "Soroksári út 160",
+    "locationPrecision": "Точный адрес из сообщения полиции",
+    "latitude": 47.4639,
+    "longitude": 19.0808,
+    "occurredAt": "2026-09-03T05:55:00+02:00",
+    "summary": "По данным BRFK, Mitsubishi выехал на встречную полосу и столкнулся с Ford. Водитель Ford, 62-летний мужчина, погиб на месте; пассажира госпитализировали с тяжёлыми травмами. Полиция расследует подозрение в управлении автомобилем в состоянии опьянения.",
+    "updatedAt": "2026-09-04T11:50:00+02:00",
+    "sources": [
+      {
+        "id": 7,
+        "incidentId": 1,
+        "sourceType": "Неофициально",
+        "outlet": "24.hu",
+        "sourceUrl": "https://24.hu/belfold/2026/09/04/soroksari-ut-frontalis-baleset-vallomas/",
+        "publishedAt": "2026-09-04T12:31:00+02:00",
+        "note": "Фото с места ДТП; 24.hu указывает police.hu как источник снимка."
+      },
+      {
+        "id": 1,
+        "incidentId": 1,
+        "sourceType": "Официально",
+        "outlet": "BRFK / police.hu",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+        "publishedAt": "2026-09-04T11:50:00+02:00",
+        "note": "Сообщение о ходе расследования и задержании водителя."
+      }
+    ],
+    "updates": [
+      {
+        "id": 1,
+        "incidentId": 1,
+        "publishedAt": "2026-09-03T05:55:00+02:00",
+        "title": "Два автомобиля столкнулись на Soroksári út",
+        "detail": "Ford после столкновения вылетел к обочине; водитель погиб, пассажир получил тяжёлые травмы.",
+        "verification": "Официальный источник"
+      },
+      {
+        "id": 2,
+        "incidentId": 1,
+        "publishedAt": "2026-09-04T11:50:00+02:00",
+        "title": "Водитель задержан",
+        "detail": "BRFK сообщила о подозрении в управлении автомобилем в состоянии опьянения; расследование продолжается.",
+        "verification": "Официальный источник"
+      }
+    ],
+    "media": [
+      {
+        "id": 1,
+        "incidentId": 1,
+        "imageUrl": "https://s.24.hu/app/uploads/2026/09/57a508b5-6aa8-452a-9c83-de1bd555dc2b-1-e1788517489423-1024x562.jpg",
+        "sourceUrl": "https://24.hu/belfold/2026/09/04/soroksari-ut-frontalis-baleset-vallomas/",
+        "outlet": "24.hu",
+        "credit": "police.hu via 24.hu",
+        "caption": "Разбитый Ford на месте столкновения на Soroksári út.",
+        "isSensitive": true
+      }
+    ],
+    "participants": [
+      {
+        "key": "mitsubishi-driver",
+        "role": "suspect",
+        "label": "Водитель Mitsubishi",
+        "status": "detained",
+        "profile": {
+          "kind": "person"
+        },
+        "note": "Подозрение в управлении в состоянии опьянения. Расследование продолжается.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-04T11:50:00+02:00"
+      },
+      {
+        "key": "ford-driver",
+        "role": "victim",
+        "label": "Водитель Ford",
+        "status": "deceased",
+        "profile": {
+          "kind": "person",
+          "gender": "male",
+          "age": 62
+        },
+        "note": "Погиб на месте столкновения.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-04T11:50:00+02:00"
+      },
+      {
+        "key": "ford-passenger",
+        "role": "victim",
+        "label": "Пассажир Ford",
+        "status": "injured",
+        "profile": {
+          "kind": "person"
+        },
+        "note": "Госпитализирован с тяжёлыми травмами.",
+        "sourceUrl": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+        "sourceLabel": "BRFK / police.hu",
+        "asOf": "2026-09-04T11:50:00+02:00"
+      }
+    ],
+    "context": [
+      {
+        "key": "crossing-cause-unresolved",
+        "subject": {
+          "kind": "event"
+        },
+        "topic": "circumstances",
+        "text": "24.hu со ссылкой на сообщение BRFK пишет: причина выезда Mitsubishi на встречную полосу на момент публикации оставалась невыясненной.",
+        "origin": "source",
+        "verification": "unverified",
+        "reviewStatus": "approved",
+        "evidence": [
+          {
+            "kind": "media",
+            "label": "24.hu",
+            "url": "https://24.hu/belfold/2026/09/04/soroksari-ut-frontalis-baleset-vallomas/",
+            "relation": "supports",
+            "attribution": "пересказ сообщения полиции; прямая проверка этого утверждения по первоисточнику не выполнена"
+          }
+        ],
+        "asOf": "2026-09-04T12:31:00+02:00"
+      }
+    ],
+    "legal": [
+      {
+        "jurisdiction": "HU",
+        "qualification": "official",
+        "stage": "investigation",
+        "statuteMatch": "editorial",
+        "reviewStatus": "approved",
+        "checkedAt": "2026-09-26T12:00:00+02:00",
+        "key": "driver-drug-impaired-fatal",
+        "subjectLabel": "Водитель Mitsubishi",
+        "participantKey": "mitsubishi-driver",
+        "offense": "управление под воздействием одурманивающих веществ, повлёкшее смерть",
+        "source": {
+          "kind": "official",
+          "label": "BRFK / police.hu",
+          "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+          "publishedAt": "2026-09-04T11:50:00+02:00"
+        },
+        "statutes": [
+          {
+            "code": "criminal",
+            "act": "2012. évi C. törvény",
+            "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+            "versionDate": "2026-08-26",
+            "section": "§ 237 (2) c)"
+          }
+        ],
+        "penalties": [
+          {
+            "kind": "imprisonment",
+            "min": 2,
+            "max": 8,
+            "unit": "years"
+          }
+        ],
+        "condition": "Если суд установит этот состав преступления. Полиция сообщает о подозрении; виновность ещё не установлена."
+      }
+    ]
+  }
+]

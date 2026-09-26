@@ -7,6 +7,11 @@ import { isPublishableContext } from "../app/context-model";
 import { isPublishableLegal } from "../app/legal-model";
 import { starterLegal } from "./starter-legal";
 
+export async function getIncidentMetadata(incidentId: number) {
+  const row = await getRawDb().prepare("SELECT details FROM incident_metadata WHERE incident_id = ?").bind(incidentId).first<{ details: string }>();
+  return row ? JSON.parse(row.details) as Pick<import("../app/incidents-view").IncidentView, "eventType" | "signals"> : {};
+}
+
 export async function getIncidentLegal(incidentId: number) {
   const result = await getRawDb().prepare("SELECT details FROM incident_legal WHERE incident_id = ? ORDER BY id").bind(incidentId).all<{ details: string }>();
   return result.results.map((row) => JSON.parse(row.details) as unknown).filter(isPublishableLegal);

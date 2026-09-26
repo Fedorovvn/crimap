@@ -1,0 +1,47 @@
+{
+  "policyVersion": "1.0",
+  "implementationStatus": "specification-only",
+  "timeUnit": "seconds",
+  "ageBasisPriority": ["confirmedOccurredAt", "firstSeenAt"],
+  "boundaryConvention": "minimum-inclusive-maximum-exclusive",
+  "durationConventions": {
+    "daySeconds": 86400,
+    "weekSeconds": 604800,
+    "monthSeconds": 2592000,
+    "threeMonthsSeconds": 7776000,
+    "yearSeconds": 31536000
+  },
+  "confirmedClarifications": [
+    {
+      "field": "stages[4].minAgeSeconds",
+      "value": 86400,
+      "status": "user-confirmed",
+      "reason": "The user confirmed the transition to a 6-hour interval at an event age of 24 hours."
+    }
+  ],
+  "assumptions": [
+    {
+      "field": "durationConventions",
+      "status": "implementation-convention",
+      "reason": "Month, three months and year are fixed durations of 30, 90 and 365 days."
+    }
+  ],
+  "stages": [
+    { "minAgeSeconds": 0, "maxAgeSecondsExclusive": 7200, "intervalSeconds": 600 },
+    { "minAgeSeconds": 7200, "maxAgeSecondsExclusive": 14400, "intervalSeconds": 900 },
+    { "minAgeSeconds": 14400, "maxAgeSecondsExclusive": 43200, "intervalSeconds": 1800 },
+    { "minAgeSeconds": 43200, "maxAgeSecondsExclusive": 86400, "intervalSeconds": 3600 },
+    { "minAgeSeconds": 86400, "maxAgeSecondsExclusive": 259200, "intervalSeconds": 21600 },
+    { "minAgeSeconds": 259200, "maxAgeSecondsExclusive": 1209600, "intervalSeconds": 86400 },
+    { "minAgeSeconds": 1209600, "maxAgeSecondsExclusive": 2592000, "intervalSeconds": 172800 },
+    { "minAgeSeconds": 2592000, "maxAgeSecondsExclusive": 7776000, "intervalSeconds": 604800 },
+    { "minAgeSeconds": 7776000, "maxAgeSecondsExclusive": 31536000, "intervalSeconds": 2592000 }
+  ],
+  "stopAtAgeSeconds": 31536000,
+  "initialCheck": "immediate-if-younger-than-stop-age",
+  "nextCheckAnchor": "successful-check-completion",
+  "newPublicationResetsEventAge": false,
+  "catchUpPolicy": "one-current-check",
+  "retainEventAfterStop": true,
+  "incomingUpdatesAfterStop": "allow-linking-without-restarting-periodic-checks"
+}

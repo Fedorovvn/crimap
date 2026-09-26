@@ -1,0 +1,1175 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Budapest Signal — IncidentEvent",
+  "description": "Снимок 2026-09-26. Дополнительные правила качества описаны в README. Не подключён к runtime сайта.",
+  "$ref": "#/$defs/IncidentEvent",
+  "$defs": {
+    "ParticipantRole": {
+      "type": "string",
+      "enum": [
+        "suspect",
+        "victim",
+        "convicted",
+        "involved"
+      ],
+      "description": "Роль участника."
+    },
+    "ParticipantStatus": {
+      "type": "string",
+      "enum": [
+        "detained",
+        "wanted",
+        "in-custody",
+        "charged",
+        "convicted",
+        "released",
+        "deceased",
+        "injured",
+        "unknown"
+      ],
+      "description": "Текущий статус участника, не текстовый статус всего события."
+    },
+    "Gender": {
+      "type": "string",
+      "enum": [
+        "male",
+        "female"
+      ],
+      "description": "Неизвестный пол: поле пропускается."
+    },
+    "AgeGroup": {
+      "type": "string",
+      "enum": [
+        "child",
+        "adult",
+        "older"
+      ],
+      "description": "До 18; 18–59; от 60 лет. Точный age имеет приоритет."
+    },
+    "Citizenship": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "code": {
+          "type": "string",
+          "description": "Двухбуквенный код страны, например HU.",
+          "pattern": "^[A-Z]{2}$"
+        },
+        "name": {
+          "type": "string",
+          "description": "Название страны гражданства."
+        }
+      },
+      "required": [
+        "code",
+        "name"
+      ]
+    },
+    "PersonProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "person",
+          "type": "string"
+        },
+        "name": {
+          "type": "string",
+          "description": "Опубликованное имя, если известно."
+        },
+        "gender": {
+          "$ref": "#/$defs/Gender"
+        },
+        "age": {
+          "type": "integer",
+          "minimum": 0,
+          "description": "Возраст в полных годах."
+        },
+        "ageGroup": {
+          "$ref": "#/$defs/AgeGroup"
+        },
+        "citizenship": {
+          "$ref": "#/$defs/Citizenship"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "GroupLeader": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "person": {
+          "$ref": "#/$defs/PersonProfile"
+        },
+        "status": {
+          "$ref": "#/$defs/ParticipantStatus"
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Источник сведений о лидере."
+        }
+      },
+      "required": [
+        "person",
+        "status",
+        "sourceUrl"
+      ]
+    },
+    "GroupProfile": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "const": "group",
+          "type": "string"
+        },
+        "count": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Общая численность, включая лидера. 1–4 показываются отдельно; от 5 — группа."
+        },
+        "gender": {
+          "$ref": "#/$defs/Gender"
+        },
+        "leader": {
+          "$ref": "#/$defs/GroupLeader"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "Participant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Уникальный ключ внутри события."
+        },
+        "role": {
+          "$ref": "#/$defs/ParticipantRole"
+        },
+        "label": {
+          "type": "string",
+          "description": "Подпись карточки при отсутствии имени."
+        },
+        "status": {
+          "$ref": "#/$defs/ParticipantStatus"
+        },
+        "profile": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/PersonProfile"
+            },
+            {
+              "$ref": "#/$defs/GroupProfile"
+            }
+          ]
+        },
+        "note": {
+          "type": "string",
+          "description": "Дополнительные сведения."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Ссылка на публикацию об участнике."
+        },
+        "sourceLabel": {
+          "type": "string",
+          "description": "Подпись ссылки на источник."
+        },
+        "asOf": {
+          "type": "string",
+          "description": "Дата актуальности сведений.",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "key",
+        "role",
+        "label",
+        "status",
+        "profile",
+        "sourceUrl",
+        "sourceLabel",
+        "asOf"
+      ]
+    },
+    "ContextTopic": {
+      "type": "string",
+      "enum": [
+        "motive",
+        "circumstances",
+        "citizenship",
+        "occupation",
+        "visitor-status",
+        "housing-status",
+        "appearance"
+      ],
+      "description": "Тема отдельного сведения или версии."
+    },
+    "EventSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "event"
+        }
+      },
+      "required": [
+        "kind"
+      ]
+    },
+    "ParticipantSubject": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "const": "participant"
+        },
+        "participantKey": {
+          "type": "string",
+          "description": "Ключ исходной записи participants[].key."
+        }
+      },
+      "required": [
+        "kind",
+        "participantKey"
+      ]
+    },
+    "ContextEvidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": [
+            "official",
+            "media",
+            "eyewitness",
+            "social"
+          ],
+          "description": "Тип источника конкретного свидетельства."
+        },
+        "label": {
+          "type": "string",
+          "description": "Название источника."
+        },
+        "url": {
+          "type": "string",
+          "description": "Ссылка на конкретную публикацию.",
+          "pattern": "^https?://"
+        },
+        "attribution": {
+          "type": "string",
+          "description": "Кто сообщил сведения: очевидец, знакомый, ведомство; цепочка пересказа."
+        },
+        "relation": {
+          "type": "string",
+          "enum": [
+            "supports",
+            "disputes",
+            "background"
+          ],
+          "description": "Источник поддерживает утверждение, оспаривает или даёт контекст."
+        }
+      },
+      "required": [
+        "kind",
+        "label",
+        "url",
+        "relation"
+      ]
+    },
+    "ContextClaim": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "description": "Ключ утверждения, уникальный внутри события."
+        },
+        "subject": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/EventSubject"
+            },
+            {
+              "$ref": "#/$defs/ParticipantSubject"
+            }
+          ]
+        },
+        "topic": {
+          "$ref": "#/$defs/ContextTopic"
+        },
+        "text": {
+          "type": "string",
+          "description": "Текст с сохранением авторства и неопределённости."
+        },
+        "origin": {
+          "type": "string",
+          "enum": [
+            "source",
+            "model"
+          ],
+          "description": "Сообщение источника или собственная гипотеза модели."
+        },
+        "verification": {
+          "type": "string",
+          "enum": [
+            "unverified",
+            "corroborated",
+            "disputed",
+            "retracted"
+          ],
+          "description": "Независимое подтверждение и состояние утверждения; отдельно от официальности источника."
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved"
+          ],
+          "description": "Проверка привязки, источника и формулировки перед показом."
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextEvidence"
+          },
+          "minItems": 1
+        },
+        "asOf": {
+          "type": "string",
+          "description": "Когда актуальность утверждения оценивалась; не время происшествия.",
+          "format": "date-time"
+        },
+        "rationale": {
+          "type": "string",
+          "description": "Основание гипотезы модели, обязательно для её показа."
+        }
+      },
+      "required": [
+        "key",
+        "subject",
+        "topic",
+        "text",
+        "origin",
+        "verification",
+        "reviewStatus",
+        "evidence",
+        "asOf"
+      ]
+    },
+    "IncidentSourceInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sourceType": {
+          "type": "string",
+          "description": "Тип источника; свободный текст, не enum."
+        },
+        "outlet": {
+          "type": "string",
+          "description": "Издание или ведомство."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Оригинальная публикация; уникальна во всей таблице источников."
+        },
+        "publishedAt": {
+          "type": "string",
+          "description": "Дата публикации источника.",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string",
+          "description": "Пояснение к источнику."
+        }
+      },
+      "required": [
+        "sourceType",
+        "outlet",
+        "sourceUrl",
+        "publishedAt",
+        "note"
+      ]
+    },
+    "IncidentUpdateInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "publishedAt": {
+          "type": "string",
+          "description": "Дата пункта хронологии.",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string",
+          "description": "Заголовок пункта хронологии."
+        },
+        "detail": {
+          "type": "string",
+          "description": "Подробности изменения."
+        },
+        "verification": {
+          "type": "string",
+          "description": "Метка подтверждения; свободный текст, не enum."
+        }
+      },
+      "required": [
+        "publishedAt",
+        "title",
+        "detail",
+        "verification"
+      ]
+    },
+    "IncidentMediaInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "imageUrl": {
+          "type": "string",
+          "description": "URL или путь изображения от корня сайта. Уникален во всей таблице фото."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Публикация, из которой взято изображение."
+        },
+        "outlet": {
+          "type": "string",
+          "description": "Издание / источник изображения."
+        },
+        "credit": {
+          "type": "string",
+          "description": "Авторство / правообладатель."
+        },
+        "caption": {
+          "type": "string",
+          "description": "Подпись под фото и alt."
+        },
+        "isSensitive": {
+          "type": "boolean",
+          "description": "true: сначала размыто, раскрывается нажатием."
+        }
+      },
+      "required": [
+        "imageUrl",
+        "sourceUrl",
+        "outlet",
+        "credit",
+        "caption",
+        "isSensitive"
+      ]
+    },
+    "IncidentSource": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Автоматический ID строки."
+        },
+        "incidentId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ID родительского события; UI допускает отсутствие."
+        },
+        "sourceType": {
+          "type": "string",
+          "description": "Тип источника; свободный текст, не enum."
+        },
+        "outlet": {
+          "type": "string",
+          "description": "Издание или ведомство."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Оригинальная публикация; уникальна во всей таблице источников."
+        },
+        "publishedAt": {
+          "type": "string",
+          "description": "Дата публикации источника.",
+          "format": "date-time"
+        },
+        "note": {
+          "type": "string",
+          "description": "Пояснение к источнику."
+        }
+      },
+      "required": [
+        "id",
+        "sourceType",
+        "outlet",
+        "sourceUrl",
+        "publishedAt",
+        "note"
+      ]
+    },
+    "IncidentUpdate": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Автоматический ID строки."
+        },
+        "incidentId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ID родительского события; UI допускает отсутствие."
+        },
+        "publishedAt": {
+          "type": "string",
+          "description": "Дата пункта хронологии.",
+          "format": "date-time"
+        },
+        "title": {
+          "type": "string",
+          "description": "Заголовок пункта хронологии."
+        },
+        "detail": {
+          "type": "string",
+          "description": "Подробности изменения."
+        },
+        "verification": {
+          "type": "string",
+          "description": "Метка подтверждения; свободный текст, не enum."
+        }
+      },
+      "required": [
+        "id",
+        "publishedAt",
+        "title",
+        "detail",
+        "verification"
+      ]
+    },
+    "IncidentMedia": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Автоматический ID строки."
+        },
+        "incidentId": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "ID родительского события; UI допускает отсутствие."
+        },
+        "imageUrl": {
+          "type": "string",
+          "description": "URL или путь изображения от корня сайта. Уникален во всей таблице фото."
+        },
+        "sourceUrl": {
+          "type": "string",
+          "description": "Публикация, из которой взято изображение."
+        },
+        "outlet": {
+          "type": "string",
+          "description": "Издание / источник изображения."
+        },
+        "credit": {
+          "type": "string",
+          "description": "Авторство / правообладатель."
+        },
+        "caption": {
+          "type": "string",
+          "description": "Подпись под фото и alt."
+        },
+        "isSensitive": {
+          "type": "boolean",
+          "description": "true: сначала размыто, раскрывается нажатием."
+        }
+      },
+      "required": [
+        "id",
+        "imageUrl",
+        "sourceUrl",
+        "outlet",
+        "credit",
+        "caption",
+        "isSensitive"
+      ]
+    },
+    "IncidentInput": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextClaim"
+          }
+        },
+        "slug": {
+          "type": "string",
+          "description": "Уникальный постоянный ключ события."
+        },
+        "title": {
+          "type": "string",
+          "description": "Заголовок события."
+        },
+        "category": {
+          "type": "string",
+          "description": "Свободный текст категории; не enum."
+        },
+        "status": {
+          "type": "string",
+          "description": "Текстовый статус события; не enum ParticipantStatus."
+        },
+        "verification": {
+          "type": "string",
+          "description": "Текстовая метка достоверности; не enum."
+        },
+        "district": {
+          "type": "string",
+          "description": "Район."
+        },
+        "locationLabel": {
+          "type": "string",
+          "description": "Читаемое место / адрес."
+        },
+        "locationPrecision": {
+          "type": "string",
+          "description": "Пояснение точности места; свободный текст."
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "occurredAt": {
+          "type": "string",
+          "description": "Время происшествия.",
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Описание происшествия."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Дата обновления события.",
+          "format": "date-time"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentSourceInput"
+          }
+        },
+        "updates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentUpdateInput"
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentMediaInput"
+          }
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          }
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LegalAssessment"
+          }
+        }
+      },
+      "required": [
+        "slug",
+        "title",
+        "category",
+        "status",
+        "verification",
+        "district",
+        "locationLabel",
+        "locationPrecision",
+        "latitude",
+        "longitude",
+        "occurredAt",
+        "summary",
+        "updatedAt",
+        "sources",
+        "updates",
+        "media"
+      ],
+      "description": "Объект наполнения без внутренних ID. Формат документации, существующего API импорта нет."
+    },
+    "IncidentEvent": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "id": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "context": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/ContextClaim"
+          }
+        },
+        "slug": {
+          "type": "string",
+          "description": "Уникальный постоянный ключ события."
+        },
+        "title": {
+          "type": "string",
+          "description": "Заголовок события."
+        },
+        "category": {
+          "type": "string",
+          "description": "Свободный текст категории; не enum."
+        },
+        "status": {
+          "type": "string",
+          "description": "Текстовый статус события; не enum ParticipantStatus."
+        },
+        "verification": {
+          "type": "string",
+          "description": "Текстовая метка достоверности; не enum."
+        },
+        "district": {
+          "type": "string",
+          "description": "Район."
+        },
+        "locationLabel": {
+          "type": "string",
+          "description": "Читаемое место / адрес."
+        },
+        "locationPrecision": {
+          "type": "string",
+          "description": "Пояснение точности места; свободный текст."
+        },
+        "latitude": {
+          "type": "number",
+          "minimum": -90,
+          "maximum": 90
+        },
+        "longitude": {
+          "type": "number",
+          "minimum": -180,
+          "maximum": 180
+        },
+        "occurredAt": {
+          "type": "string",
+          "description": "Время происшествия.",
+          "format": "date-time"
+        },
+        "summary": {
+          "type": "string",
+          "description": "Описание происшествия."
+        },
+        "updatedAt": {
+          "type": "string",
+          "description": "Дата обновления события.",
+          "format": "date-time"
+        },
+        "sources": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentSource"
+          }
+        },
+        "updates": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentUpdate"
+          }
+        },
+        "media": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/IncidentMedia"
+          }
+        },
+        "participants": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/Participant"
+          }
+        },
+        "legal": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LegalAssessment"
+          }
+        }
+      },
+      "required": [
+        "id",
+        "slug",
+        "title",
+        "category",
+        "status",
+        "verification",
+        "district",
+        "locationLabel",
+        "locationPrecision",
+        "latitude",
+        "longitude",
+        "occurredAt",
+        "summary",
+        "updatedAt",
+        "sources",
+        "updates",
+        "media"
+      ],
+      "description": "Полный объект события, передаваемый интерфейсу."
+    },
+    "LegalPenalty": {
+      "oneOf": [
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "imprisonment"
+            },
+            "min": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "years",
+                "months"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "max",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "fine"
+            },
+            "min": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "HUF"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "max",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "detention"
+            },
+            "min": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "days"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "max",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "community-service"
+            },
+            "min": {
+              "type": "number",
+              "minimum": 0
+            },
+            "max": {
+              "type": "number",
+              "exclusiveMinimum": 0
+            },
+            "unit": {
+              "type": "string",
+              "enum": [
+                "hours"
+              ]
+            }
+          },
+          "required": [
+            "kind",
+            "max",
+            "unit"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "const": "life-imprisonment"
+            }
+          },
+          "required": [
+            "kind"
+          ]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "kind": {
+              "type": "string",
+              "enum": [
+                "driving-ban",
+                "other"
+              ]
+            },
+            "text": {
+              "type": "string",
+              "minLength": 1
+            }
+          },
+          "required": [
+            "kind",
+            "text"
+          ]
+        }
+      ]
+    },
+    "LegalAssessment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "key": {
+          "type": "string",
+          "minLength": 1
+        },
+        "jurisdiction": {
+          "const": "HU"
+        },
+        "subjectLabel": {
+          "type": "string",
+          "minLength": 1
+        },
+        "participantKey": {
+          "type": "string",
+          "minLength": 1
+        },
+        "offense": {
+          "type": "string",
+          "minLength": 1
+        },
+        "qualification": {
+          "type": "string",
+          "enum": [
+            "official",
+            "reported",
+            "possible"
+          ]
+        },
+        "stage": {
+          "type": "string",
+          "enum": [
+            "investigation",
+            "charged",
+            "trial",
+            "judgment"
+          ]
+        },
+        "source": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "label": {
+              "type": "string",
+              "minLength": 1
+            },
+            "url": {
+              "type": "string",
+              "format": "uri",
+              "pattern": "^https?://"
+            },
+            "kind": {
+              "type": "string",
+              "enum": [
+                "official",
+                "media"
+              ]
+            },
+            "publishedAt": {
+              "type": "string",
+              "format": "date-time"
+            }
+          },
+          "required": [
+            "label",
+            "url",
+            "kind",
+            "publishedAt"
+          ]
+        },
+        "statuteMatch": {
+          "type": "string",
+          "enum": [
+            "source-explicit",
+            "editorial"
+          ]
+        },
+        "statutes": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "criminal",
+                  "petty-offense",
+                  "administrative"
+                ]
+              },
+              "act": {
+                "type": "string",
+                "minLength": 1
+              },
+              "section": {
+                "type": "string",
+                "minLength": 1
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "pattern": "^https?://"
+              },
+              "versionDate": {
+                "type": "string",
+                "format": "date"
+              }
+            },
+            "required": [
+              "code",
+              "act",
+              "section",
+              "url",
+              "versionDate"
+            ]
+          }
+        },
+        "penalties": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LegalPenalty"
+          }
+        },
+        "condition": {
+          "type": "string",
+          "minLength": 1
+        },
+        "reviewStatus": {
+          "type": "string",
+          "enum": [
+            "pending",
+            "approved"
+          ]
+        },
+        "checkedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": [
+        "key",
+        "jurisdiction",
+        "subjectLabel",
+        "offense",
+        "qualification",
+        "stage",
+        "source",
+        "statuteMatch",
+        "statutes",
+        "penalties",
+        "condition",
+        "reviewStatus",
+        "checkedAt"
+      ],
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "qualification": {
+                "const": "official"
+              }
+            }
+          },
+          "then": {
+            "properties": {
+              "source": {
+                "properties": {
+                  "kind": {
+                    "const": "official"
+                  }
+                }
+              }
+            }
+          }
+        }
+      ]
+    }
+  }
+}

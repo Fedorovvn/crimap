@@ -1,0 +1,1033 @@
+{
+  "version": "1.0",
+  "checkedAt": "2026-09-26",
+  "scope": "Budapest and optional Pest agglomeration",
+  "purpose": "Каталог для проектирования парсера. Это не запущенный сборщик и не готовая конфигурация адаптеров.",
+  "priorityLegend": {
+    "1": "Первая очередь",
+    "2": "Расширение",
+    "3": "Резерв / справочный источник"
+  },
+  "verificationLegend": {
+    "page-reviewed": "Просмотрена страница или подтверждена доступность прямым запросом; не гарантия качества/оперативности всех публикаций.",
+    "official-link-only": "Адрес найден в официальном материале, сама целевая лента не проверена."
+  },
+  "topicCodesNote": "topics — рабочие метки каталога источников; НЕ enum category существующего контракта события.",
+  "sources": [
+    {
+      "id": "police-brfk",
+      "name": "BRFK · полиция Будапешта",
+      "group": "official",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink?field_feltolto_szerv_target_id=108",
+      "language": "hu",
+      "coverage": "Будапешт",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "missing-person",
+        "investigation"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 1,
+      "notes": "Основной источник для фактов, задержаний, розыска и уточнений. Публикация может относиться к более раннему событию; не считать её время временем происшествия.",
+      "feeds": [
+        {
+          "url": "https://www.police.hu/hu/rss/Budapesti%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g",
+          "check": {
+            "url": "https://www.police.hu/hu/rss/Budapesti%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sat, 26 Sep 2026 05:30:00 +0000",
+            "channelTitle": "Legfrissebb híreink - Budapesti Rendőr-főkapitányság"
+          }
+        }
+      ],
+      "socialUrls": [
+        "https://www.facebook.com/BRFK-l-Budapesti-Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g-1625295504364187"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.police.hu/hu/rss",
+        "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/szervezeti-hirek/megujultunk"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "police-pest",
+      "name": "Полиция медье Пешт",
+      "group": "official",
+      "url": "https://www.police.hu/hu/rss",
+      "language": "hu",
+      "coverage": "Пригороды, медье Пешт",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "missing-person"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 2,
+      "notes": "Нужно для агломерации. Будапешт и медье Пешт фильтруем раздельно.",
+      "feeds": [
+        {
+          "url": "https://www.police.hu/hu/rss/Pest%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g",
+          "check": {
+            "url": "https://www.police.hu/hu/rss/Pest%20Megyei%20Rend%C5%91r-f%C5%91kapit%C3%A1nys%C3%A1g",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Fri, 25 Sep 2026 08:00:00 +0000",
+            "channelTitle": "Legfrissebb híreink - Pest Megyei Rendőr-főkapitányság"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.police.hu/hu/rss"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "police-national",
+      "name": "Police.hu · общая лента и ДТП",
+      "group": "official",
+      "url": "https://www.police.hu/hu/rss",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "investigation"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 1,
+      "notes": "Дополняет BRFK сообщениями других подразделений. Обязательны геофильтр и удаление дублей с BRFK; отдельная лента ДТП не гарантирует полноту.",
+      "feeds": [
+        {
+          "url": "https://www.police.hu/hu/rss/feed",
+          "check": {
+            "url": "https://www.police.hu/hu/rss/feed",
+            "status": 200,
+            "root": "rss",
+            "items": 35,
+            "firstDate": "Sat, 26 Sep 2026 07:04:22 +0000",
+            "channelTitle": "Legfrissebb híreink - Teljes hírcsatorna"
+          }
+        },
+        {
+          "url": "https://www.police.hu/hu/rss/Baleseti%20h%C3%ADrek",
+          "check": {
+            "url": "https://www.police.hu/hu/rss/Baleseti%20h%C3%ADrek",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sun, 20 Sep 2026 12:22:10 +0000",
+            "channelTitle": "Baleseti hírek"
+          }
+        }
+      ],
+      "socialUrls": [
+        "https://www.facebook.com/PoliceHungaryOfficial/"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.police.hu/hu/rss"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "okf-events",
+      "name": "BM OKF · VÉSZ / Eseménytérkép",
+      "group": "official",
+      "url": "https://www.katasztrofavedelem.hu/modules/vesz/esemenyterkep/",
+      "language": "hu",
+      "coverage": "Венгрия, фильтр Будапешта",
+      "topics": [
+        "fire",
+        "rescue",
+        "traffic-accident",
+        "gas-leak",
+        "storm-damage"
+      ],
+      "ingestionMethod": "Карта + архив; RSS требует наблюдения",
+      "priority": 1,
+      "notes": "Наиболее близкий по формату источник оперативных ЧП. RSS_VESZ вернул корректный XML, но 0 записей. Нельзя считать подтверждённой полноту и частоту этой ленты; нужен контроль карты и архива.",
+      "feeds": [
+        {
+          "url": "https://www.katasztrofavedelem.hu/10466/RSS_VESZ",
+          "check": {
+            "url": "https://www.katasztrofavedelem.hu/10466/RSS_VESZ",
+            "status": 200,
+            "root": "rss",
+            "items": 0,
+            "channelTitle": "BM OKF",
+            "firstDate": null
+          }
+        }
+      ],
+      "socialUrls": [
+        "https://www.facebook.com/bmokf.hivatalos/"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.katasztrofavedelem.hu/modules/vesz/esemenyterkep/",
+        "https://www.katasztrofavedelem.hu/modules/vesz/archivum/",
+        "https://www.katasztrofavedelem.hu/10198/rss-forrasok-a-bm-okf-oldalan"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "okf-daily",
+      "name": "BM OKF · Tegnap történt",
+      "group": "official",
+      "url": "https://www.katasztrofavedelem.hu/30/tegnap-tortent",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "fire",
+        "rescue",
+        "traffic-accident"
+      ],
+      "ingestionMethod": "HTML ежедневной сводки",
+      "priority": 1,
+      "notes": "Сводка за предыдущий день для восстановления пропущенных событий и уточнений. Один материал содержит много разных происшествий: его нужно делить на события. Не минутная лента.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.katasztrofavedelem.hu/30/tegnap-tortent"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "fki",
+      "name": "Fővárosi Katasztrófavédelmi Igazgatóság",
+      "group": "official",
+      "url": "https://fovaros.katasztrofavedelem.hu/",
+      "language": "hu",
+      "coverage": "Будапешт",
+      "topics": [
+        "fire",
+        "rescue",
+        "gas-leak"
+      ],
+      "ingestionMethod": "HTML новостей",
+      "priority": 2,
+      "notes": "Столичное управление спасателей: локальные сообщения, иногда фотографии. Много организационных публикаций — нужен фильтр происшествий.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://fovaros.katasztrofavedelem.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "omsz",
+      "name": "Országos Mentőszolgálat · скорая помощь",
+      "group": "official",
+      "url": "https://www.mentok.hu/",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "medical-rescue",
+        "injury"
+      ],
+      "ingestionMethod": "RSS сайта + официальная Facebook-страница",
+      "priority": 2,
+      "notes": "Сайт содержит выбранные новости службы, а не полный журнал выездов. При проверке верхняя дата RSS — 14 сентября. Для сообщений о спасениях полезна официальная соцстраница; автоматический доступ к её постам отдельно не проверен.",
+      "feeds": [
+        {
+          "url": "https://www.mentok.hu/feed/",
+          "check": {
+            "url": "https://www.mentok.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Mon, 14 Sep 2026 11:46:22 +0000",
+            "channelTitle": "ORSZÁGOS MENTŐSZOLGÁLAT"
+          }
+        }
+      ],
+      "socialUrls": [
+        "https://www.facebook.com/orszagosmentok/"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.mentok.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "bkk",
+      "name": "BKK Info / BKK OpenData",
+      "group": "official",
+      "url": "https://bkk.hu/bkk-info",
+      "language": "hu",
+      "coverage": "Будапешт",
+      "topics": [
+        "transport-disruption",
+        "closure",
+        "traffic-accident"
+      ],
+      "ingestionMethod": "BKK Info; интеграция через OpenData после проверки доступа",
+      "priority": 1,
+      "notes": "Оперативные изменения движения автобусов, трамваев, метро. Отделять происшествия от плановых работ. Портал OpenData предусматривает ключи и их одобрение BKK; конкретная лента alerts здесь не тестировалась. Статический GTFS не заменяет сообщения о сбоях.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://bkk.hu/bkk-info",
+        "https://m.bkkinfo.hu/apps/bkkinfo/",
+        "https://opendata.bkk.hu/data-sources",
+        "https://bkk.hu/bkk-partnerek/egyeb/gtfs-menetrendi-adatok-programozoknak/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "utinform",
+      "name": "Útinform · Magyar Közút",
+      "group": "official",
+      "url": "https://www.utinform.hu/",
+      "language": "hu",
+      "coverage": "Национальные дороги, въезды в Будапешт и M0",
+      "topics": [
+        "traffic-accident",
+        "road-closure",
+        "congestion"
+      ],
+      "ingestionMethod": "Динамическая карта / сайт",
+      "priority": 2,
+      "notes": "Полезен для кольцевой и подъездных дорог. Не заменяет городские источники. Публичный стабильный API/RSS при этой проверке не подтверждён.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.utinform.hu/",
+        "https://kozut.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "mavinform",
+      "name": "MÁVINFORM",
+      "group": "official",
+      "url": "https://www.mavcsoport.hu/mavinform",
+      "language": "hu",
+      "coverage": "Венгрия; линии и узлы Будапешта",
+      "topics": [
+        "rail-incident",
+        "transport-disruption",
+        "collision"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 1,
+      "notes": "Готовая транспортная лента. Сохранять обновления одной публикации; отсеивать плановые ремонты и нерелевантные регионы.",
+      "feeds": [
+        {
+          "url": "https://www.mavcsoport.hu/mavinform/rss.xml",
+          "check": {
+            "url": "https://www.mavcsoport.hu/mavinform/rss.xml",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sat, 26 Sep 2026 17:36:26 +0200",
+            "channelTitle": "MÁVINFORM hírek"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.mavcsoport.hu/mavinform"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "hungaromet",
+      "name": "HungaroMet · Veszélyjelzés",
+      "group": "official",
+      "url": "https://www.met.hu/idojaras/veszelyjelzes/",
+      "language": "hu",
+      "coverage": "Венгрия, территориальные предупреждения",
+      "topics": [
+        "weather-warning",
+        "storm",
+        "heat",
+        "ice"
+      ],
+      "ingestionMethod": "Страница предупреждений + открытый каталог файлов",
+      "priority": 2,
+      "notes": "Предупреждение о риске не равно уже произошедшему ЧП. В каталоге ODP есть венгерские предупреждения и оповещения; форматы конкретных файлов нужно согласовать при реализации.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.met.hu/idojaras/veszelyjelzes/",
+        "https://odp.met.hu/weather/warnings/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "water",
+      "name": "Fővárosi Vízművek · Munkatérkép",
+      "group": "official",
+      "url": "https://www.vizmuvek.hu/hu/kezdolap/informaciok/munkaterkep-hol-dolgozunk",
+      "language": "hu",
+      "coverage": "Будапешт и зона обслуживания",
+      "topics": [
+        "water-outage",
+        "pipe-burst",
+        "road-restriction"
+      ],
+      "ingestionMethod": "Карта работ + официальная Facebook-страница",
+      "priority": 2,
+      "notes": "Карта различает текущие/ожидаемые отключения и ограничения движения. Выявлять аварийные работы отдельно от плановых. Рекламируемый RSS /hu/rss/head/ вернул 404.",
+      "feeds": [],
+      "socialUrls": [
+        "https://www.facebook.com/fovarosivizmuvek/"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.vizmuvek.hu/hu/kezdolap/informaciok/munkaterkep-hol-dolgozunk"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "eon",
+      "name": "E.ON · Áramszünet",
+      "group": "official",
+      "url": "https://www.eon.hu/aramszunet",
+      "language": "hu",
+      "coverage": "Зона обслуживания, включая Будапешт",
+      "topics": [
+        "power-outage"
+      ],
+      "ingestionMethod": "Карта отключений; подключение требует проверки",
+      "priority": 3,
+      "notes": "Адрес подтверждён официальной памяткой; содержимое карты в исследовании получить не удалось. Не считать готовым источником для автоматического сбора.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "official-link-only",
+      "evidenceUrls": [
+        "https://www.eon.hu/content/dam/eon/eon-hungary/documents/Lakossagi/Hibabejelentes_tudnivalok.pdf"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "budapest-kozut",
+      "name": "Budapest Közút",
+      "group": "official",
+      "url": "https://www.budapestkozut.hu/",
+      "language": "hu",
+      "coverage": "Будапешт",
+      "topics": [
+        "road-closure",
+        "roadworks"
+      ],
+      "ingestionMethod": "RSS новостей + HTML",
+      "priority": 3,
+      "notes": "Дорожные работы и городская инфраструктура; справочный источник. Найденный RSS при проверке содержит одну запись и не является полной оперативной дорожной лентой.",
+      "feeds": [
+        {
+          "url": "https://www.budapestkozut.hu/feed/",
+          "check": {
+            "url": "https://www.budapestkozut.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 1,
+            "firstDate": "Wed, 23 Sep 2026 11:10:36 +0000",
+            "channelTitle": "Budapest Közút Zrt."
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.budapestkozut.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "budapest-city",
+      "name": "Budapest.hu · городские сообщения",
+      "group": "official",
+      "url": "https://budapest.hu/hirek/hirek",
+      "language": "hu",
+      "coverage": "Будапешт",
+      "topics": [
+        "city-alert",
+        "heat",
+        "closure"
+      ],
+      "ingestionMethod": "HTML",
+      "priority": 3,
+      "notes": "Общегородские сообщения, ограничения, меры при жаре и других рисках. Много обычных городских новостей; не специализированная лента ЧП.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://budapest.hu/hirek/hirek"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "prosecution",
+      "name": "Ügyészség · прокуратура",
+      "group": "official",
+      "url": "https://ugyeszseg.hu/category/sajto/",
+      "language": "hu",
+      "coverage": "Венгрия; фильтр столичной прокуратуры",
+      "topics": [
+        "charges",
+        "custody",
+        "case-update"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 2,
+      "notes": "Для развития уже известных дел и статусов участников. Историческое происшествие из нового пресс-релиза не должно попадать как новое ЧП. Не смешивать запрос меры пресечения с уже принятым решением.",
+      "feeds": [
+        {
+          "url": "https://ugyeszseg.hu/category/hirek/sajto/feed/",
+          "check": {
+            "url": "https://ugyeszseg.hu/category/hirek/sajto/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Fri, 25 Sep 2026 07:57:16 +0000",
+            "channelTitle": "Sajtóközlemények - Ügyészség"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://ugyeszseg.hu/category/sajto/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "bpiautosok",
+      "name": "BpiAutósok",
+      "group": "media",
+      "url": "https://bpiautosok.hu/",
+      "language": "hu",
+      "coverage": "Будапешт и Венгрия",
+      "topics": [
+        "traffic-accident",
+        "road-conflict",
+        "dashcam"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 1,
+      "notes": "ДТП, дорожные конфликты, фото и записи очевидцев. Есть материалы вне столицы и старые записи: проверять место и время.",
+      "feeds": [
+        {
+          "url": "https://bpiautosok.hu/feed/",
+          "check": {
+            "url": "https://bpiautosok.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Thu, 24 Sep 2026 17:28:57 +0000",
+            "channelTitle": "BpiAutósok.hu"
+          }
+        }
+      ],
+      "socialUrls": [
+        "https://www.facebook.com/bpiautosok.hu"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://bpiautosok.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "budapestkornyeke",
+      "name": "BudaPestkörnyéke",
+      "group": "media",
+      "url": "https://budapestkornyeke.hu/",
+      "language": "hu",
+      "coverage": "Будапешт и агломерация",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "fire",
+        "local-news"
+      ],
+      "ingestionMethod": "RSS + разделы Baleset / Krimi",
+      "priority": 1,
+      "notes": "Плотное локальное покрытие и фотографии. Сопоставлять с первичной публикацией полиции/спасателей; статьи могут быть пересказами.",
+      "feeds": [
+        {
+          "url": "https://budapestkornyeke.hu/feed/",
+          "check": {
+            "url": "https://budapestkornyeke.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sat, 26 Sep 2026 10:26:23 +0000",
+            "channelTitle": "BudaPestkörnyéke.hu"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://budapestkornyeke.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "kekvillogo",
+      "name": "Kékvillogó",
+      "group": "media",
+      "url": "https://kekvillogo.hu/",
+      "language": "hu",
+      "coverage": "Венгрия, есть раздел Budapest",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "rescue"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 2,
+      "notes": "Специализированный сайт происшествий. Нужен геофильтр и сопоставление перепечаток с другими изданиями.",
+      "feeds": [
+        {
+          "url": "https://kekvillogo.hu/feed/",
+          "check": {
+            "url": "https://kekvillogo.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 20,
+            "firstDate": "Sat, 26 Sep 2026 10:31:02 +0000",
+            "channelTitle": "Kékvillogó"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://kekvillogo.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "ittlakunk",
+      "name": "Ittlakunk · сеть районных сайтов",
+      "group": "media",
+      "url": "https://budapest.ittlakunk.hu/",
+      "language": "hu",
+      "coverage": "Будапешт и районные страницы",
+      "topics": [
+        "local-incident",
+        "traffic-accident",
+        "closure"
+      ],
+      "ingestionMethod": "HTML районных страниц",
+      "priority": 2,
+      "notes": "Полезен для событий масштаба улицы и района. Проверены примеры публикаций I и XIII районов; RSS всей сети в этой проверке не подтверждён.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://ittlakunk.hu/",
+        "https://1.kerulet.ittlakunk.hu/kozlekedes/260610/hazfalnak-utkozott-egy-auto-a-hattyu-utcaban",
+        "https://13.kerulet.ittlakunk.hu/kozlekedes/260908/ujra-kellett-eleszteni-egy-fiatal-not-akit-elgazolt-egy-auto-a-roppentyu-utcanal"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "24hu",
+      "name": "24.hu · Belföld",
+      "group": "media",
+      "url": "https://24.hu/belfold/",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "crime",
+        "traffic-accident",
+        "breaking-news"
+      ],
+      "ingestionMethod": "Общий RSS + тематический/геофильтр",
+      "priority": 1,
+      "notes": "Дополнительные подробности, ответы служб и фотографии. RSS общий, поэтому большую часть публикаций нужно отсеивать.",
+      "feeds": [
+        {
+          "url": "https://24.hu/feed/",
+          "check": {
+            "url": "https://24.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sat, 26 Sep 2026 15:49:08 +0000",
+            "channelTitle": "24.hu"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://24.hu/belfold/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "telex",
+      "name": "Telex · Belföld",
+      "group": "media",
+      "url": "https://telex.hu/rovat/belfold",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "breaking-news",
+        "crime",
+        "traffic-accident"
+      ],
+      "ingestionMethod": "Общий RSS + тематический/геофильтр",
+      "priority": 1,
+      "notes": "Второй крупный редакционный источник для сопоставления сообщений; общая лента содержит много других тем.",
+      "feeds": [
+        {
+          "url": "https://telex.hu/rss",
+          "check": {
+            "url": "https://telex.hu/rss",
+            "status": 200,
+            "root": "rss",
+            "items": 50,
+            "firstDate": "Sat, 26 Sep 2026 17:50:27 +0200",
+            "channelTitle": "Telex RSS: Legfrissebb"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://telex.hu/rovat/belfold"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "hvg",
+      "name": "HVG · Itthon",
+      "group": "media",
+      "url": "https://hvg.hu/itthon",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "crime",
+        "breaking-news",
+        "case-update"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 2,
+      "notes": "Для подробностей и дальнейшего развития громких событий; нужен геофильтр.",
+      "feeds": [
+        {
+          "url": "https://hvg.hu/rss",
+          "check": {
+            "url": "https://hvg.hu/rss",
+            "status": 200,
+            "root": "rss",
+            "items": 60,
+            "firstDate": "Sat, 26 Sep 2026 15:48:26 Z",
+            "channelTitle": "HVG"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://hvg.hu/itthon"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "index",
+      "name": "Index · Belföld",
+      "group": "media",
+      "url": "https://index.hu/belfold/",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "breaking-news",
+        "traffic-accident",
+        "crime"
+      ],
+      "ingestionMethod": "RSS раздела Belföld",
+      "priority": 2,
+      "notes": "Внутренняя новостная лента; фильтровать Будапешт, происшествия и даты фактического события.",
+      "feeds": [
+        {
+          "url": "https://index.hu/belfold/rss/",
+          "check": {
+            "url": "https://index.hu/belfold/rss/",
+            "status": 200,
+            "root": "rss",
+            "items": 30,
+            "firstDate": "Sat, 26 Sep 2026 17:55:00 +0200",
+            "channelTitle": "Index - Belföld cikkek"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://index.hu/belfold/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "blikk",
+      "name": "Blikk · Krimi",
+      "group": "media",
+      "url": "https://www.blikk.hu/aktualis/krimi",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "crime",
+        "traffic-accident"
+      ],
+      "ingestionMethod": "HTML; RSS не подтверждён",
+      "priority": 2,
+      "notes": "Криминальные материалы, рассказы очевидцев и фото. Каталог просмотрен через поиск; прямой запрос из локальной среды встретил ошибку TLS, автоматический сбор ещё не проверен.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.blikk.hu/aktualis/krimi"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "metropol",
+      "name": "Metropol",
+      "group": "media",
+      "url": "https://metropol.hu/",
+      "language": "hu",
+      "coverage": "Будапешт и Венгрия",
+      "topics": [
+        "local-incident",
+        "crime",
+        "traffic-accident"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 2,
+      "notes": "Городские происшествия среди общей новостной ленты; требуется фильтрация.",
+      "feeds": [
+        {
+          "url": "https://metropol.hu/publicapi/hu/rss/metropol/articles",
+          "check": {
+            "url": "https://metropol.hu/publicapi/hu/rss/metropol/articles",
+            "status": 200,
+            "root": "rss",
+            "items": 50,
+            "firstDate": "Fri, 25 Sep 2026 12:51:39 +0000",
+            "channelTitle": "Metropol"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://metropol.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "rtl",
+      "name": "RTL Híradó",
+      "group": "media",
+      "url": "https://rtl.hu/hirado",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "crime",
+        "rescue",
+        "reportage"
+      ],
+      "ingestionMethod": "Общий RSS + страницы сюжетов",
+      "priority": 2,
+      "notes": "Репортажи и уточнения. RSS покрывает RTL в целом, а не только ЧП; видео не превращается автоматически в поддерживаемую сайтом фотографию.",
+      "feeds": [
+        {
+          "url": "https://rss.rtl.hu",
+          "check": {
+            "url": "https://rss.rtl.hu",
+            "status": 200,
+            "root": "rss",
+            "items": 50,
+            "firstDate": "Sat, 26 Sep 2026 17:30:00 +0200",
+            "channelTitle": "RTL.hu"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://rtl.hu/hirado"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "idokep",
+      "name": "Időkép",
+      "group": "media",
+      "url": "https://www.idokep.hu/",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "storm",
+        "weather-impact",
+        "flooding"
+      ],
+      "ingestionMethod": "RSS погодных новостей",
+      "priority": 2,
+      "notes": "Наблюдения, фотографии и последствия непогоды; для официального предупреждения использовать HungaroMet.",
+      "feeds": [
+        {
+          "url": "https://adat.idokep.hu/rss/news.xml",
+          "check": {
+            "url": "https://adat.idokep.hu/rss/news.xml",
+            "status": 200,
+            "root": "rss",
+            "items": 10,
+            "firstDate": "Sat, 26 Sep 2026 17:48:38 +0200",
+            "channelTitle": "Időkép"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.idokep.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "langlovagok",
+      "name": "Lánglovagok",
+      "group": "media",
+      "url": "https://www.langlovagok.hu/",
+      "language": "hu",
+      "coverage": "Венгрия",
+      "topics": [
+        "fire",
+        "fire-safety"
+      ],
+      "ingestionMethod": "RSS + статьи",
+      "priority": 3,
+      "notes": "Профильный пожарный ресурс / база знаний. В проверенном RSS верхняя дата 4 сентября: не использовать как основной быстрый канал.",
+      "feeds": [
+        {
+          "url": "https://www.langlovagok.hu/feed/",
+          "check": {
+            "url": "https://www.langlovagok.hu/feed/",
+            "status": 200,
+            "root": "rss",
+            "items": 21,
+            "firstDate": "Fri, 04 Sep 2026 08:24:08 +0000",
+            "channelTitle": "Lánglovagok"
+          }
+        }
+      ],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://www.langlovagok.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "balesetinfo",
+      "name": "Baleset-info · Facebook-группа",
+      "group": "community",
+      "url": "https://baleset-info.hu/",
+      "language": "hu",
+      "coverage": "Будапешт и Венгрия",
+      "topics": [
+        "traffic-accident",
+        "eyewitness"
+      ],
+      "ingestionMethod": "Публикации группы; отдельная проверка доступа",
+      "priority": 2,
+      "notes": "Сайт сейчас является формой отправки материалов и ведёт в Facebook-группу. HTML сайта не содержит новостную ленту. Сообщения очевидцев — повод искать подтверждение, доступ к автоматическому чтению группы не проверен.",
+      "feeds": [],
+      "socialUrls": [
+        "https://www.facebook.com/groups/balesetinfo"
+      ],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://baleset-info.hu/"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "telegram-karpathir",
+      "name": "KárpátHír · Telegram",
+      "group": "telegram",
+      "url": "https://t.me/s/karpathirr",
+      "language": "hu",
+      "coverage": "Венгрия / Закарпатье / международные новости",
+      "topics": [
+        "general-news"
+      ],
+      "ingestionMethod": "Публичный Telegram-preview",
+      "priority": 3,
+      "notes": "Венгероязычный канал найден, но просмотренная лента в основном международная. Не специализированный источник ЧП Будапешта; оставить в резерве.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://t.me/s/karpathirr"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "telegram-budalive",
+      "name": "Будапешт Live · Telegram",
+      "group": "telegram",
+      "url": "https://t.me/s/budalive",
+      "language": "ru",
+      "coverage": "Будапешт и Венгрия",
+      "topics": [
+        "local-news"
+      ],
+      "ingestionMethod": "Публичный Telegram-preview",
+      "priority": 3,
+      "notes": "Русскоязычный дополнительный канал для обнаружения тем и исходных ссылок. Не заменяет венгерские первоисточники. Публичная страница и ссылки на сообщения получены прямым запросом.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://t.me/s/budalive"
+      ],
+      "checkedAt": "2026-09-26"
+    },
+    {
+      "id": "telegram-tripandme",
+      "name": "Венгрия, Будапешт и не только · Telegram",
+      "group": "telegram",
+      "url": "https://t.me/s/tripandme",
+      "language": "ru",
+      "coverage": "Будапешт и Венгрия",
+      "topics": [
+        "local-news",
+        "travel"
+      ],
+      "ingestionMethod": "Публичный Telegram-preview",
+      "priority": 3,
+      "notes": "Русскоязычные новости, городская жизнь и туризм, включая отдельные происшествия. Вторичный источник; много нерелевантных для ЧП публикаций.",
+      "feeds": [],
+      "socialUrls": [],
+      "verification": "page-reviewed",
+      "evidenceUrls": [
+        "https://t.me/s/tripandme"
+      ],
+      "checkedAt": "2026-09-26"
+    }
+  ]
+}

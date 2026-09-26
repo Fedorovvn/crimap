@@ -2,7 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
-import { ArrowLeftIcon, CarFrontIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
+import { ArrowLeftIcon, CarFrontIcon, CrossIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
 import { filterIncidents, PERIODS, selectVisibleIncident } from "./incidents-model";
 import { HandcuffsIcon } from "./incident-icons";
 import { IncidentParticipants } from "./incident-participants";
@@ -20,6 +20,8 @@ const IncidentMap = dynamic(
 );
 
 export type IncidentView = {
+  eventType?: string;
+  signals?: IncidentSignal[];
   context?: ContextClaim[];
   legal?: LegalAssessment[];
   participants?: Participant[];
@@ -128,7 +130,7 @@ function IncidentMediaGallery({ incident }: { incident: IncidentView }) {
   );
 }
 
-type IncidentSignal = "death" | "suspect-detained" | "suspect-wanted";
+type IncidentSignal = "death" | "injury" | "suspect-detained" | "suspect-wanted";
 
 
 function KnifeIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
@@ -140,7 +142,9 @@ function KnifeIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
   );
 }
 
-export function getIncidentType(incident: Pick<IncidentView, "title" | "category" | "summary">) {
+export function getIncidentType(incident: Pick<IncidentView, "title" | "category" | "summary" | "eventType">) {
+  const labels: Record<string, string> = { "traffic-accident": "ДТП", assault: "Нападение", fight: "Драка", robbery: "Ограбление", accident: "Несчастный случай", fire: "Пожар", rescue: "Спасательная операция", "missing-person": "Пропавший человек", "transport-disruption": "Транспорт", weather: "Непогода", other: "Происшествие" };
+  if (incident.eventType && labels[incident.eventType]) return labels[incident.eventType];
   const text = `${incident.title} ${incident.category} ${incident.summary}`.toLocaleLowerCase("ru-RU");
 
   if (/дтп|столкнов|авари/.test(text)) return "ДТП";
@@ -152,7 +156,8 @@ export function getIncidentType(incident: Pick<IncidentView, "title" | "category
   return "Происшествие";
 }
 
-export function getIncidentSignals(incident: Pick<IncidentView, "title" | "status" | "summary">): IncidentSignal[] {
+export function getIncidentSignals(incident: Pick<IncidentView, "title" | "status" | "summary" | "signals">): IncidentSignal[] {
+  if (incident.signals) return incident.signals;
   const text = `${incident.title} ${incident.status} ${incident.summary}`.toLocaleLowerCase("ru-RU");
   const signals: IncidentSignal[] = [];
 
@@ -179,12 +184,13 @@ function IncidentSignalIcon({ signal }: { signal: IncidentSignal }) {
   const className = "size-3.5";
 
   if (signal === "death") return <SkullIcon aria-hidden="true" className={className} strokeWidth={2.1} />;
+  if (signal === "injury") return <CrossIcon aria-hidden="true" className={className} strokeWidth={2.1} />;
   if (signal === "suspect-detained") return <HandcuffsIcon aria-hidden="true" className={className} />;
 
   return <SearchIcon aria-hidden="true" className={className} strokeWidth={2.1} />;
 }
 
-function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | "status" | "summary"> }) {
+function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | "status" | "summary" | "signals"> }) {
   const signals = getIncidentSignals(incident);
 
   if (!signals.length) return null;
@@ -194,6 +200,7 @@ function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | 
       {signals.map((signal) => {
         const details = {
           death: { label: "Есть погибшие" },
+          injury: { label: "Есть пострадавшие" },
           "suspect-detained": { label: "Подозреваемый задержан" },
           "suspect-wanted": { label: "Подозреваемый разыскивается" },
         }[signal];

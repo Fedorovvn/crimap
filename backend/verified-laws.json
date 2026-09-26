@@ -1,0 +1,83 @@
+[
+  {
+    "id": "homicide-basic",
+    "offense": "Homicide (basic offense)",
+    "hungarianQualification": "emberölés",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 160 (1)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 5,
+        "max": 15,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only the basic offense; aggravating circumstances can change the sanction.",
+    "checkedAt": "2026-09-26T12:00:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "attempt-serious-bodily-harm",
+    "offense": "Attempted serious bodily harm",
+    "hungarianQualification": "súlyos testi sértés kísérlete",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 164 (3)"
+      },
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 10 (2)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "Basic offense; the attempt provision applies the completed-offense sanction.",
+    "checkedAt": "2026-09-26T12:00:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "drug-impaired-driving-fatal",
+    "offense": "Drug-impaired driving causing death",
+    "hungarianQualification": "bódult állapotban elkövetett járművezetés",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 237 (2) c)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 2,
+        "max": 8,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only if the court establishes all elements of this offense.",
+    "checkedAt": "2026-09-26T12:00:00+02:00",
+    "reviewRequired": true
+  }
+]
