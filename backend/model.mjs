@@ -39,7 +39,7 @@ export class DeepSeek {
       if(data.choices?.[0]?.finish_reason!=='stop')throw new Error('Model response incomplete');
       let result;
       try{result=validate(parseJsonResponse(data.choices[0].message.content));}
-      catch(e){this.store.log('model-validation-failure',cacheKey,{stage,error:e.message,response:data.choices[0].message.content.slice(0,30000)});if(attempt===1)throw e;feedback='\nYour previous response failed server validation. Generate a fresh corrected JSON response. Validation error: '+e.message.slice(0,3000);continue;}
+      catch(e){this.store.log('model-validation-failure',cacheKey,{stage,error:e.message,response:data.choices[0].message.content.slice(0,30000)});if(attempt===1){e.validationFailure=true;throw e;}feedback='\nYour previous response failed server validation. Generate a fresh corrected JSON response. Validation error: '+e.message.slice(0,3000);continue;}
       this.store.db.prepare('INSERT OR REPLACE INTO model_cache VALUES(?,?,?)').run(cacheKey,JSON.stringify(result),new Date().toISOString());
       return result;
     }catch(e){this.store.usageFailed(id,e.message);throw e;}

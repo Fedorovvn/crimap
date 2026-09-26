@@ -59,12 +59,16 @@ export class Pipeline {
     const doc=await this.readDocument(url,publishedAt);
     const processed=this.store.db.prepare("SELECT id FROM audit WHERE action='document-processed' AND subject=? LIMIT 1").get(`${doc.id}:${doc.contentHash}`);
     if(processed)return {unchanged:true,documentId:doc.id};
-    const result=await this.model.json('extract',{schema:this.schema,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:this.laws},{validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}});
+    const input={schema:this.schema,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:this.laws};
+    const options={validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
+    let result,extractionModel=this.model.model;
+    try{result=await this.model.json('extract',input,options);}
+    catch(e){if(!e.validationFailure||!this.reviewer)throw e;this.store.log('escalated-extraction',doc.id,{reason:e.message,model:this.reviewer.model});result=await this.reviewer.json('extract',{...input,previousValidationError:e.message},options);extractionModel=this.reviewer.model;}
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
     const events=result.events.map(event=>this.validate(event,[doc]));
     let firstId;
     for(const event of events){const id=await this.upsert(event,doc);firstId??=id;}
-    if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:this.model.model});
+    if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
     this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,irrelevantReason:result.irrelevantReason});
     return {documentId:doc.id,events:events.length};
   }
