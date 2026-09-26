@@ -1,6 +1,7 @@
 import { asc, desc, eq } from "drizzle-orm";
 import { ensureStarterIncidents, getDb, getIncidentParticipants, getIncidentContext, getIncidentLegal, getIncidentMetadata } from "../db";
 import { incidentMedia, incidents, incidentSources, incidentUpdates } from "../db/schema";
+import starterTranslations from "../db/starter-translations.json";
 import { IncidentsView, type IncidentView } from "./incidents-view";
 
 export const dynamic = "force-dynamic";
@@ -21,7 +22,9 @@ export default async function Home() {
         getIncidentLegal(incident.id),
         getIncidentMetadata(incident.id),
       ]);
-      return { ...incident, ...metadata, sources, updates, media, participants, context, legal };
+      const translations = metadata.translations
+        ?? (starterTranslations as Record<string, IncidentView["translations"]>)[incident.slug];
+      return { ...incident, ...metadata, translations, sources, updates, media, participants, context, legal };
     }),
   );
 
