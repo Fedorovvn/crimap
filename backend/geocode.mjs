@@ -63,8 +63,33 @@ export class Geocoder{
     const data=JSON.parse(res.body);if(!Array.isArray(data.features))throw new Error('Invalid geocoder response');
     this.store.db.prepare('INSERT OR REPLACE INTO geocode_cache VALUES(?,?,?)').run(key,JSON.stringify(data.features),new Date().toISOString());return data.features;
   }
+  async landmarks(anchor, location) {
+    const features = await this.query(`${anchor.label}, ${location.district??''}, Budapest`);
+    if (['street','address'].includes(anchor.kind)) {
+      const found = choosePlace(features, {...location,label:anchor.label,precision:anchor.kind==='address'?'exact':'street'});
+      return found ? [{...found,id:hash(found).slice(0,20)}] : [];
+    }
+    const label = normalizePlace(anchor.label), district = districtNumber(location.district);
+    const candidates = [];
+    for (const f of features) {
+      const p=f.properties??{}, [longitude,latitude]=f.geometry?.coordinates??[];
+      if (!bounds(latitude,longitude) || String(p.countrycode).toUpperCase()!=='HU') continue;
+      if (![p.city,p.state].some(s=>normalizePlace(s)==='budapest')) continue;
+      const name=normalizePlace(p.name), foundDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
+      if (district && foundDistrict && district!==foundDistrict) continue;
+      if (!(name===label || name.startsWith(label+' ') || label.startsWith(name+' ') && name.length>4)) continue;
+      if (anchor.kind==='stop' && !['tram_stop','bus_stop','stop_position','platform','station','halt','stop_area'].includes(p.osm_value)) continue;
+      if (anchor.kind==='landmark' && ['highway','boundary'].includes(p.osm_key)) continue;
+      if (!['N','W','R'].includes(p.osm_type) || !/^\d+$/.test(String(p.osm_id))) continue;
+      const candidate={latitude,longitude,precision:'landmark',provider:'photon',label:p.name,district:foundDistrict,
+        placeType:p.osm_value,street:p.street??null,postcode:p.postcode??null,
+        sourceUrl:`https://www.openstreetmap.org/${{N:'node',W:'way',R:'relation'}[p.osm_type]}/${p.osm_id}`};
+      candidates.push({...candidate,id:hash(candidate).slice(0,20)});
+    }
+    return candidates.slice(0,8);
+  }
   async locate(location){
-    if(['exact','street'].includes(location.precision)){
+    if(['exact','street','landmark'].includes(location.precision)){
       const found=choosePlace(await this.query(`${location.label}, ${location.district??''}, Budapest`),location);
       if(found)return found;
     }

@@ -11,6 +11,7 @@ import { isDeepStrictEqual } from 'node:util';
 import { checkReview,recordRequests } from './review.mjs';
 import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
+import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
 
 const iso=()=>new Date().toISOString();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -177,10 +178,33 @@ export class Pipeline {
     if(!translated)throw new Error('Translate the current revision before review');
     const docs=this.eventDocuments(id);
     const russian=JSON.parse(translated.payload);
-    const preparation=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
-    const result=await this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,siteTranslations:languages,documents:docs,preparation:preparation?JSON.parse(preparation.payload):null,verifiedLawCatalog:this.laws},{maxTokens:4000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,translations:languages})});
-    this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,event.revision,this.reviewer.model,JSON.stringify(result),iso());
-    this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
+    const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
+    const preparation=prepared?JSON.parse(prepared.payload):null;
+    const enabled=!!(preparation&&this.preparation?.geocoder?.landmarks&&event.canonical.location.precision!=='exact');
+    if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
+    const assess=async()=>{
+      const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2};
+      return this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,siteTranslations:languages,documents:docs,preparation,locationLookup,verifiedLawCatalog:this.laws},{maxTokens:5000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,translations:languages,locationLookup})});
+    };
+    let result=await assess();
+    if(result.verdict!=='reject'&&result.locationResolution?.action==='search'){
+      // Remove any earlier pass before starting work that can change the map.
+      this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
+      preparation.locationReview={pending:true,queries:result.locationResolution.queries,completed:0,candidates:[]};
+      saveLocationPreparation(this.store,event,preparation);
+      await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
+      result=await assess();
+    }
+    if(result.verdict!=='reject'&&result.locationResolution?.action==='select'){
+      const candidate=preparation.locationReview.candidates.find(c=>c.id===result.locationResolution.candidateId);
+      return applyReviewedLocation(this.store,event,preparation,candidate,result.locationResolution.reason,this.campaignId??event.campaign_id);
+    }
+    this.store.transaction(()=>{
+      if(this.store.event(id)?.revision!==event.revision)throw new Error('Event changed during final review');
+      if(enabled){preparation.locationReview={...preparation.locationReview,checked:true};this.store.db.prepare('UPDATE preparation SET payload=? WHERE event_id=? AND revision=?').run(JSON.stringify(preparation),id,event.revision);}
+      this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,event.revision,this.reviewer.model,JSON.stringify(result),iso());
+      this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
+    });
     recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});
     if(this.preparation&&result.verdict==='revise'&&event.auto_repairs<2&&this.store.event(id).revision===event.revision)this.store.enqueue('repair',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});
     return result;

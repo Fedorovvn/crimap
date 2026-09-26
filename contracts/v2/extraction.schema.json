@@ -86,6 +86,7 @@
                     "enum": [
                       "exact",
                       "street",
+                      "landmark",
                       "district",
                       "city",
                       "unknown"

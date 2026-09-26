@@ -17,7 +17,7 @@ export const evidenceSchema = z.object({field:text,documentId:text,quote:text,at
 export const eventSchema = z.object({
   title:text,summary:text,type:z.enum(TYPES),status:z.enum(['reported','investigating','suspects-detained','wanted','resolved','closed','unknown']),
   occurredAt:date.nullable(),timePrecision:z.enum(['exact','hour','day','unknown']),
-  location:z.object({city:text,district:text.optional(),label:text,precision:z.enum(['exact','street','district','city','unknown']),latitude:z.number().min(-90).max(90).optional(),longitude:z.number().min(-180).max(180).optional()}).strict(),
+  location:z.object({city:text,district:text.optional(),label:text,precision:z.enum(['exact','street','landmark','district','city','unknown']),latitude:z.number().min(-90).max(90).optional(),longitude:z.number().min(-180).max(180).optional()}).strict(),
   signals:z.array(z.enum(SIGNALS)),caseReferences:z.array(text),
   participants:z.array(participantSchema).max(50),context:z.array(context).max(40),legal:z.array(legalAssessmentSchema).max(20),
   updates:z.array(z.object({key,publishedAt:date,title:text,detail:text,sourceUrl:url}).strict()).max(50),

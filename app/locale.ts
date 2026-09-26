@@ -54,6 +54,7 @@ export const messages: Record<string, [string, string]> = {
   'Улица; точный номер не раскрыт': ['Street; exact address not disclosed', 'Utca; a pontos házszámot nem közölték'],
   'Улица; точное место не раскрыто': ['Street; exact location not disclosed', 'Utca; a pontos helyszínt nem közölték'],
   'Приблизительно: район': ['Approximate: district', 'Hozzávetőleges: kerület'],
+  'Приблизительно: у указанного ориентира': ['Approximate: near the reported landmark', 'Hozzávetőleges: a megadott hely közelében'],
   'Приблизительно: город': ['Approximate: city', 'Hozzávetőleges: város'],
   'Место уточняется': ['Location to be confirmed', 'A helyszín tisztázás alatt'],
   'Будапешт': ['Budapest', 'Budapest'],

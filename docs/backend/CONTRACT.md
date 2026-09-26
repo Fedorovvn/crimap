@@ -15,7 +15,7 @@
 | occurredAt | ISO 8601 с часовым поясом или null | Время происшествия, возраст для повторных проверок |
 | timePrecision | exact, hour, day, unknown | Не выдавать день за известную минуту |
 | location | city, district?, label, precision, latitude?, longitude? | Карта и строка под хронологией |
-| location.precision | exact, street, district, city, unknown | Точность места, независимая от точности времени |
+| location.precision | exact, street, landmark, district, city, unknown | Точность места, независимая от точности времени; landmark — приблизительно у остановки или другого ориентира |
 | caseReferences | строки | Официальные номера дел, если опубликованы |
 | participants | массив Participant, максимум 50 | Подозреваемые, потерпевшие, другие участники |
 | context | массив ContextClaim | Атрибутированные предположения и сообщения очевидцев |

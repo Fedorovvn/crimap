@@ -46,7 +46,8 @@
                 "enum": [
                   "source",
                   "english",
-                  "russian"
+                  "russian",
+                  "translation"
                 ]
               }
             },
@@ -106,6 +107,105 @@
             "additionalProperties": false
           },
           "maxItems": 10
+        },
+        "locationResolution": {
+          "anyOf": [
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "search"
+                },
+                "queries": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "label": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 160
+                      },
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "stop",
+                          "landmark",
+                          "street",
+                          "address"
+                        ]
+                      },
+                      "documentId": {
+                        "type": "string"
+                      },
+                      "quote": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 2000
+                      }
+                    },
+                    "required": [
+                      "label",
+                      "kind",
+                      "documentId",
+                      "quote"
+                    ],
+                    "additionalProperties": false
+                  },
+                  "minItems": 1,
+                  "maxItems": 2
+                }
+              },
+              "required": [
+                "action",
+                "queries"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "select"
+                },
+                "candidateId": {
+                  "type": "string"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "action",
+                "candidateId",
+                "reason"
+              ],
+              "additionalProperties": false
+            },
+            {
+              "type": "object",
+              "properties": {
+                "action": {
+                  "type": "string",
+                  "const": "keep"
+                },
+                "reason": {
+                  "type": "string",
+                  "minLength": 1,
+                  "maxLength": 2000
+                }
+              },
+              "required": [
+                "action",
+                "reason"
+              ],
+              "additionalProperties": false
+            }
+          ]
         }
       },
       "required": [
