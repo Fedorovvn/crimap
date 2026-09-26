@@ -1,10 +1,15 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {surfaceCandidates} from '../map-surfaces.mjs';
+import {surfaceCandidates,retainLocationCoordinates} from '../map-surfaces.mjs';
 import {choosePlace,Geocoder} from '../geocode.mjs';
 import {Store} from '../store.mjs';
 const center={latitude:47.5,longitude:19.07};
 const nodes=[{type:'node',id:1,lat:47.499,lon:19.071},{type:'node',id:2,lat:47.501,lon:19.071},{type:'node',id:3,lat:47.501,lon:19.072}];
+test('text repair cannot keep stale coordinates after changing the address or invent a new point',()=>{
+ const old={city:'Budapest',label:'Soroksári út 117',precision:'exact',latitude:47.44,longitude:19.09};
+ assert.equal(retainLocationCoordinates(old,{...old,label:'Soroksári út 160'}).latitude,undefined);
+ assert.equal(retainLocationCoordinates(old,{...old,latitude:0,longitude:0}).latitude,old.latitude);
+});
 test('surface candidates lie on the requested named road, never an unrelated nearest road',()=>{
  const ways=[{type:'way',id:1,nodes:[1,2],tags:{highway:'primary',name:'Soroksári út'}},{type:'way',id:2,nodes:[2,3],tags:{highway:'residential',name:'Other utca'}}];
  const found=surfaceCandidates([...nodes,...ways],{surface:'road',label:'Soroksári út 160'},center);

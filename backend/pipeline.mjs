@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
 import {matchCandidates,identify,compareBrief} from './dedup.mjs';
+import {retainLocationCoordinates} from './map-surfaces.mjs';
 import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
@@ -128,7 +129,7 @@ export class Pipeline {
     return this.model.json('merge',{schema:zodToJsonSchema(eventSchema),existing,incoming,documents},{maxTokens:10000,validate:raw=>{
       const r=z.object({sameEvent:z.boolean(),hasNewInformation:z.boolean().default(true),reason:z.string().default('Flash comparison of source facts'),event:eventSchema.nullable()}).strict().parse(raw);
       if(r.sameEvent&&r.hasNewInformation&&!r.event)throw new Error('A material update requires a complete merged event');
-      if(r.event)r.event=this.validate(r.event,documents);return r;
+      if(r.event){retainLocationCoordinates(existing.location,r.event.location);r.event=this.validate(r.event,documents);}return r;
     }});
   }
   async gather(id){
@@ -235,7 +236,8 @@ export class Pipeline {
     const ru=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,revision);
     const docs=this.eventDocuments(id);
     const repaired=await this.model.json('repair',{schema:this.schema,event:row.canonical,russian:ru?JSON.parse(ru.payload):null,review:JSON.parse(quality.payload),documents:docs,verifiedLawCatalog:this.laws},{maxTokens:10000,validate:raw=>{
-      return {event:this.validate(eventSchema.parse(raw.event),docs)};
+      const event=eventSchema.parse(raw.event);retainLocationCoordinates(row.canonical.location,event.location);
+      return {event:this.validate(event,docs)};
     }});
     this.store.transaction(()=>{
       if(this.store.event(id).revision!==revision)throw new Error('Event changed during automatic repair');

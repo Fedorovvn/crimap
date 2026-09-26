@@ -2,6 +2,12 @@
 // route, river bank and incident context before choosing any approximation.
 const norm=s=>String(s??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
 const matches=(name,query)=>{const n=norm(name),q=norm(query);return n.length>4&&(q===n||q.includes(n)||n.startsWith(q+' '));};
+export function retainLocationCoordinates(previous,incoming){
+  const same=['city','district','label','precision'].every(k=>norm(previous[k])===norm(incoming[k]));
+  delete incoming.latitude;delete incoming.longitude;
+  if(same&&Number.isFinite(previous.latitude)&&Number.isFinite(previous.longitude))Object.assign(incoming,{latitude:previous.latitude,longitude:previous.longitude});
+  return incoming;
+}
 export function nearestOnLine(points,center){
   let best=null;
   const scale=Math.cos(center.latitude*Math.PI/180),x=center.longitude*scale,y=center.latitude;
