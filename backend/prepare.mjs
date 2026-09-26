@@ -21,6 +21,15 @@ export class Preparation{
       }else geocoding=await this.geocoder.locate(event.location);
       Object.assign(event.location,{latitude:geocoding.latitude,longitude:geocoding.longitude,precision:geocoding.precision});
     }else geocoding={provider:'source-or-editor',latitude:event.location.latitude,longitude:event.location.longitude,precision:event.location.precision};
+    // Text-only Flash repairs must not discard the evidence for an unchanged
+    // Pro-resolved map point or reopen the same paid location search.
+    const previous=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision<=? ORDER BY revision DESC LIMIT 1').get(row.id,row.revision);
+    const prior=previous?JSON.parse(previous.payload):null;
+    const sameReviewedPlace=prior?.geocoding?.provider==='photon-pro-reviewed'
+      && prior.geocoding.latitude===event.location.latitude && prior.geocoding.longitude===event.location.longitude
+      && prior.geocoding.precision===event.location.precision
+      && normalizePlace(prior.geocoding.anchor.label)===normalizePlace(event.location.label);
+    if(sameReviewedPlace)geocoding=prior.geocoding;
     if(!event.media.length&&!existing?.media.length&&this.model&&documents.some(d=>d.imageUrls.length)){
       const media=await this.model.json('media',{title:event.title,summary:event.summary,documents:documents.map(d=>({id:d.id,url:d.url,title:d.title,text:d.text.slice(0,20000),imageUrls:d.imageUrls}))},{maxTokens:1600,validate:raw=>{
         const list=eventSchema.innerType().shape.media.parse(raw.media);
@@ -44,6 +53,6 @@ export class Preparation{
       const next=mediaIndexes.get(Number(match[1]));return next===undefined?[]:[{...e,field:`media.${next}${match[2]??''}`}];
     });
     const retainedMedia=existing?.media.filter(m=>!eligible.some(e=>e.imageUrl===m.image_url)).map(m=>({imageUrl:m.image_url,sourceUrl:m.source_url,outlet:m.outlet,credit:m.credit,caption:m.caption,isSensitive:Boolean(m.is_sensitive)}))??[];
-    return {event,geocoding,retainedMedia,notes,mediaCount:eligible.length+retainedMedia.length};
+    return {event,geocoding,retainedMedia,notes,mediaCount:eligible.length+retainedMedia.length,...(sameReviewedPlace?{locationReview:prior.locationReview}:{})};
   }
 }

@@ -16,7 +16,7 @@ export const locationResolutionSchema = z.discriminatedUnion('action', [
 
 export function checkLocationResolution(result, documents, lookup) {
   const action = result.locationResolution;
-  if (lookup?.enabled && !action) throw new Error('Review location: search a source-supported anchor, select an observed candidate, or explicitly keep the approximation');
+  if (lookup?.enabled && !lookup.applied && !action) throw new Error('Review location: search a source-supported anchor, select an observed candidate, or explicitly keep the approximation');
   if (!action) return result;
   if (!lookup?.enabled && action.action !== 'keep') throw new Error('Location lookup is not available');
   if (action.action === 'search') {

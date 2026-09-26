@@ -18,6 +18,7 @@ test('Pro location tools require original quotes, observed candidates and a boun
   assert.throws(()=>checkReview({...base,locationResolution:{action:'select',candidateId:'invented',reason:'Here'}},docs,{locationLookup:lookup}),/observed/);
   assert.throws(()=>checkReview({...base,locationResolution:{action:'search',queries:[anchor]}},docs,{locationLookup:{...lookup,searched:true}}),/already completed/);
   assert.throws(()=>checkReview(base,docs,{locationLookup:lookup}),/Review location/);
+  assert.equal(checkReview({...base,verdict:'pass'},docs,{locationLookup:{...lookup,applied:true}}).verdict,'pass');
 });
 
 test('map lookup preserves real stop coordinates and excludes namesakes, streets, wrong districts and foreign results',async()=>{
@@ -64,6 +65,8 @@ test('final Pro review replaces district point with stop, invalidates approval a
     assert.deepEqual(stats(),{calls:3,searches:1});
     const prep=JSON.parse(store.db.prepare('SELECT payload FROM preparation WHERE event_id=1 AND revision=3').get().payload);
     assert.equal(prep.geocoding.anchor.quote,quote);assert.equal(prep.locationReview.applied,true);
+    const rePrepared=await pipeline.preparation.enrich(store.event(1),pipeline.eventDocuments(1));
+    assert.equal(rePrepared.geocoding.provider,'photon-pro-reviewed');assert.equal(rePrepared.locationReview.applied,true);
     assert.equal(store.event(1).state,'draft');
   } finally {store.close();}
 });
