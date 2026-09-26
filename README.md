@@ -1,126 +1,135 @@
-# vinext-starter
+# Crimap · Budapest Signal
 
-A clean full-stack starter running on [vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and Drizzle support.
+Карта происшествий Будапешта: лента событий, фотографии, хронология, участники, источники и правовая информация. В интерфейсе пока используется название Budapest Signal.
 
-## Prerequisites
+- **Сайт:** https://crimap.online/
+- **GitHub:** https://github.com/Fedorovvn/crimap
+- **Ветка:** `main`.
+- **Размещение:** собственный VPS, Nginx + Node.js + SQLite.
+- **Автоматического деплоя из GitHub нет:** отправка коммитов и обновление работающего сайта — отдельные действия.
 
-- Node.js `>=22.13.0`
-- Portable: Windows, macOS, or Linux; no Bash required
-- Managed Linux: managed Linux runtime with Bash, `flock`, `curl`, `sha256sum`, and GNU `timeout`
-- Git is required only for publishing
+Сведения проверены 26 сентября 2026 года. Подробности размещения — в [DEPLOYMENT.md](DEPLOYMENT.md).
 
-## Sites Lifecycle
-
-The Sites initializer copies the shared starter and selects managed-linux only when `SITES_MANAGED_LINUX_CONTAINER=1`; otherwise it selects portable. It saves the selection only in ignored `.sites-runtime/execution-profile.json`. Both profiles copy/configure first, then use the plugin's separate `install-dependencies.mjs` step to measure installation independently. Edit source under `app/` and follow the Sites skill for installation, preview, builds, and publishing.
-
-Run `node <plugin-root>/scripts/configure-execution-profile.mjs` only when the profile is unknown for the current checkout and environment. Profile changes do not alter tracked source or require reinstalling otherwise-valid dependencies; restart an existing preview to use the new selection. Do not commit or upload `.sites-runtime/`.
-
-This starter does not use `wrangler.jsonc`.
-
-`install:ci` runs `npm ci` once against the shared lockfile, disables parent-workspace discovery, and includes required dev/optional dependencies despite production/omit settings. Sharp defaults to prebuilt binaries unless explicitly configured otherwise. Do not overlap installers.
-
-- **Portable:** Preserve host HOME, npm cache, registry, proxy, temporary paths, retry/concurrency settings, and lifecycle-script policy. Use `--prefer-offline --no-audit --no-fund`.
-- **Managed Linux:** Use the existing project-local HOME/cache/tmp setup and Linux install lock, tarball preflight, and timeout. Restore the image-seeded npm cache only when its lockfile hash matches; retain network fallback. Builds keep their existing timeout. These helpers are not invoked by the portable profile.
-
-`scripts/sites-env.mjs` preserves the caller's HOME, npm cache, proxy, XDG, and temporary-directory configuration while defaulting Wrangler and Miniflare state to the checkout. If npm reports an unwritable cache, select a writable path with `npm_config_cache` for that install. The `dev` and `start` scripts also keep Wrangler logs inside the checkout. Generated `.sites-runtime/` and `.wrangler/` directories are disposable and ignored by Git.
-
-On portable, `npm run dev` uses `vinext dev` with HMR, starting at port 5173. Vinext records the running server in ignored `.vinext/` state, rejects an ordinary duplicate launch, and recovers stale state after a stopped process; exactly simultaneous starts can race. Pass `--port <port>` or `--hostname <host>` after `npm run dev --` when needed; keep portable previews on loopback.
-
-For browser QA on managed Linux, use `sites-preview start`. The project's dev script runs Vite and accepts the supervisor's `--host 0.0.0.0 --port 4173 --strictPort` arguments. The internal browser uses `http://terminal.local:4173/`; it is not a user-facing URL. The supervisor owns the preview lifecycle. The ignored local profile survives the supervisor's cleared process environment.
-
-The portable profile simulates ChatGPT sign-in only for loopback development requests. Visit `/signin-with-chatgpt?return_to=/` to sign in as `local_seedy` (`seedy@sites.test`, display name `Seedy`) and `/signout-with-chatgpt?return_to=/` to sign out. The development cookie preserves that identity across server restarts. Mock auth is disabled in the managed-linux profile and is not included in production builds; hosted authentication remains dispatch-owned.
-
-The Worker uses `vinext/server/fetch-handler`, including Vinext's config-aware image handling. After building, `npm start` runs that Worker locally through Wrangler on `127.0.0.1`, sharing `.wrangler/state` with dev preview and local D1 migrations; it does not deploy the site or simulate sign-in. Use the URL printed by the server. Pass `npm start -- --port <port>` to select a different built-preview port.
-
-Local previews use Miniflare's placeholder `Request.cf` metadata without a network lookup. Set `CLOUDFLARE_CF_FETCH_ENABLED=true` to opt into fetching preview metadata; this setting does not change hosted request metadata.
-
-Local tool usage metrics are disabled by default. Set `WRANGLER_SEND_METRICS=true` to opt in.
-
-## Included Shape
-
-- edit site code under `app/`
-- `app/chatgpt-auth.ts` provides optional dispatch-owned ChatGPT sign-in helpers
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/index.ts` reads the D1 binding from the Cloudflare Worker environment
-- `db/schema.ts` starts intentionally empty
-- `@cloudflare/workers-types` provides Worker types; `cloudflare-env.d.ts` declares optional `DB`/`BUCKET` bindings—update these declarations if binding names change
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
-
-## Workspace Auth Headers
-
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
-
-The user ID is stable for the same user on the same Site and different across Sites. Use it as the durable user key; use email and name for display or contact purposes.
-
-SIWC-authenticated workspace sites may also receive `oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty `name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by `oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
-
-Treat the full name as optional and fall back to email when it is absent:
-
-```tsx
-import { headers } from "next/headers";
-
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
-
-  const displayName = fullName ?? email;
-  // ...
-}
-```
-
-## Optional Dispatch-Owned ChatGPT Sign-In
-
-Import the ready-to-use helpers from `app/chatgpt-auth.ts` when the site needs optional or required ChatGPT sign-in:
-
-- Use `getChatGPTUser()` for optional signed-in UI.
-- Use the returned `userId` as the stable user key for user-owned records; do not use email as a durable identifier.
-- Use `requireChatGPTUser(returnTo)` for server-rendered pages that should send anonymous visitors through Sign in with ChatGPT.
-- In a Server Component, start sign-in with `<a href={chatGPTSignInPath(returnTo)} target="_top">`. The auth helper module is server-only; do not import it into a Client Component.
-- Do not use `fetch`, XHR, a client-side router, or a framework link that can prefetch the sign-in route. SIWC must start as a top-level navigation.
-- Never request the AuthAPI authorization endpoint directly. The dispatch-owned `/signin-with-chatgpt` route must start the SIWC flow.
-- Use `chatGPTSignOutPath(returnTo)` for browser sign-out links or actions.
-- Pass a same-origin relative `returnTo` path for the destination after sign-in or sign-out. The helper validates and safely encodes it.
-- Mark protected pages with `export const dynamic = "force-dynamic"` because they depend on per-request identity headers.
-
-Dispatch owns `/signin-with-chatgpt`, `/signout-with-chatgpt`, `/callback`, the OAuth cookies, and identity header injection. Do not implement app routes for those reserved paths. Routes that do not import and call the helper remain anonymous-compatible.
-
-SIWC establishes identity only; it does not prove workspace membership. Use the Sites hosting platform's access policy controls for workspace-wide restrictions, or enforce explicit server-side membership or allowlist checks.
-
-Use SIWC for account pages, user-specific dashboards, saved records, and write actions tied to the current ChatGPT user. Leave public content anonymous.
-
-## Local D1 migrations
-
-For a D1-backed local preview, generate SQL with `npm run db:generate`. Build once through the Sites skill's build entrypoint (or `npm run build` for standalone use) to generate `dist/server/wrangler.json`, rebuilding if bindings change. From the project root, apply each pending migration in order:
+## SSH и сервер
 
 ```sh
-node --import ./scripts/sites-env.mjs ./node_modules/wrangler/bin/wrangler.js d1 execute DB --local --config dist/server/wrangler.json --persist-to .wrangler/state --file drizzle/0000_example.sql
+ssh vencar@63.250.53.127
 ```
 
-Replace the filename with the pending migration and `DB` with your D1 binding name if different. Use `.wrangler/state`, not `.wrangler/state/v3`; Wrangler adds the versioned directories. Do not replay migrations already applied locally. This updates only the preview database; publishing applies production migrations separately.
+Порт `22`, имя сервера `vencar-main`, Ubuntu 24.04.2 LTS. Пользователь `vencar` имеет `sudo`. Пароль вводится отдельно; пароли и приватные ключи не хранятся в репозитории.
 
-## Diagnostic Commands
+В терминале агента на Windows интерактивная передача пароля через OpenSSH ранее не сработала. Проверенный запасной способ — Python/Paramiko с паролем через стандартный ввод, без записи в файл. Ключ сервера проверяется по `~/.ssh/known_hosts`; отключать проверку не требуется. Обычная команда SSH у владельца работала.
 
-- `npm run install:ci`: perform the one locked dependency install
-- `npm run dev`: start the Vite/Vinext development server
-- `npm run build`: build the deployable Sites artifact
-- `npm run start`: preview the built Worker locally with D1/R2 support
-- `npm run db:generate`: generate Drizzle migrations after schema changes
+| Назначение | Путь или значение |
+| --- | --- |
+| Исходники и Git на сервере | `/srv/crimap/app` |
+| Пользователь приложения | `crimap`, системный, без интерактивного входа |
+| База событий | `/srv/crimap/data/incidents.sqlite` |
+| Служба | `crimap.service` |
+| Файл службы | `/etc/systemd/system/crimap.service` |
+| Внутренний адрес | `127.0.0.1:8082` |
+| Nginx | `/etc/nginx/sites-available/crimap-online` |
+| Подключение Nginx | `/etc/nginx/sites-enabled/crimap-online` |
+| Node.js 24.21.0 | `/srv/crimap/runtime/node/bin/node` |
+| pnpm 11.25.0 | `/srv/crimap/tools/node_modules/.bin/pnpm` |
+| Сертификат Let's Encrypt | `/etc/letsencrypt/live/crimap.online/` |
+| Каталог проверки домена | `/srv/crimap/acme` |
+| Резервная копия прежнего Nginx | `/srv/crimap/backups/nginx-before-crimap.tar.gz` |
 
-When using the Sites plugin, follow its skill instructions for installation, builds, and publishing. These npm commands remain available for standalone use.
+Запрос проходит так: `crimap.online → Nginx (HTTPS) → 127.0.0.1:8082 → приложение → SQLite`.
 
-The portable build runs Vinext directly without a host `timeout` command. The managed-linux build uses `scripts/build-verified.sh` and its existing `SITES_BUILD_TIMEOUT` setting.
+HTTP перенаправляется на HTTPS. Служба включена в автозапуск и перезапускается при сбое. Сертификат продлевает `certbot.timer`; Nginx перечитывает его через `/etc/letsencrypt/renewal-hooks/deploy/crimap-nginx-reload`.
 
-## Learn More
+На момент проверки основной домен указывал на `63.250.53.127`, а DNS-запись `www.crimap.online` отсутствовала. Для HTTPS на `www` также нужно расширить сертификат и добавить HTTPS-редирект.
 
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+## GitHub и существующий SSH-доступ
+
+- На компьютере `origin`: `https://github.com/Fedorovvn/crimap.git`.
+- На сервере `origin`: `git@github.com:Fedorovvn/crimap.git`.
+- Репозитории имеют общую историю и ветку `main`.
+
+Первый push выполнен с сервера через существующий SSH-ключ системного пользователя **`wannascale`**. GitHub распознал его как аккаунт **`Fedorovvn`**. Ключ не копировался в проект. У пользователя приложения `crimap` собственного GitHub-ключа пока нет.
+
+Сохранённая HTTPS-авторизация на компьютере при проверке не работала. Для прямого `git push` с компьютера нужно заново авторизоваться. До этого используется перенос коммитов на сервер через `git bundle`, затем отправка через существующий SSH-доступ.
+
+Если подготовленные коммиты уже находятся в `/srv/crimap/app`, отправить их можно так:
+
+```sh
+sudo -u wannascale env GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes' \
+  git -c safe.directory=/srv/crimap/app -C /srv/crimap/app \
+  push ssh://git@github.com/Fedorovvn/crimap.git main:refs/heads/main
+```
+
+`safe.directory` действует только для этой команды и конкретного каталога. Явный URL позволяет отправить изменения без изменения настроек других проектов.
+
+Проверка опубликованного коммита:
+
+```sh
+sudo -u wannascale env GIT_SSH_COMMAND='ssh -o BatchMode=yes -o StrictHostKeyChecking=yes' \
+  git ls-remote git@github.com:Fedorovvn/crimap.git refs/heads/main
+```
+
+На этом VPS есть независимые проекты: Vencar использует Bitbucket (`vencars`), Wannascale — GitHub (`Vicfirt/Wannascale-main-site`). Их конфигурации и ключи для обновления Crimap менять не требуется.
+
+## Единый порядок работы: компьютер → GitHub → сервер
+
+1. Изменять исходники в локальном проекте и проверять результат локально.
+2. Выполнять проверки, соответствующие изменению, и сохранять изменения коммитом.
+3. Отправлять ветку `main` в GitHub. Пока локальная HTTPS-авторизация не обновлена, передавать коммиты через `git bundle` на сервер и отправлять существующим SSH-ключом.
+4. Переносить на сервер именно эти коммиты, без ручного редактирования второй независимой копии. Перед обновлением проверять `git status`; применять `merge --ff-only`, не перезаписывая чужие изменения.
+5. Для изменения приложения сохранять резервную копию данных и предыдущей версии, затем устанавливать зависимости, собирать VPS-версию и перезапускать `crimap.service` по инструкции [DEPLOYMENT.md](DEPLOYMENT.md). Для изменения только документации пересборка и перезапуск не нужны.
+6. Проверять опубликованный коммит, состояние службы и сайт. GitHub и сервер должны использовать согласованную версию кода.
+
+Push сам по себе не запускает сборку. GitHub Actions, webhook и автоматическое скачивание коммитов сейчас не настроены.
+
+## База данных
+
+**На сервере есть отдельная постоянная SQLite-база** `/srv/crimap/data/incidents.sqlite`. Это рабочая база сайта. В ней хранятся события, источники, хронология, фотографии (ссылки и описания), участники, версии и правовая информация.
+
+При первой публикации перенесён согласованный снимок локальной базы с двумя событиями. Локальная база разработки находится в `.wrangler/state`; далее эти базы независимы и автоматически не синхронизируются.
+
+- Файлы базы не входят в Git и не заменяются при отправке исходников.
+- Новые рабочие данные должны сохраняться в серверную базу.
+- Изменения схемы описываются SQL-миграциями в `drizzle/` и применяются отдельно после резервного копирования.
+- Нельзя заменять серверную базу старым локальным снимком при деплое.
+- SQLite может использовать соседние `-wal`/`-shm` файлы; резервную копию работающей базы нужно делать через SQLite backup API, а не простым копированием основного файла.
+
+Подключение задаёт `DATABASE_PATH` в службе systemd. VPS использует `db/sqlite-binding.mjs` — адаптер используемых операций D1 поверх SQLite Node.js.
+
+## Запуск и проверки
+
+Локальный адрес — `http://127.0.0.1:5173/`. Windows-запуск описан в [LOCAL-RUN.md](LOCAL-RUN.md).
+
+- `pnpm dev` — локальный preview Vinext/Vite с Cloudflare D1.
+- `pnpm run build:vps` — производственная сборка Node.js; скрипт задаёт `SITE_TARGET=vps`.
+- `pnpm run start:vps` — запуск VPS-сборки; требуется `DATABASE_PATH`.
+- `pnpm start` — локальный Worker-preview через Wrangler, это другой режим.
+
+`.openai/hosting.json` унаследован от шаблона и используется локальным режимом. Работающий сайт размещён на VPS.
+
+```sh
+pnpm test
+pnpm run test:vps
+pnpm exec tsc --noEmit
+```
+
+На сервере:
+
+```sh
+sudo systemctl status crimap.service
+sudo journalctl -u crimap.service -n 60 --no-pager
+sudo nginx -t
+curl -I https://crimap.online/
+```
+
+## Основные файлы
+
+- `app/` — интерфейс, карта, страницы и тесты.
+- `db/` — схема, данные и доступ к базе.
+- `drizzle/` — SQL-миграции.
+- `public/` — изображения, аватары и варианты дизайна.
+- `deploy/` — шаблоны Nginx, systemd и обновления сертификата.
+- `scripts/` — команды разработки и сборки.
+- [DEPLOYMENT.md](DEPLOYMENT.md) — обслуживание VPS.
+- [LOCAL-RUN.md](LOCAL-RUN.md) — локальный запуск.
+- [Исходная документация шаблона](docs/starter-reference.md) — историческая справка; актуальные настройки описаны в этом README.
