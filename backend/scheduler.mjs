@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-export const policy=JSON.parse(readFileSync(new URL('../contracts/v1/recheck-policy.json',import.meta.url),'utf8'));
+export const policy=JSON.parse(readFileSync(new URL('../contracts/v2/recheck-policy.json',import.meta.url),'utf8'));
 export function anchor(event){return event.occurredAt??event.firstSeenAt;}
 export function intervalFor(event,now=Date.now()){
   const start=Date.parse(anchor(event));if(!Number.isFinite(start)||start>now)throw new Error('Invalid or future event date');

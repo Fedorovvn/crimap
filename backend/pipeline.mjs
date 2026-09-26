@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
-import { readFileSync } from 'node:fs';
+import { readFileSync,existsSync } from 'node:fs';
+import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
 import { hash } from './store.mjs';
 import { nextCheck, intervalFor, retryDelay } from './scheduler.mjs';
@@ -21,12 +22,20 @@ export function matchCandidates(event,rows){
   });
 }
 export class Pipeline {
-  constructor(store,{reader,model,reviewer,search,sourceIds=(process.env.COLLECTOR_SOURCES??'police-brfk,okf-events,kekvillogo').split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??5)}={}){
+  constructor(store,{reader,model,reviewer,search,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??'police-brfk,okf-events,kekvillogo').split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??5)}={}){
     this.store=store;this.reader=reader;this.model=model;this.reviewer=reviewer;this.search=search;this.sourceIds=sourceIds;this.maxItems=maxItems;
     this.laws=JSON.parse(readFileSync(new URL('./verified-laws.json',import.meta.url),'utf8'));
+    this.publicPath=publicPath;
     this.schema=zodToJsonSchema(extractionSchema,{name:'Extraction'});
   }
-  seed(){for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);}
+  publishedSources(){
+    if(!this.publicPath||!existsSync(this.publicPath))return [];
+    const db=new DatabaseSync(this.publicPath,{readOnly:true});try{return db.prepare('SELECT i.id,i.slug,i.occurred_at,i.location_label,s.source_url,s.source_type,s.published_at FROM incidents i JOIN incident_sources s ON s.incident_id=i.id').all();}finally{db.close();}
+  }
+  seed(){
+    for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
+    for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
+  }
   async readDocument(url,publishedAt=null){
     const source=sourceFor(url);if(!source)throw new Error('Unregistered source');
     const page=await this.reader.read(url),finalSource=sourceFor(page.url);if(!finalSource)throw new Error('Redirect to unregistered source');
@@ -61,14 +70,18 @@ export class Pipeline {
   }
   async upsert(incoming,doc){
     const rows=this.store.db.prepare('SELECT id FROM events').all().map(r=>this.store.event(r.id));
-    const candidates=matchCandidates(incoming,rows);
+    const street=normalized(incoming.location.label.split(',')[0]);
+    const publishedMatches=this.publishedSources().filter(p=>p.source_url===doc.url&&incoming.occurredAt&&Math.abs(Date.parse(p.occurred_at)-Date.parse(incoming.occurredAt))<86400000&&street===normalized(p.location_label.split(',')[0]));
+    let published=publishedMatches.length===1?publishedMatches[0]:null;
+    const linked=published?rows.filter(r=>r.public_id===published.id):[];
+    const candidates=linked.length?linked:matchCandidates(incoming,rows);
     // Same article may cover several incidents. Do not merge by URL alone.
     let target=null,event=incoming,reason=candidates.length>1?'Several possible matching events':null;
     if(candidates.length===1){
       const candidate=candidates[0],docs=[...this.eventDocuments(candidate.id).filter(d=>d.id!==doc.id||d.contentHash!==doc.contentHash),doc];
       const merged=await this.model.json('merge',{schema:zodToJsonSchema(eventSchema),existing:candidate.canonical,incoming,documents:docs},{validate:raw=>{const parsed=z.object({sameEvent:z.boolean(),reason:z.string(),event:eventSchema.nullable()}).strict().parse(raw);if(parsed.sameEvent&&parsed.event)parsed.event=this.validate(parsed.event,docs);return parsed;}});
       if(merged.sameEvent&&merged.event){event=this.validate(merged.event,docs);target=candidate;}
-      else reason='Possible duplicate: '+merged.reason;
+      else {reason='Possible duplicate: '+merged.reason;published=null;}
     }
     const now=iso();
     this.store.transaction(()=>{
@@ -80,9 +93,9 @@ export class Pipeline {
         this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',review_reason=? WHERE id=?").run(JSON.stringify(event),event.occurredAt,revision,'Updated source: review changes',target.id);
         this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(target.id,revision,JSON.stringify(event),'source-update',now);
       }else{
-        const slug=normalized(incoming.title).replace(/ /g,'-').slice(0,65)+'-'+hash({doc:doc.id,event:incoming.title,date:incoming.occurredAt}).slice(0,10);
+        const slug=published?.slug??normalized(incoming.title).replace(/ /g,'-').slice(0,65)+'-'+hash({doc:doc.id,version:doc.contentHash,event:incoming.title,date:incoming.occurredAt}).slice(0,10);
         const existing=this.store.db.prepare('SELECT id FROM events WHERE slug=?').get(slug);if(existing){target=this.store.event(existing.id);return;}
-        const id=Number(this.store.db.prepare('INSERT INTO events(slug,first_seen_at,occurred_at,canonical,review_reason) VALUES(?,?,?,?,?)').run(slug,now,event.occurredAt,JSON.stringify(event),reason??'New event: verify extraction and location').lastInsertRowid);
+        const id=Number(this.store.db.prepare('INSERT INTO events(slug,first_seen_at,occurred_at,canonical,review_reason,public_id) VALUES(?,?,?,?,?,?)').run(slug,now,event.occurredAt,JSON.stringify(event),reason??'New event: verify extraction and location',published?.id??null).lastInsertRowid);
         target={id};this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,1,?,?,?)').run(id,JSON.stringify(event),'discovered',now);
       }
       this.store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(target.id,doc.id,doc.contentHash,JSON.stringify(incoming),now);
