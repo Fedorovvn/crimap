@@ -7,12 +7,17 @@ import {Store,hash} from '../store.mjs';
 import {createAdmin} from '../admin-server.mjs';
 import {translationStrings} from '../contract.mjs';
 import {migratePublic} from '../publish.mjs';
+import {DatabaseSync} from 'node:sqlite';
+import {displayStrings} from '../site-localization.mjs';
 const url='https://www.police.hu/test',quote='A robbery occurred in Budapest at Test utca. Police are investigating.';
 const fixture=()=>({title:'Robbery in Budapest',summary:quote,type:'robbery',status:'investigating',occurredAt:null,timePrecision:'unknown',location:{city:'Budapest',label:'Test utca',precision:'street'},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location'].map(field=>({field,documentId:'1',quote}))});
 test('editor authenticates, rejects CSRF/stale edits and publishes only a reviewed current revision',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'crimap-admin-')),s=new Store(join(dir,'collector.sqlite')),publicPath=join(dir,'public.sqlite');migratePublic(publicPath);
   const now=new Date().toISOString(),canonical=fixture();
-  const doc=s.saveDocument({url,sourceId:'police-brfk',sourceKind:'official',text:quote,title:'Test'});
+  canonical.media=[{imageUrl:'https://www.police.hu/photo.jpg',sourceUrl:url,outlet:'Police',credit:'Police photographer',caption:'Scene photo',isSensitive:true,rights:'unknown'}];
+  canonical.context=[{key:'circumstances',subject:{kind:'event'},topic:'circumstances',text:'Police are investigating.',origin:'source',verification:'unverified',reviewStatus:'pending',evidence:[{kind:'official',label:'Police',url,relation:'supports'}],asOf:now}];
+  canonical.evidence.push({field:'context.0',documentId:'1',quote});
+  const doc=s.saveDocument({url,sourceId:'police-brfk',sourceKind:'official',text:quote,title:'Test',imageUrls:[canonical.media[0].imageUrl]});
   s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('test',now,JSON.stringify(canonical));
   s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(1,1,?,?,?)').run(doc.contentHash,JSON.stringify(canonical),now);
   s.db.prepare('INSERT INTO translations VALUES(1,1,?,?,?,?)').run('ru',JSON.stringify(canonical),'fixture',now);
@@ -40,10 +45,24 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     modified.occurredAt='2026-09-20T12:00:00Z';modified.timePrecision='day';modified.evidence.push({field:'occurredAt',documentId:'1',quote});
     assert.equal((await request('events/1/save',{revision:2,canonical:modified,strings:translationStrings(modified)})).status,200);
     s.db.prepare('INSERT INTO quality_reviews VALUES(1,3,?,?,?)').run('fixture',JSON.stringify({verdict:'pass',summary:'ok',issues:[],requests:[]}),now);
+    const retained={...canonical.media[0],imageUrl:'https://www.police.hu/retained.jpg',isSensitive:false,caption:'Retained photo'};
+    s.db.prepare('INSERT INTO preparation VALUES(1,3,?,?)').run(JSON.stringify({retainedMedia:[retained]}),now);
+    const strings=Object.fromEntries(displayStrings({...modified,retainedMedia:[retained]}).map(text=>[text,text]));
+    s.db.prepare('INSERT INTO site_translations VALUES(1,3,?,?)').run(JSON.stringify({en:strings,hu:strings}),now);
     detail=await(await request('events/1')).json();assert.equal(detail.blockers.length,0);
     assert.equal((await request('events/1/publish',{revision:3,approvalToken:'stale',confirm:true})).status,409);
     assert.equal((await request('events/1/publish',{revision:3,approvalToken:detail.approvalToken,confirm:true})).status,200);
     assert.equal(s.event(1).published_revision,3);
+    const publicDb=new DatabaseSync(publicPath);
+    try {
+      const photos=publicDb.prepare('SELECT image_url,source_url,credit,caption,is_sensitive FROM incident_media ORDER BY id').all();
+      assert.equal(photos.length,2);assert.equal(photos[0].image_url,canonical.media[0].imageUrl);assert.equal(photos[0].source_url,url);assert.equal(photos[0].credit,'Police photographer');assert.equal(photos[0].is_sensitive,1);assert.equal(photos[1].caption,'Retained photo');assert.equal(photos[1].is_sensitive,0);
+      assert.equal(publicDb.prepare('SELECT count(*) n FROM incident_context').get().n,1);
+      detail=await(await request('events/1')).json();
+      assert.equal((await request('events/1/publish',{revision:3,approvalToken:detail.approvalToken,confirm:true})).status,200);
+      assert.equal(publicDb.prepare('SELECT count(*) n FROM incidents').get().n,1);
+      assert.equal(publicDb.prepare('SELECT count(*) n FROM incident_media').get().n,2);
+    }finally{publicDb.close();}
     assert.equal((await request('logout',{})).status,200);assert.equal((await request('events')).status,401);
   }finally{await new Promise(resolve=>server.close(resolve));s.close();rmSync(dir,{recursive:true,force:true});}
 });
