@@ -1,3 +1,5 @@
+import { translate, type Locale } from "./locale";
+
 export type PersonProfile = {
   kind: "person";
   name?: string;
@@ -31,7 +33,7 @@ export type Participant = {
 export const GROUP_DISPLAY_MINIMUM = 5;
 
 /** Expand known small groups without inventing individual identities or ages. */
-export function participantsForDisplay(participants: Participant[]): Participant[] {
+export function participantsForDisplay(participants: Participant[], locale: Locale = "ru"): Participant[] {
   const labels = { suspect: "Подозреваемый", victim: "Потерпевший", convicted: "Осуждённый", involved: "Участник" };
   const femaleLabels = { suspect: "Подозреваемая", victim: "Потерпевшая", convicted: "Осуждённая", involved: "Участница" };
   return participants.flatMap((participant) => {
@@ -43,12 +45,12 @@ export function participantsForDisplay(participants: Participant[]): Participant
       return {
         ...participant,
         key: `${participant.key}-person-${index + 1}`,
-        label: `${(profile.gender === "female" ? femaleLabels : labels)[participant.role]} ${index + 1}`,
+        label: `${translate((profile.gender === "female" ? femaleLabels : labels)[participant.role],locale)} ${index + 1}`,
         profile,
         status: leader?.status ?? participant.status,
-        note: leader ? "Предполагаемый лидер." : "Индивидуальные сведения не опубликованы.",
+        note: translate(leader ? "Предполагаемый лидер." : "Индивидуальные сведения не опубликованы.",locale),
         sourceUrl: leader?.sourceUrl ?? participant.sourceUrl,
-        sourceLabel: leader ? "Источник сведений о лидере" : participant.sourceLabel,
+        sourceLabel: leader ? translate("Источник сведений о лидере",locale) : participant.sourceLabel,
       };
     });
   });
@@ -84,7 +86,8 @@ export function avatarFor(profile: Participant["profile"]): string {
   return profile.gender === "male" ? "adult-male" : "adult-female";
 }
 
-export function ageLabel(age: number) {
+export function ageLabel(age: number, locale: Locale = "ru") {
+  if(locale!=="ru") return locale==="hu"?`${age} éves`:`${age} ${age===1?"year":"years"} old`;
   const mod100 = age % 100;
   const ending = mod100 >= 11 && mod100 <= 14 ? "лет" : age % 10 === 1 ? "год" : [2, 3, 4].includes(age % 10) ? "года" : "лет";
   return `${age} ${ending}`;

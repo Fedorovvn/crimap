@@ -27,6 +27,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,from_date TEXT NOT NULL,to_date TEXT NOT NULL,budget_usd REAL NOT NULL,state TEXT NOT NULL DEFAULT 'running',created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS triage_log(document_id INTEGER NOT NULL,content_hash TEXT NOT NULL,keep INTEGER NOT NULL,method TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(document_id,content_hash));
       CREATE TABLE IF NOT EXISTS preparation(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
+      CREATE TABLE IF NOT EXISTS site_translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
       CREATE TABLE IF NOT EXISTS geocode_cache(query_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS service_limits(service TEXT PRIMARY KEY,next_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive_pages(campaign_id TEXT NOT NULL,source_id TEXT NOT NULL,url TEXT NOT NULL,earliest TEXT,latest TEXT,found INTEGER NOT NULL,filtered INTEGER NOT NULL,scanned_at TEXT NOT NULL,PRIMARY KEY(campaign_id,url));
@@ -45,7 +46,7 @@ export class Store {
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on
     // half-finished drafts. Due times still govern retries and rate limits.
-    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE (state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?) ORDER BY CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'repair' THEN 2 WHEN 'prepare' THEN 3 WHEN 'translate' THEN 4 WHEN 'review' THEN 5 ELSE 6 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now);
+    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE (state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?) ORDER BY CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'repair' THEN 2 WHEN 'prepare' THEN 3 WHEN 'translate' THEN 4 WHEN 'localize' THEN 5 WHEN 'review' THEN 6 ELSE 7 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now);
     return row?{...row,payload:JSON.parse(row.payload)}:null;
   }
   heartbeat(job){return this.db.prepare("UPDATE jobs SET lease_until=? WHERE id=? AND lease_token=? AND state='running'").run(new Date(Date.now()+15*60_000).toISOString(),job.id,job.lease_token).changes===1;}

@@ -7,6 +7,7 @@ export const PERIODS = [
   { label: "24 ч", hours: 24 },
   { label: "7 дней", hours: 24 * 7 },
   { label: "Месяц", hours: 24 * 31 },
+  { label: "Всё время", hours: Infinity },
 ] as const;
 
 export const REFERENCE_TIME = new Date("2026-09-25T00:00:00+02:00").getTime();

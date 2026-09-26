@@ -3,6 +3,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { eventSchema } from './contract.mjs';
 import { isPublishableContext } from '../app/context-model.ts';
 import { isPublishableLegal } from '../app/legal-model.ts';
+import { siteTranslations, displayStrings } from './site-localization.mjs';
 export const typeLabels={'traffic-accident':'ДТП',assault:'Нападение',fight:'Драка',robbery:'Ограбление',accident:'Несчастный случай',fire:'Пожар',rescue:'Спасательная операция','missing-person':'Пропавший человек','transport-disruption':'Транспорт',weather:'Непогода',other:'Происшествие'};
 const statuses={reported:'Сообщается о происшествии',investigating:'В расследовании','suspects-detained':'Подозреваемые задержаны',wanted:'Подозреваемый разыскивается',resolved:'Ситуация разрешена',closed:'Дело закрыто',unknown:'Статус уточняется'};
 export function migratePublic(path){
@@ -25,6 +26,8 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
   const event=eventSchema.parse(JSON.parse(translation.payload));
   const prepared=store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(eventId,row.revision);
   const preparation=prepared?JSON.parse(prepared.payload):null;
+  const languages=siteTranslations(store,eventId,row.revision);
+  if(preparation&&!languages)throw new Error('Current English and Hungarian display translations are missing');
   if(!event.occurredAt)throw new Error('Resolve occurrence date before publishing');
   if(event.location.latitude===undefined)throw new Error('Add verified map coordinates before publishing');
   const documents=store.db.prepare('SELECT DISTINCT d.* FROM observations o JOIN documents d ON d.id=o.document_id WHERE o.event_id=?').all(eventId);
@@ -42,7 +45,10 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     for(const p of event.participants)db.prepare('INSERT INTO incident_participants(incident_id,participant_key,details) VALUES(?,?,?)').run(id,p.key,JSON.stringify(p));
     for(const c of event.context){if(includeContext)c.reviewStatus='approved';if(isPublishableContext(c))db.prepare('INSERT INTO incident_context(incident_id,claim_key,details) VALUES(?,?,?)').run(id,c.key,JSON.stringify(c));}
     for(const l of event.legal){if(includeLegal)l.reviewStatus='approved';if(isPublishableLegal(l))db.prepare('INSERT INTO incident_legal(incident_id,assessment_key,details) VALUES(?,?,?)').run(id,l.key,JSON.stringify(l));}
-    db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision}));
+    // Do not expose translations of context or legal text excluded from publication.
+    const publicTexts=new Set(displayStrings({...event,context:event.context.filter(isPublishableContext),legal:event.legal.filter(isPublishableLegal),media,retainedMedia:preparation?.retainedMedia}));
+    const translations=languages?Object.fromEntries(Object.entries(languages).map(([language,strings])=>[language,Object.fromEntries(Object.entries(strings).filter(([text])=>publicTexts.has(text)))])):undefined;
+    db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision,translations}));
     db.exec('COMMIT');
     const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=? WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
     if(store.db.isTransaction)record();else store.transaction(record);return id;

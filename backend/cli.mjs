@@ -11,6 +11,7 @@ import { exportRequests } from './review.mjs';
 import { Triage } from './triage.mjs';
 import { Preparation } from './prepare.mjs';
 import { Archive } from './archive.mjs';
+import { localizePublished } from './site-localization.mjs';
 const {values,positionals}=parseArgs({allowPositionals:true,options:{db:{type:'string'},'public-db':{type:'string'},file:{type:'string'},reviewer:{type:'string'},context:{type:'boolean'},legal:{type:'boolean'},limit:{type:'string'},from:{type:'string'},to:{type:'string'},budget:{type:'string'}}});
 const [command='status',arg]=positionals,path=values.db??process.env.COLLECTOR_DATABASE_PATH??'data/collector.sqlite';
 const store=new Store(path),reader=new Reader(store),model=new DeepSeek(store),archive=new Archive(store,{reader});
@@ -25,6 +26,7 @@ try{
   else if(command==='translate')result=await pipeline.translate(Number(arg));
   else if(command==='review')result=await pipeline.review(Number(arg));
   else if(command==='prepare')result=await pipeline.prepare(Number(arg));
+  else if(command==='localize-public')result=await localizePublished(store,model,values['public-db']??process.env.DATABASE_PATH);
   else if(command==='backfill')result=archive.start({id:arg,from:values.from,to:values.to,budget:Number(values.budget)});
   else if(command==='requests')result={file:exportRequests(store),requests:store.db.prepare('SELECT * FROM field_requests ORDER BY created_at DESC').all().map(r=>({...r,payload:JSON.parse(r.payload)}))};
   else if(command==='show'){result=store.event(Number(arg));if(values.file){writeFileSync(values.file,JSON.stringify(result?.canonical,null,2)+'\n');result={saved:values.file};}}

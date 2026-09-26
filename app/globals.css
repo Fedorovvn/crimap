@@ -831,4 +831,9 @@ body {
 }
 
 .incident-signal--injury { color: #f3d178; background: #3b3320; }
+.section-switch { display: flex; flex-shrink: 0; gap: 4px; padding: 4px; margin: 0 0 20px; border-radius: 999px; width: fit-content; background: var(--control-bg); }
+.section-switch button { border-radius: 999px; padding: 9px 18px; font-size: 14px; font-weight: 600; color: var(--muted-text); cursor: pointer; }
+.section-switch button[aria-pressed='true'] { color: var(--control-active-text); background: var(--control-active); }
+.section-switch button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
+@media (max-width: 767px) { .section-switch { margin: 12px 20px; } .section-switch button { padding: 8px 14px; font-size: 13px; } .map-controls button { padding-inline: 9px; font-size: 12px; } }
 [data-theme='day'] .incident-signal--injury { color: #855d00; background: #fff0bb; }

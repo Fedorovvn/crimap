@@ -1,6 +1,7 @@
 "use client";
 
 import L from "leaflet";
+import { useI18n } from "./i18n";
 import { useEffect } from "react";
 import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 
@@ -82,6 +83,7 @@ export function IncidentMap({
   theme: "day" | "night";
   layoutMode: "list" | "detail";
 }) {
+  const {t}=useI18n();
   const isNight = theme === "night";
 
   return (
@@ -94,7 +96,7 @@ export function IncidentMap({
         zoomControl={false}
         attributionControl={false}
         className="signal-map h-full w-full"
-        aria-label="Интерактивная карта Будапешта"
+        aria-label={t('Интерактивная карта Будапешта')}
       >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'

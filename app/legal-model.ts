@@ -1,4 +1,5 @@
 import { z } from "zod";
+import type { Locale } from "./locale";
 
 const httpUrl = z.string().url().refine((url) => /^https?:\/\//i.test(url));
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => Number.isFinite(Date.parse(value)) && new Date(value).toISOString().slice(0, 10) === value);
@@ -44,7 +45,17 @@ export function isPublishableLegal(value: unknown): value is LegalAssessment {
   return result.success && result.data.reviewStatus === "approved";
 }
 
-export function penaltyLabel(value: LegalPenalty) {
+export function penaltyLabel(value: LegalPenalty, locale: Locale = "ru") {
+  if(locale!=="ru") {
+    if(value.kind==='other'||value.kind==='driving-ban') return value.text;
+    if(value.kind==='life-imprisonment') return locale==='hu'?'életfogytig tartó szabadságvesztés':'life imprisonment';
+    const number=(n:number)=>new Intl.NumberFormat(locale==='hu'?'hu-HU':'en-GB').format(n);
+    const amount=value.min===undefined?`${locale==='hu'?'legfeljebb':'up to'} ${number(value.max)}`:`${number(value.min)}-${number(value.max)}`;
+    if(value.kind==='fine') return locale==='hu'?`${amount} HUF pénzbírság`:`fine of ${amount} HUF`;
+    const units=locale==='hu'?{years:'év',months:'hónap',days:'nap',hours:'óra'}:{years:value.max===1?'year':'years',months:value.max===1?'month':'months',days:value.max===1?'day':'days',hours:value.max===1?'hour':'hours'};
+    const suffix=locale==='hu'?{'imprisonment':'szabadságvesztés','detention':'elzárás','community-service':'közérdekű munka'}:{'imprisonment':'imprisonment','detention':'detention','community-service':'community service'};
+    return `${amount} ${units[value.unit]} ${suffix[value.kind]}`;
+  }
   if (value.kind === "life-imprisonment") return "пожизненное лишение свободы";
   if (value.kind === "other" || value.kind === "driving-ban") return value.text;
   const number = (n: number) => new Intl.NumberFormat("ru-RU").format(n);

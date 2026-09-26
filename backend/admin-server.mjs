@@ -61,7 +61,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(path==='/admin/api/events'&&req.method==='GET'){
         const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.review_reason,
           coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title,
-          json_extract(q.payload,'$.verdict') verdict
+          json_extract(q.payload,'$.verdict') verdict, json_extract(e.canonical,'$.type') eventType
           FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'
           LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision ORDER BY e.first_seen_at DESC LIMIT 500`).all();
           return send(200,{events,requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),

@@ -4,8 +4,8 @@ import { dirname,join } from 'node:path';
 import { hash } from './store.mjs';
 import { normalizeQuote,fieldRequestSchema } from './contract.mjs';
 const short=z.string().trim().min(1).max(2000);
-export const reviewSchema=z.object({verdict:z.enum(['pass','revise','reject']),summary:short,issues:z.array(z.object({severity:z.enum(['error','warning']),field:short,reason:short,documentId:z.string().optional(),quote:short.optional(),quoteOrigin:z.enum(['source','english','russian']).optional()}).strict()).max(30),requests:z.array(fieldRequestSchema).max(10)}).strict();
-export function checkReview(raw,documents,{english,russian}={}){
+export const reviewSchema=z.object({verdict:z.enum(['pass','revise','reject']),summary:short,issues:z.array(z.object({severity:z.enum(['error','warning']),field:short,reason:short,documentId:z.string().optional(),quote:short.optional(),quoteOrigin:z.enum(['source','english','russian','translation']).optional()}).strict()).max(30),requests:z.array(fieldRequestSchema).max(10)}).strict();
+export function checkReview(raw,documents,{english,russian,translations}={}){
   const result=reviewSchema.parse(raw);
   if(result.verdict==='pass'&&result.issues.some(i=>i.severity==='error'))throw new Error('Review cannot pass with factual errors');
   for(const item of [...result.issues,...result.requests]){
@@ -15,6 +15,7 @@ export function checkReview(raw,documents,{english,russian}={}){
       if(sourceMatch){if(result.issues.includes(item))item.quoteOrigin='source';}
       else if(result.issues.includes(item)&&russian&&normalizeQuote(JSON.stringify(russian)).includes(normalizeQuote(item.quote))){item.quoteOrigin='russian';delete item.documentId;}
       else if(result.issues.includes(item)&&english&&normalizeQuote(JSON.stringify(english)).includes(normalizeQuote(item.quote))){item.quoteOrigin='english';delete item.documentId;}
+      else if(result.issues.includes(item)&&translations&&normalizeQuote(JSON.stringify(translations)).includes(normalizeQuote(item.quote))){item.quoteOrigin='translation';delete item.documentId;}
       else throw new Error('Review quotation is not in the original source or supplied editorial text; omit it if it is a paraphrase');
     }
   }return result;

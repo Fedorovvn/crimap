@@ -104,7 +104,7 @@ const incidents: IncidentView[] = [
   },
 ];
 
-beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); });
+beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); });
 afterEach(() => { vi.restoreAllMocks(); });
 
 afterEach(() => {
@@ -113,6 +113,29 @@ afterEach(() => {
 });
 
 describe("IncidentsView", () => {
+  it("switches between three languages and retains the chosen section without changing machine statuses", async () => {
+    const user=userEvent.setup();
+    const missing:IncidentView={...incidents[0],id:3,slug:'missing-person',eventType:'missing-person',category:'Пропавший человек',title:'Пропал человек',summary:'Идут поиски.',occurredAt:'2026-06-01T12:00:00Z',updates:[],media:[],participants:[],translations:{en:{'Пропал человек':'Missing person','Идут поиски.':'Search is ongoing.'},hu:{'Пропал человек':'Eltűnt személy','Идут поиски.':'A keresés folyamatban van.'}}};
+    render(<IncidentsView incidents={[...incidents,missing]} />);
+    expect(screen.getByText('Crime Map')).toBeTruthy();
+    expect(screen.queryByText('Пропал человек')).toBeNull();
+    await user.click(screen.getByRole('button',{name:'Пропавшие люди'}));
+    expect(screen.getAllByText('Пропал человек').length).toBeGreaterThan(0);
+    expect(screen.queryByText(incidents[0].title)).toBeNull();
+    expect(screen.getByRole('button',{name:'Всё время'}).getAttribute('aria-pressed')).toBe('true');
+    await user.click(screen.getByRole('button',{name:'English'}));
+    expect(screen.getByRole('button',{name:'Missing people'}).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByText('Search is ongoing.')).toBeTruthy();
+    expect(document.documentElement.lang).toBe('en');
+    expect(window.localStorage.getItem('crime-map-language')).toBe('en');
+    await user.click(screen.getByRole('button',{name:'Magyar'}));
+    expect(screen.getByText('A keresés folyamatban van.')).toBeTruthy();
+    expect(screen.getByRole('button',{name:'Eltűnt személyek'}).getAttribute('aria-pressed')).toBe('true');
+    expect(new URLSearchParams(window.location.search).get('section')).toBe('missing');
+    await user.click(screen.getByRole('button',{name:'Русский'}));
+    expect(screen.getByText('Идут поиски.')).toBeTruthy();
+  });
+
   it("assigns the incident type and icon-only signals from verified facts", () => {
     expect(getIncidentType(incidents[0])).toBe("ДТП");
     expect(getIncidentSignals(incidents[0])).toEqual(["death", "suspect-detained"]);

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Budapest Signal",
+  title: "Crime Map",
   description: "Проверенные городские инциденты Будапешта на карте.",
   other: {
     "codex-preview": "development",

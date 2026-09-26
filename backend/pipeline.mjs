@@ -10,6 +10,7 @@ import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { checkReview,recordRequests } from './review.mjs';
 import { cheapDecision } from './triage.mjs';
+import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 
 const iso=()=>new Date().toISOString();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -38,6 +39,7 @@ export class Pipeline {
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
     for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
     if(this.preparation)for(const e of this.store.db.prepare("SELECT id,revision,campaign_id FROM events WHERE state='draft'").all())if(!this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(e.id,e.revision))this.store.enqueue('prepare',e.id,{eventId:e.id,campaignId:e.campaign_id});
+    if(this.preparation)for(const e of this.store.db.prepare("SELECT e.id,e.revision,e.campaign_id FROM events e JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru' WHERE e.state='draft'").all())if(!siteTranslations(this.store,e.id,e.revision))this.store.enqueue('localize',e.id,{eventId:e.id,campaignId:e.campaign_id});
   }
   async readDocument(url,publishedAt=null){
     const source=sourceFor(url);if(!source)throw new Error('Unregistered source');
@@ -134,7 +136,7 @@ export class Pipeline {
       if(old&&JSON.stringify(translationStrings(event))===JSON.stringify(translationStrings(row.canonical))){
         const russian=applyTranslation(event,{language:'ru',strings:translationStrings(JSON.parse(old.payload))});
         this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,revision,'ru',JSON.stringify(russian),'preparation-reuse',iso());
-        this.store.enqueue('review',`${id}:${revision}`,{eventId:id,revision,campaignId:this.campaignId});
+        this.store.enqueue('localize',id,{eventId:id,campaignId:this.campaignId});
       }else this.store.enqueue('translate',id,{eventId:id,campaignId:this.campaignId});
       this.store.log('prepared',id,{revision,...metadata});
     });
@@ -145,19 +147,38 @@ export class Pipeline {
     const translated=applyTranslation(event.canonical,payload);
     this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,event.revision,'ru',JSON.stringify(translated),this.model.model,iso());
-    if(this.reviewer)this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});return translated;
+    if(this.reviewer)this.store.enqueue(this.preparation?'localize':'review',this.preparation?id:`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});return translated;
+  }
+  async localize(id) {
+    const row=this.store.event(id);if(!row)throw new Error('Unknown event');
+    const russian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,row.revision);
+    if(!russian)throw new Error('Current Russian translation is missing');
+    const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
+    if(!prepared){this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});return;}
+    const texts=displayStrings({...JSON.parse(russian.payload),retainedMedia:JSON.parse(prepared.payload).retainedMedia});
+    const lastReview=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? ORDER BY revision DESC LIMIT 1').get(id);
+    const feedback=lastReview?JSON.parse(lastReview.payload).issues.filter(i=>i.field.startsWith('siteTranslations')):[];
+    const translations=siteTranslations(this.store,id,row.revision)??await translateSiteTexts(this.model,texts,feedback);
+    this.store.transaction(()=>{
+      if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during site translation');
+      this.store.db.prepare('INSERT OR REPLACE INTO site_translations VALUES(?,?,?,?)').run(id,row.revision,JSON.stringify(translations),iso());
+      this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,row.revision);
+      this.store.enqueue('review',`${id}:${row.revision}`,{eventId:id,revision:row.revision,campaignId:this.campaignId});
+    });
   }
   async review(id,revision){
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
     if(!this.reviewer)throw new Error('Review model is not configured');
+    const languages=siteTranslations(this.store,id,event.revision);
+    if(this.preparation&&!languages){this.store.enqueue('localize',id,{eventId:id,campaignId:this.campaignId});return {deferred:true};}
     if(this.preparation&&(!event.canonical.occurredAt||event.canonical.location.latitude===undefined)){this.store.log('review-deferred',id,{revision:event.revision,reason:'Not ready: date or prepared coordinates missing'});return {deferred:true};}
     const translated=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
     if(!translated)throw new Error('Translate the current revision before review');
     const docs=this.eventDocuments(id);
     const russian=JSON.parse(translated.payload);
     const preparation=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
-    const result=await this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,documents:docs,preparation:preparation?JSON.parse(preparation.payload):null,verifiedLawCatalog:this.laws},{maxTokens:4000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian})});
+    const result=await this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,siteTranslations:languages,documents:docs,preparation:preparation?JSON.parse(preparation.payload):null,verifiedLawCatalog:this.laws},{maxTokens:4000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,translations:languages})});
     this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,event.revision,this.reviewer.model,JSON.stringify(result),iso());
     this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
     recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});
@@ -217,6 +238,7 @@ export class Pipeline {
       else if(job.kind==='repair')await this.repair(job.payload.eventId,job.payload.revision);
       else if(job.kind==='archive')await this.archive.scan(job.payload);
       else if(job.kind==='translate')await this.translate(job.payload.eventId);
+      else if(job.kind==='localize')await this.localize(job.payload.eventId);
       else if(job.kind==='review')await this.review(job.payload.eventId,job.payload.revision);
       else if(job.kind==='recheck')next=await this.recheck(job.payload.eventId);
       else throw new Error('Unknown job kind');

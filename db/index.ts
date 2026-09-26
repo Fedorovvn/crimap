@@ -9,7 +9,7 @@ import { starterLegal } from "./starter-legal";
 
 export async function getIncidentMetadata(incidentId: number) {
   const row = await getRawDb().prepare("SELECT details FROM incident_metadata WHERE incident_id = ?").bind(incidentId).first<{ details: string }>();
-  return row ? JSON.parse(row.details) as Pick<import("../app/incidents-view").IncidentView, "eventType" | "signals"> : {};
+  return row ? JSON.parse(row.details) as Pick<import("../app/incidents-view").IncidentView, "eventType" | "signals" | "translations"> : {};
 }
 
 export async function getIncidentLegal(incidentId: number) {

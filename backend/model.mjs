@@ -20,7 +20,8 @@ export class DeepSeek {
   async json(stage,payload,{maxTokens=8192,validate=x=>x}={}){
     if(this.model==='deepseek-v4-pro'&&stage!=='review')throw new Error('Pro is reserved for final publication review');
     if(!this.key)throw new Error('DEEPSEEK_API_KEY is not configured');
-    const prompt=readFileSync(new URL(`./prompts/${stage}.md`,import.meta.url),'utf8');
+    const instruction=readFileSync(new URL(`./prompts/${stage}.md`,import.meta.url),'utf8');
+    const prompt=/\bjson\b/i.test(instruction)?instruction:'Return valid JSON only.\n'+instruction;
     const content=JSON.stringify(payload);if(content.length>160000)throw new Error('Model input exceeds limit');
     const cacheKey=hash({stage,prompt,content,model:this.model});
     const cached=this.store.db.prepare('SELECT payload FROM model_cache WHERE cache_key=?').get(cacheKey);
@@ -34,7 +35,7 @@ export class DeepSeek {
     const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget,new Date().toISOString(),this.campaignId??null);
     try{
       const r=await this.fetcher('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify({model:this.model,thinking:{type:'disabled'},messages:[{role:'system',content:prompt+feedback},{role:'user',content}],response_format:{type:'json_object'},max_tokens:maxTokens,temperature:0}),signal:AbortSignal.timeout(90000)});
-      if(!r.ok){const e=new Error(`DeepSeek HTTP ${r.status}`);e.retryAfter=Number(r.headers.get('retry-after'))||0;throw e;}
+      if(!r.ok){let detail='';try{const body=await r.json();detail=String(body.error?.message??'').replaceAll(this.key,'[REDACTED]').slice(0,300);}catch{}const e=new Error(`DeepSeek HTTP ${r.status}${detail?': '+detail:''}`);e.retryAfter=Number(r.headers.get('retry-after'))||0;throw e;}
       const data=await r.json(),usage=data.usage;
       if(usage)this.store.usageDone(id,usage.prompt_tokens??0,usage.completion_tokens??0,((usage.prompt_tokens??0)*prices.input+(usage.completion_tokens??0)*prices.output)/1e6);
       if(data.choices?.[0]?.finish_reason!=='stop')throw new Error('Model response incomplete');

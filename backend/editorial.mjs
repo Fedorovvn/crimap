@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, applyTranslation, translationStrings, validateEvidence } from './contract.mjs';
 import { hash } from './store.mjs';
+import { siteTranslations } from './site-localization.mjs';
 
 export function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 export function documentsFor(store, id) {
@@ -33,14 +34,16 @@ export function eventDetail(store, id, publicPath) {
   const documents = documentsFor(store,id);
   const prepared=store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
   const preparation=prepared?JSON.parse(prepared.payload):null;
+  const languages=siteTranslations(store,id,row.revision);
   const blockers = [];
   if (!russian) blockers.push('Нет русского перевода текущей версии');
   if (quality?.payload.verdict !== 'pass') blockers.push('Нужна успешная проверка Pro текущей версии');
   if (!row.canonical.occurredAt) blockers.push('Нужно уточнить дату события');
   if (row.canonical.location.latitude === undefined) blockers.push('Нужно указать проверенные координаты');
   if (!documents.length) blockers.push('Нет сохранённых источников');
+  if(preparation&&!languages)blockers.push('Готовятся английская и венгерская версии');
   return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,
-    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload}),
+    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload,languages}),
     published:currentPublic(publicPath,row.slug),
     jobs:store.db.prepare("SELECT kind,state,last_error,due_at FROM jobs WHERE state!='done' AND json_extract(payload,'$.eventId')=?").all(id),
   };

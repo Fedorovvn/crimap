@@ -1,6 +1,8 @@
 "use client";
 
 import dynamic from "next/dynamic";
+import { LocaleProvider, useI18n } from "./i18n";
+import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { ArrowLeftIcon, CarFrontIcon, CrossIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
 import { filterIncidents, PERIODS, selectVisibleIncident } from "./incidents-model";
@@ -15,11 +17,13 @@ const IncidentMap = dynamic(
   () => import("./incident-map").then((module) => module.IncidentMap),
   {
     ssr: false,
-    loading: () => <div className="grid h-full w-full place-items-center bg-[var(--map-loading)] text-sm font-medium text-[var(--muted-text)]">Загрузка карты…</div>,
+    loading: () => <MapLoading /> /* localized loading */ ,
   },
 );
+function MapLoading() { const {t}=useI18n(); return <div className="grid h-full w-full place-items-center bg-[var(--map-loading)] text-sm font-medium text-[var(--muted-text)]">{t("Загрузка карты…")}</div>; }
 
 export type IncidentView = {
+  translations?: Partial<Record<"en" | "hu", Record<string, string>>>;
   eventType?: string;
   signals?: IncidentSignal[];
   context?: ContextClaim[];
@@ -48,6 +52,7 @@ export type IncidentView = {
     note: string;
   }[];
   updates: {
+    signals?: IncidentSignal[];
     id: number;
     publishedAt: string;
     title: string;
@@ -65,8 +70,8 @@ export type IncidentView = {
   }[];
 };
 
-function formatDate(value: string) {
-  return new Intl.DateTimeFormat("ru-RU", {
+function formatDate(value: string, locale: Locale) {
+  return new Intl.DateTimeFormat(dateLocales[locale], {
     day: "numeric",
     month: "short",
     hour: "2-digit",
@@ -76,17 +81,18 @@ function formatDate(value: string) {
 }
 
 function isOfficialInformation(label: string) {
-  return !/неофициаль/i.test(label) && /официаль|police|brfk/i.test(label);
+  return !/неофициаль|unofficial|nem hivatalos/i.test(label) && /официаль|official|hivatalos|police|brfk/i.test(label);
 }
 
 function IncidentMediaGallery({ incident }: { incident: IncidentView }) {
+  const {t}=useI18n();
   const { media } = incident;
   const [revealedIds, setRevealedIds] = useState<number[]>([]);
 
   if (!media.length) return null;
 
   return (
-    <section className="incident-media-gallery mt-6" aria-label="Фотографии с места">
+    <section className="incident-media-gallery mt-6" aria-label={t('Фотографии с места')}>
       <div className="grid gap-3">
         {media.map((item, index) => {
           const concealed = item.isSensitive && !revealedIds.includes(item.id);
@@ -104,10 +110,10 @@ function IncidentMediaGallery({ incident }: { incident: IncidentView }) {
                   <button
                     type="button"
                     onClick={() => setRevealedIds((ids) => [...ids, item.id])}
-                    aria-label="Показать чувствительное изображение"
+                    aria-label={t('Показать чувствительное изображение')}
                     className="absolute inset-0 grid place-items-center bg-black/25 p-5 text-center text-sm font-semibold text-white"
                   >
-                    <span className="rounded-full bg-black/65 px-4 py-2.5">Чувствительное изображение · показать</span>
+                    <span className="rounded-full bg-black/65 px-4 py-2.5">{t('Чувствительное изображение · показать')}</span>
                   </button>
                 )}
                 {index === 0 && (
@@ -147,6 +153,7 @@ export function getIncidentType(incident: Pick<IncidentView, "title" | "category
   if (incident.eventType && labels[incident.eventType]) return labels[incident.eventType];
   const text = `${incident.title} ${incident.category} ${incident.summary}`.toLocaleLowerCase("ru-RU");
 
+  if (/пропавш|пропал|исчезновен/.test(incident.category.toLowerCase())) return "Пропавший человек";
   if (/дтп|столкнов|авари/.test(text)) return "ДТП";
   if (/драк/.test(text)) return "Драка";
   if (/ограб|грабёж|грабеж|краж/.test(text)) return "Ограбление";
@@ -156,14 +163,16 @@ export function getIncidentType(incident: Pick<IncidentView, "title" | "category
   return "Происшествие";
 }
 
-export function getIncidentSignals(incident: Pick<IncidentView, "title" | "status" | "summary" | "signals">): IncidentSignal[] {
-  if (incident.signals) return incident.signals;
+export function getIncidentSignals(incident: Pick<IncidentView, "title" | "status" | "summary" | "signals" | "eventType">): IncidentSignal[] {
+  if (incident.signals) return incident.eventType==='missing-person'?incident.signals.filter(s=>s==='death'||s==='injury'):incident.signals;
   const text = `${incident.title} ${incident.status} ${incident.summary}`.toLocaleLowerCase("ru-RU");
   const signals: IncidentSignal[] = [];
 
   if (/смерт|погиб|умер|убийств/.test(text)) signals.push("death");
-  if (/разыскив/.test(text)) signals.push("suspect-wanted");
-  else if (/задерж|под страж|арестован/.test(text)) signals.push("suspect-detained");
+  if (incident.eventType!=='missing-person') {
+    if (/разыскив/.test(text)) signals.push("suspect-wanted");
+    else if (/задерж|под страж|арестован/.test(text)) signals.push("suspect-detained");
+  }
 
   return signals;
 }
@@ -191,6 +200,7 @@ function IncidentSignalIcon({ signal }: { signal: IncidentSignal }) {
 }
 
 function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | "status" | "summary" | "signals"> }) {
+  const {t}=useI18n();
   const signals = getIncidentSignals(incident);
 
   if (!signals.length) return null;
@@ -206,7 +216,7 @@ function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | 
         }[signal];
 
         return (
-          <span key={signal} className={`incident-signal incident-signal--${signal}`} aria-label={details.label} title={details.label}>
+          <span key={signal} className={`incident-signal incident-signal--${signal}`} aria-label={t(details.label)} title={t(details.label)}>
             <IncidentSignalIcon signal={signal} />
           </span>
         );
@@ -216,13 +226,14 @@ function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | 
 }
 
 function IncidentMeta({ incident }: { incident: Pick<IncidentView, "title" | "category" | "status" | "summary"> }) {
+  const {t}=useI18n();
   const incidentType = getIncidentType(incident);
 
   return (
     <div className="incident-meta">
       <span className="incident-type" data-type={incidentType}>
         <IncidentTypeIcon type={incidentType} />
-        {incidentType}
+        {t(incidentType)}
       </span>
       <IncidentSignals incident={incident} />
     </div>
@@ -230,19 +241,27 @@ function IncidentMeta({ incident }: { incident: Pick<IncidentView, "title" | "ca
 }
 
 function IncidentLocation({ incident, placement }: { incident: IncidentView; placement: "timeline" | "sidebar" }) {
-  return <section className={`incident-location incident-location--${placement} mobile-text-block rounded-2xl bg-[var(--card)] p-4`} aria-label="Локация происшествия">
-    <h3 className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]"><MapPinIcon size={16} aria-hidden="true" />Локация</h3>
+  const {t}=useI18n();
+  return <section className={`incident-location incident-location--${placement} mobile-text-block rounded-2xl bg-[var(--card)] p-4`} aria-label={t('Локация происшествия')}>
+    <h3 className="flex items-center gap-2 font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]"><MapPinIcon size={16} aria-hidden="true" />{t('Локация')}</h3>
     <p className="mt-2 font-semibold">{incident.locationLabel}</p>
     <p className="mt-1 text-sm leading-6 text-[var(--muted-text)]">{incident.locationPrecision}</p>
   </section>;
 }
 
-export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
+export function IncidentsView(props: { incidents: IncidentView[] }) {
+  return <LocaleProvider><LocalizedIncidentsView {...props} /></LocaleProvider>;
+}
+function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
+  const {locale,setLocale,t}=useI18n();
+  const [section,setSection]=useState<"incidents" | "missing">("incidents");
+  useEffect(()=>{ if(new URLSearchParams(window.location.search).get("section")==="missing"){setSection("missing");setPeriod(PERIODS[3]);} },[]);
+  const typedIncidents = useMemo(()=>incidents.map(incident=>({...incident, eventType:incident.eventType ?? ({"ДТП":"traffic-accident","Нападение":"assault","Драка":"fight","Ограбление":"robbery","Несчастный случай":"accident","Пропавший человек":"missing-person"}[getIncidentType(incident)] ?? "other"), signals:getIncidentSignals(incident),updates:incident.updates.map(update=>({...update,signals:getIncidentSignals({title:update.title,status:"",summary:update.detail,eventType:incident.eventType})}))})),[incidents]);
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>(PERIODS[2]);
   const [theme, setTheme] = useState<"day" | "night">("night");
   const visibleIncidents = useMemo(
-    () => filterIncidents(incidents, period.hours),
-    [incidents, period],
+    () => filterIncidents(typedIncidents.filter(incident=>(incident.eventType==="missing-person")===(section==="missing")), period.hours).map(incident=>translateContent(incident,locale,locale==="ru"?{}:incident.translations?.[locale])),
+    [typedIncidents, period, section, locale],
   );
   const [selectedSlug, setSelectedSlug] = useState(incidents[0]?.slug ?? "");
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -317,23 +336,21 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-3.5 lg:px-9">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand)] font-mono text-xs font-bold text-[var(--brand-text)]">B</span>
+            <span className="grid h-8 w-8 place-items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand)] font-mono text-xs font-bold text-[var(--brand-text)]">C</span>
             <div>
-              <p className="text-base font-semibold tracking-[-0.03em]">Budapest Signal</p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted-text)]">городская лента</p>
+              <p className="text-base font-semibold tracking-[-0.03em]">Crime Map</p>
+              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted-text)]">{t('городская лента')}</p>
             </div>
           </div>
           <div className="flex items-center gap-3">
-            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5 text-[11px] font-semibold" aria-label="Язык">
-              <span className="rounded-full bg-[var(--control-active)] px-2 py-1 text-[var(--control-active-text)]">RU</span>
-              <span className="px-2 py-1 text-[var(--subtle-text)]">EN</span>
-              <span className="px-2 py-1 text-[var(--subtle-text)]">HU</span>
+            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5 text-[11px] font-semibold" aria-label={t('Язык')}>
+{(["ru","en","hu"] as const).map(language=><button type="button" key={language} onClick={()=>setLocale(language)} aria-label={localeNames[language]} aria-pressed={locale===language} className={`rounded-full px-2 py-1 ${locale===language?"bg-[var(--control-active)] text-[var(--control-active-text)]":"text-[var(--subtle-text)]"}`}>{language.toUpperCase()}</button>)}
             </div>
-            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5" aria-label="Тема карты и интерфейса">
-              <button type="button" onClick={() => changeTheme("day")} aria-label="Дневной режим" aria-pressed={theme === "day"} className={`grid h-7 w-7 place-items-center rounded-full transition ${theme === "day" ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--subtle-text)] hover:text-[var(--app-text)]"}`}>
+            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5" aria-label={t('Тема карты и интерфейса')}>
+              <button type="button" onClick={() => changeTheme("day")} aria-label={t('Дневной режим')} aria-pressed={theme === "day"} className={`grid h-7 w-7 place-items-center rounded-full transition ${theme === "day" ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--subtle-text)] hover:text-[var(--app-text)]"}`}>
                 <span aria-hidden="true">☼</span>
               </button>
-              <button type="button" onClick={() => changeTheme("night")} aria-label="Ночной режим" aria-pressed={theme === "night"} className={`grid h-7 w-7 place-items-center rounded-full transition ${theme === "night" ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--subtle-text)] hover:text-[var(--app-text)]"}`}>
+              <button type="button" onClick={() => changeTheme("night")} aria-label={t('Ночной режим')} aria-pressed={theme === "night"} className={`grid h-7 w-7 place-items-center rounded-full transition ${theme === "night" ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--subtle-text)] hover:text-[var(--app-text)]"}`}>
                 <span aria-hidden="true">☾</span>
               </button>
             </div>
@@ -342,10 +359,11 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
       </header>
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
+        <nav className="section-switch" aria-label={t("Раздел")}>{(["incidents","missing"] as const).map(value=><button type="button" key={value} aria-pressed={section===value} onClick={()=>{setSection(value);setPeriod(value==="missing"?PERIODS[3]:PERIODS[2]);setMobileDetailOpen(false);setSelectedSlug("");setPreselectedSlug("");const url=new URL(window.location.href);url.searchParams.set("section",value);window.history.replaceState(null,"",url);}}>{t(value==="missing"?"Пропавшие люди":"Происшествия")}</button>)}</nav>
         <div className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
-          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label="Карта инцидентов Будапешта" role="region">
+          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t(section==="missing"?"Карта пропавших людей":"Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
-            <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label="Период событий">
+            <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label={t('Период событий')}>
               {PERIODS.map((item) => (
                 <button
                   key={item.label}
@@ -354,14 +372,14 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
                   aria-pressed={period.label === item.label}
                   className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${period.label === item.label ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--map-overlay-text)] hover:text-[var(--app-text)]"}`}
                 >
-                  {item.label}
+                  {t(item.label)}
                 </button>
               ))}
             </div>
-            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={`Всего ${visibleIncidents.length} происшествий на карте`}>
+            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t(section==="missing"?"Всего {n} сообщений о пропаже на карте":"Всего {n} происшествий на карте",{n:visibleIncidents.length})}>
               {visibleIncidents.length}
             </span>
-            <button type="button" onClick={closeMobileDetail} className="mobile-map-back absolute left-4 top-4 z-[1100] size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label="Назад к списку происшествий">
+            <button type="button" onClick={closeMobileDetail} className="mobile-map-back absolute left-4 top-4 z-[1100] size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t('Назад к списку происшествий')}>
               <ArrowLeftIcon aria-hidden="true" className="size-5" strokeWidth={2.2} />
             </button>
             {mobileDetailOpen && selected && (
@@ -373,7 +391,7 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </section>
 
           <div ref={feedRef} onScroll={updatePreselectedIncident} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:contents" data-testid="incident-feed">
-            <aside className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label="Лента происшествий">
+            <aside className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label={t(section==="missing"?"Лента пропавших людей":"Лента происшествий")}>
               {visibleIncidents.length ? (
                 visibleIncidents.map((incident) => (
                   <button
@@ -389,14 +407,14 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
                   >
                     <div className="mb-3 flex items-center justify-between gap-3 text-xs font-medium">
                       <IncidentMeta incident={incident} />
-                      <span className="text-[var(--subtle-text)]">{formatDate(incident.occurredAt)}</span>
+                      <span className="text-[var(--subtle-text)]">{formatDate(incident.occurredAt,locale)}</span>
                     </div>
                     <h2 className="text-base font-semibold leading-5 tracking-[-0.02em]">{incident.title}</h2>
                     <p className="mt-2 text-sm text-[var(--muted-text)]">{incident.district} · {incident.locationLabel}</p>
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">За этот период нет внесённых происшествий.</div>
+                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">{t(section==="missing"?"За этот период нет опубликованных сообщений о пропаже.":"За этот период нет внесённых происшествий.")}</div>
               )}
             </aside>
 
@@ -414,27 +432,27 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
               <h2 className="mobile-detail-title mt-3 text-2xl font-semibold tracking-[-0.04em]">{selected.title}</h2>
               <p className="mobile-detail-location mt-2 text-sm font-medium text-[var(--muted-text)]">{selected.district} · {selected.locationLabel}</p>
               <p className="mt-5 max-w-3xl leading-7 text-[var(--body-text)]">{selected.summary}</p>
-              <ContextClaims claims={(selected.context ?? []).filter((claim) => claim.subject.kind === "event")} title="Обстоятельства и версии" />
+              <ContextClaims claims={(selected.context ?? []).filter((claim) => claim.subject.kind === "event")} title={t("Обстоятельства и версии")} />
               </div>
 
               <IncidentMediaGallery incident={selected} />
 
               <div className="incident-timeline mt-6 pt-2">
-                <h3 className="font-semibold">Хронология</h3>
+                <h3 className="font-semibold">{t('Хронология')}</h3>
                 <ol className="mt-3 space-y-4 pl-4">
                   {selected.updates.map((update) => (
                     <li key={update.id} className="relative">
                       <span className="absolute -left-4 top-1.5 h-2 w-2 rounded-full bg-[var(--accent-text)]" />
                       <div className="flex flex-wrap items-center gap-2">
                         {isOfficialInformation(update.verification) ? (
-                          <p className="text-xs font-medium text-[var(--subtle-text)]">{formatDate(update.publishedAt)} · {update.verification}</p>
+                          <p className="text-xs font-medium text-[var(--subtle-text)]">{formatDate(update.publishedAt,locale)} · {update.verification}</p>
                         ) : (
                           <>
-                            <p className="text-xs font-medium text-[var(--subtle-text)]">{formatDate(update.publishedAt)}</p>
+                            <p className="text-xs font-medium text-[var(--subtle-text)]">{formatDate(update.publishedAt,locale)}</p>
                             <span className="rounded-full bg-[var(--status-bg)] px-2 py-0.5 text-[11px] font-semibold text-[var(--status-text)]">{update.verification}</span>
                           </>
                         )}
-                        <IncidentSignals incident={{ title: update.title, status: "", summary: update.detail }} />
+                        <IncidentSignals incident={{ title: update.title, status: "", summary: update.detail, signals:update.signals }} />
                       </div>
                       <p className="mt-1 font-semibold">{update.title}</p>
                       <p className="mt-1 text-sm leading-6 text-[var(--muted-text)]">{update.detail}</p>
@@ -446,10 +464,10 @@ export function IncidentsView({ incidents }: { incidents: IncidentView[] }) {
             </div>
 
             <div className="mobile-text-stack space-y-6">
-              <IncidentParticipants participants={selected.participants ?? []} context={selected.context ?? []} legal={selected.legal} />
+              <IncidentParticipants missingPeople={section==='missing'} participants={selected.participants ?? []} context={selected.context ?? []} legal={selected.legal} />
               <IncidentLocation incident={selected} placement="sidebar" />
               <div className="pt-2">
-                <h3 className="font-semibold">Источники</h3>
+                <h3 className="font-semibold">{t('Источники')}</h3>
                 <div className="mt-3 space-y-3">
                   {selected.sources.map((source) => {
                     const official = isOfficialInformation(source.sourceType);
