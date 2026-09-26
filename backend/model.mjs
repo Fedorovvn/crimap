@@ -18,6 +18,7 @@ export class DeepSeek {
     this.store=store;this.key=key;this.model=model;this.budget=budget;this.fetcher=fetcher;
   }
   async json(stage,payload,{maxTokens=8192,validate=x=>x}={}){
+    if(this.model==='deepseek-v4-pro'&&stage!=='review')throw new Error('Pro is reserved for final publication review');
     if(!this.key)throw new Error('DEEPSEEK_API_KEY is not configured');
     const prompt=readFileSync(new URL(`./prompts/${stage}.md`,import.meta.url),'utf8');
     const content=JSON.stringify(payload);if(content.length>160000)throw new Error('Model input exceeds limit');
@@ -30,7 +31,7 @@ export class DeepSeek {
     let feedback='';
     for(let attempt=0;attempt<2;attempt++){
     const reserve=(Buffer.byteLength(prompt+content+feedback)*prices.input+maxTokens*prices.output)/1e6;
-    const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget);
+    const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget,new Date().toISOString(),this.campaignId??null);
     try{
       const r=await this.fetcher('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify({model:this.model,thinking:{type:'disabled'},messages:[{role:'system',content:prompt+feedback},{role:'user',content}],response_format:{type:'json_object'},max_tokens:maxTokens,temperature:0}),signal:AbortSignal.timeout(90000)});
       if(!r.ok){const e=new Error(`DeepSeek HTTP ${r.status}`);e.retryAfter=Number(r.headers.get('retry-after'))||0;throw e;}

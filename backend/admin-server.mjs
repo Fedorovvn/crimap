@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
+import { catalog } from './sources.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -20,7 +21,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
     res.setHeader('Cache-Control','no-store');
     res.setHeader('X-Content-Type-Options','nosniff');
     res.setHeader('Referrer-Policy','no-referrer');
-    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self'; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
+    res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       const path = new URL(req.url,origin).pathname;
       if (!path.startsWith('/admin/')) return send(404,{error:'Не найдено'});
@@ -58,12 +59,21 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         store.db.prepare('DELETE FROM admin_sessions WHERE token_hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});
       }
       if(path==='/admin/api/events'&&req.method==='GET'){
-        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.state,e.occurred_at,e.review_reason,
+        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.review_reason,
           coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title,
           json_extract(q.payload,'$.verdict') verdict
           FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'
           LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision ORDER BY e.first_seen_at DESC LIMIT 500`).all();
-        return send(200,{events,requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
+          return send(200,{events,requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
+          campaigns:store.db.prepare(`SELECT c.*,coalesce((SELECT sum(coalesce(cost_usd,reserved_usd)) FROM usage WHERE campaign_id=c.id),0) spent,
+            (SELECT count(*) FROM events WHERE campaign_id=c.id) events,
+            (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='done') done,
+            (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state IN ('queued','running')) pending,
+            (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='failed') failed
+            FROM campaigns c ORDER BY created_at DESC`).all(),
+          archivePages:store.db.prepare('SELECT campaign_id,source_id,count(*) pages,min(earliest) earliest,max(latest) latest,sum(found) found,sum(filtered) filtered FROM archive_pages GROUP BY campaign_id,source_id').all(),
+          triage:store.db.prepare('SELECT keep,method,count(*) count FROM triage_log GROUP BY keep,method').all(),
+          sources:catalog.map(s=>({id:s.id,name:s.name,url:s.url,active:(s.feeds??[]).some(f=>store.db.prepare("SELECT 1 FROM jobs WHERE kind='feed' AND job_key=?").get(f.url)),archive:['police-brfk','kekvillogo'].includes(s.id)})),
           errors:store.db.prepare('SELECT kind,last_error,due_at FROM jobs WHERE last_error IS NOT NULL ORDER BY due_at DESC LIMIT 10').all(),
           usage:store.db.prepare('SELECT count(*) calls,coalesce(sum(coalesce(cost_usd,reserved_usd)),0) usd FROM usage WHERE created_at>=?').get(new Date().toISOString().slice(0,10)),
         });
@@ -82,13 +92,13 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
           if(body.approvalToken!==current.approvalToken)fail(409,'Перевод или проверка изменились. Обновите карточку перед публикацией.');
           if(current.blockers.length)fail(422,current.blockers.join('. '));
           if(body.confirm!==true)fail(400,'Подтвердите публикацию');
-          return publish(store,id,publicPath,{reviewer,includeContext:body.includeContext===true,includeLegal:body.includeLegal===true});
+          return publish(store,id,publicPath,{reviewer,includeContext:true,includeLegal:true});
         });
         return send(200,{publicId});
       }
       if(action==='review'&&!event.russian)fail(422,'Сначала нужен русский перевод');
       if(action==='translate'&&event.russian)fail(409,'Перевод уже есть. Для повторного перевода сохраните новую версию через редактор.');
-      store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision});
+      store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id});
       store.log('editorial-queue',id,{action,reviewer,revision:event.revision});
       return send(200,{queued:action});
     } catch(e) {

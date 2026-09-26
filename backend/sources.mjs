@@ -28,11 +28,12 @@ export function parseArticle(page){
     const title=(d.querySelector('meta[property="og:title"]')?.getAttribute('content')??d.querySelector('h1')?.textContent??d.title).trim();
     const published=d.querySelector('meta[property="article:published_time"],meta[name="date"]')?.getAttribute('content')??d.querySelector('time[datetime]')?.getAttribute('datetime');
     const language=d.documentElement.lang?.split('-')[0]||'hu';
-    d.querySelectorAll('script,style,nav,header,footer,aside,form,noscript,iframe').forEach(n=>n.remove());
-    const article=d.querySelector('article .field-name-body,article .field--name-body,article,.field-name-body,main')??d.body;
+    d.querySelectorAll('script,style,nav,header,footer,aside,form,noscript,iframe,.related-posts,.jp-relatedposts,.sharedaddy').forEach(n=>n.remove());
+    const article=d.querySelector('article .field-name-body,article .field--name-body,article .entry-content')??d.querySelector('article,.field-name-body,main')??d.body;
     const imageUrls=[...new Set([...d.querySelectorAll('meta[property="og:image"]')].map(n=>n.getAttribute('content')).concat([...article.querySelectorAll('img')].map(n=>n.getAttribute('src'))).filter(Boolean).map(u=>{try{return new URL(u,page.url).href;}catch{return null;}}).filter(u=>u&&/^https?:/.test(u)))].slice(0,20);
     article.querySelectorAll('p,div,br,li,h1,h2,h3').forEach(n=>{n.append('\n');});
-    const text=(title+'\n'+article.textContent).replace(/[\t ]+/g,' ').replace(/\n\s*\n/g,'\n').trim();
+    const imageDescriptions=[...article.querySelectorAll('img[alt]')].filter(n=>n.getAttribute('alt')?.trim()).slice(0,10).map(n=>`${n.getAttribute('src')??''}: ${n.getAttribute('alt')}`).join('\n');
+    const text=(title+'\n'+article.textContent+(imageDescriptions?'\nImage descriptions from source HTML:\n'+imageDescriptions:'')).replace(/[\t ]+/g,' ').replace(/\n\s*\n/g,'\n').trim();
     if(text.length<80)throw new Error('Article text is empty or inaccessible');
     // Reject truncation instead of extracting facts from an incomplete article.
     if(text.length>65000)throw new Error('Article exceeds extraction limit; needs a specific adapter');

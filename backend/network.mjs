@@ -59,14 +59,14 @@ export class Reader {
     if(!robotsAllowed(robots.body,u.pathname+u.search))throw new Error('Disallowed by robots.txt');
     const wait=(this.last.get(u.origin)??0)+this.minDelayMs-Date.now();if(wait>0)await new Promise(r=>setTimeout(r,wait));this.last.set(u.origin,Date.now());
   }
-  async read(url){
+  async read(url,{json=false}={}){
     url=canonicalUrl(url);await this.allowed(url);
     const cached=this.store.db.prepare('SELECT * FROM http_cache WHERE url=?').get(url);const headers={};
     if(cached?.etag)headers['If-None-Match']=cached.etag;if(cached?.last_modified)headers['If-Modified-Since']=cached.last_modified;
     const r=await this.request(url,{headers,beforeRedirect:destination=>this.allowed(destination)});
     if(r.status===304&&cached)return {url,body:cached.body,contentType:cached.content_type,unchanged:true};
     if(r.status!==200){const e=new Error(`Source HTTP ${r.status}`);e.retryAfter=Number(r.headers['retry-after'])||0;throw e;}
-    const type=String(r.headers['content-type']??'');if(!/html|xml|text\/plain/i.test(type))throw new Error('Unsupported source content type');
+    const type=String(r.headers['content-type']??'');if(!/html|xml|text\/plain/i.test(type)&&!(json&&/application\/json/i.test(type)))throw new Error('Unsupported source content type');
     this.store.db.prepare(`INSERT INTO http_cache(url,etag,last_modified,body,content_type,fetched_at) VALUES(?,?,?,?,?,?) ON CONFLICT(url) DO UPDATE SET etag=excluded.etag,last_modified=excluded.last_modified,body=excluded.body,content_type=excluded.content_type,fetched_at=excluded.fetched_at`).run(url,r.headers.etag??null,r.headers['last-modified']??null,r.body,type,new Date().toISOString());
     return {url:r.url,body:r.body,contentType:type,unchanged:cached?.body===r.body};
   }

@@ -1,0 +1,79 @@
+import { requestPage } from './network.mjs';
+import { hash } from './store.mjs';
+export const normalizePlace=s=>String(s??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+const romans=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX','XXI','XXII','XXIII'];
+export function districtNumber(s){const m=String(s??'').match(/(?:^|\b)([IVX]+|\d{1,2})\.?\s*(?:ker|district|[·(—-]|$)/i);if(!m)return null;const n=/^\d+$/.test(m[1])?Number(m[1]):romans.indexOf(m[1].toUpperCase())+1;return n>=1&&n<=23?n:null;}
+const bounds=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=47.34&&lat<=47.62&&lon>=18.92&&lon<=19.34;
+const normalizedStreet=s=>normalizePlace(s).replace(/\bbudapest\b/g,'').replace(/\b\d+[a-z]?\b/g,'').replace(/\s+/g,' ').trim();
+export function choosePlace(features,location,mode='address'){
+  const district=districtNumber(location.district),label=normalizePlace(location.label),street=normalizedStreet(location.label);
+  const candidates=[];
+  for(const f of features??[]){
+    const p=f.properties??{},[lon,lat]=f.geometry?.coordinates??[];
+    if(!bounds(lat,lon)||String(p.countrycode).toUpperCase()!=='HU')continue;
+    if(![p.city,p.state,p.name].some(n=>normalizePlace(n)==='budapest'))continue;
+    const candidateDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
+    if(district&&candidateDistrict&&candidateDistrict!==district)continue;
+    let precision,score=0;
+    const place=normalizePlace(p.name),road=normalizedStreet(p.street??(p.osm_key==='highway'?p.name:''));
+    if(mode==='city'){
+      if(place!=='budapest'||!['city','administrative'].includes(p.osm_value))continue;
+      precision='city';score=1;
+    }else if(mode==='district'){
+      const expected=normalizePlace(location.district);
+      if(!expected||p.housenumber||p.street||p.osm_key==='highway')continue;
+      if(!(district&&districtNumber(p.name)===district)&&!(place.length>4&&expected.includes(place)))continue;
+      precision='district';score=2;
+    }else{
+      const roadMatch=street&&road&&(street===road||street.endsWith(' '+road)||street.startsWith(road+' '));
+      const placeMatch=place.length>4&&(label===place||label.startsWith(place+' '));
+      if(!roadMatch&&!placeMatch)continue;
+      // An intersection must match both street names. A result for one street is not the junction.
+      if(/keresztez|intersection|\s[–&]\s/i.test(location.label))continue;
+      const house=p.housenumber&&new RegExp('(?:^| )'+normalizePlace(p.housenumber).replace(/[.*+?^${}()|[\]\\]/g,'\\$&')+'(?: |$)').test(label);
+      precision=location.precision==='exact'&&house?'exact':'street';
+      score=(house?20:10)+(district&&candidateDistrict===district?5:0);
+    }
+    candidates.push({latitude:lat,longitude:lon,precision,score,district:candidateDistrict,
+      provider:'photon',label:p.name??p.street??location.label,
+      sourceUrl:`https://www.openstreetmap.org/${({N:'node',W:'way',R:'relation'})[p.osm_type]??'node'}/${p.osm_id}`});
+  }
+  candidates.sort((a,b)=>b.score-a.score);
+  if(!candidates.length)return null;
+  const top=candidates.filter(c=>c.score===candidates[0].score);
+  if(mode==='address'&&new Set(top.map(c=>c.district).filter(Boolean)).size>1)return null;
+  if(mode==='address'&&top.length>1&&top.some(c=>Math.hypot(c.latitude-top[0].latitude,(c.longitude-top[0].longitude)*.68)>.025))return null;
+  const {score,district:ignored,...result}=top[0];return result;
+}
+export class Geocoder{
+  constructor(store,{request=requestPage,endpoint=process.env.GEOCODER_URL??'https://photon.komoot.io/api/',delayMs=16000,dailyLimit=80}={}){this.store=store;this.request=request;this.endpoint=endpoint;this.delayMs=delayMs;this.dailyLimit=dailyLimit;}
+  async query(q){
+    const key=hash({endpoint:this.endpoint,q});const cached=this.store.db.prepare('SELECT payload FROM geocode_cache WHERE query_key=?').get(key);if(cached)return JSON.parse(cached.payload);
+    const now=Date.now();const wait=this.store.transaction(()=>{
+      const n=this.store.db.prepare("SELECT count(*) n FROM audit WHERE action='geocode-request' AND created_at>=?").get(new Date(now).toISOString().slice(0,10)).n;
+      if(n>=this.dailyLimit)throw Object.assign(new Error('Geocoder daily request limit reached'),{retryAfter:3600});
+      const next=Math.max(now,this.store.db.prepare("SELECT next_at FROM service_limits WHERE service='geocoder'").get()?.next_at??0);
+      this.store.db.prepare("INSERT OR REPLACE INTO service_limits VALUES('geocoder',?)").run(next+this.delayMs);
+      this.store.log('geocode-request',key,{query:q});return next-now;
+    });
+    if(wait>0)await new Promise(r=>setTimeout(r,wait));
+    const url=new URL(this.endpoint);for(const [k,v] of Object.entries({q,limit:'8',countrycode:'HU',bbox:'18.92,47.34,19.34,47.62'}))url.searchParams.set(k,v);
+    const res=await this.request(url.href,{headers:{Accept:'application/json'},maxBytes:500000});
+    if(res.status!==200)throw new Error('Geocoder HTTP '+res.status);
+    const data=JSON.parse(res.body);if(!Array.isArray(data.features))throw new Error('Invalid geocoder response');
+    this.store.db.prepare('INSERT OR REPLACE INTO geocode_cache VALUES(?,?,?)').run(key,JSON.stringify(data.features),new Date().toISOString());return data.features;
+  }
+  async locate(location){
+    if(['exact','street'].includes(location.precision)){
+      const found=choosePlace(await this.query(`${location.label}, ${location.district??''}, Budapest`),location);
+      if(found)return found;
+    }
+    if(location.district){
+      const found=choosePlace(await this.query(`${location.district}, Budapest`),location,'district');
+      if(found)return {...found,approximation:'Адрес не удалось однозначно сопоставить; показан район'};
+    }
+    const city=choosePlace(await this.query('Budapest'),location,'city');
+    if(!city)throw new Error('Geocoder could not establish Budapest location');
+    return {...city,approximation:'Точное место не установлено; показан город'};
+  }
+}

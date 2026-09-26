@@ -31,14 +31,16 @@ export function eventDetail(store, id, publicPath) {
   const russian = ru ? JSON.parse(ru.payload) : null;
   const quality = review ? {...review,payload:JSON.parse(review.payload)} : null;
   const documents = documentsFor(store,id);
+  const prepared=store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
+  const preparation=prepared?JSON.parse(prepared.payload):null;
   const blockers = [];
   if (!russian) blockers.push('Нет русского перевода текущей версии');
   if (quality?.payload.verdict !== 'pass') blockers.push('Нужна успешная проверка Pro текущей версии');
   if (!row.canonical.occurredAt) blockers.push('Нужно уточнить дату события');
   if (row.canonical.location.latitude === undefined) blockers.push('Нужно указать проверенные координаты');
   if (!documents.length) blockers.push('Нет сохранённых источников');
-  return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers,
-    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload}),
+  return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,
+    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload}),
     published:currentPublic(publicPath,row.slug),
     jobs:store.db.prepare("SELECT kind,state,last_error,due_at FROM jobs WHERE state!='done' AND json_extract(payload,'$.eventId')=?").all(id),
   };
@@ -55,13 +57,14 @@ export function reviseEvent(store, id, {revision,canonical,strings}, reviewer) {
     const next = revision+1, now = new Date().toISOString();
     store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',review_reason='Editorial revision' WHERE id=?").run(JSON.stringify(event),event.occurredAt,next,id);
     store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,next,JSON.stringify(event),'editorial: '+reviewer,now);
+    // All edited versions return through automatic address/photo preparation before final review.
     if (translated) {
       store.db.prepare('INSERT INTO translations VALUES(?,?,?,?,?,?)').run(id,next,'ru',JSON.stringify(translated),'editorial',now);
       // Cancel a queued automatic translation so it cannot overwrite the editor's Russian text.
       // An in-flight old revision stays isolated from this new revision.
       store.db.prepare("UPDATE jobs SET state='done' WHERE kind='translate' AND job_key=? AND state='queued'").run(String(id));
-      store.enqueue('review',`${id}:${next}`,{eventId:id,revision:next});
-    } else store.enqueue('translate',id,{eventId:id});
+    }
+    store.enqueue('prepare',id,{eventId:id,campaignId:old.campaign_id});
     store.log('editorial-revision',id,{revision:next,reviewer});
     return {revision:next};
   });

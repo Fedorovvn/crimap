@@ -23,6 +23,8 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
   const translation=store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(eventId,row.revision);
   if(!translation)throw new Error('Current Russian translation is missing');
   const event=eventSchema.parse(JSON.parse(translation.payload));
+  const prepared=store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(eventId,row.revision);
+  const preparation=prepared?JSON.parse(prepared.payload):null;
   if(!event.occurredAt)throw new Error('Resolve occurrence date before publishing');
   if(event.location.latitude===undefined)throw new Error('Add verified map coordinates before publishing');
   const documents=store.db.prepare('SELECT DISTINCT d.* FROM observations o JOIN documents d ON d.id=o.document_id WHERE o.event_id=?').all(eventId);
@@ -35,7 +37,8 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     for(const table of ['incident_sources','incident_updates','incident_media','incident_participants','incident_context','incident_legal'])db.prepare(`DELETE FROM ${table} WHERE incident_id=?`).run(id);
     for(const d of documents)db.prepare('INSERT INTO incident_sources(incident_id,source_type,outlet,source_url,published_at,note) VALUES(?,?,?,?,?,?)').run(id,d.source_kind==='official'?'Официально':'Неофициально',new URL(d.url).hostname,d.url,d.published_at??d.first_seen_at,d.published_at?'':'Дата первой загрузки; время публикации не указано');
     for(const u of event.updates)db.prepare('INSERT INTO incident_updates(incident_id,published_at,title,detail,verification) VALUES(?,?,?,?,?)').run(id,u.publishedAt,u.title,u.detail,documents.find(d=>d.url===u.sourceUrl)?.source_kind==='official'?'Официальный источник':'По сообщению СМИ');
-    for(const m of event.media.filter(m=>['licensed','permission','public-domain'].includes(m.rights)))db.prepare('INSERT INTO incident_media(incident_id,image_url,source_url,outlet,credit,caption,is_sensitive) VALUES(?,?,?,?,?,?,?,?)').run(id,m.imageUrl,m.sourceUrl,m.outlet,m.credit,m.caption,Number(m.isSensitive));
+    const media=event.media.filter(m=>preparation?m.rights!=='link-only':['licensed','permission','public-domain'].includes(m.rights));
+    for(const m of [...media,...(preparation?.retainedMedia??[])])db.prepare('INSERT INTO incident_media(incident_id,image_url,source_url,outlet,credit,caption,is_sensitive) VALUES(?,?,?,?,?,?,?,?)').run(id,m.imageUrl,m.sourceUrl,m.outlet,m.credit,m.caption,Number(m.isSensitive));
     for(const p of event.participants)db.prepare('INSERT INTO incident_participants(incident_id,participant_key,details) VALUES(?,?,?)').run(id,p.key,JSON.stringify(p));
     for(const c of event.context){if(includeContext)c.reviewStatus='approved';if(isPublishableContext(c))db.prepare('INSERT INTO incident_context(incident_id,claim_key,details) VALUES(?,?,?)').run(id,c.key,JSON.stringify(c));}
     for(const l of event.legal){if(includeLegal)l.reviewStatus='approved';if(isPublishableLegal(l))db.prepare('INSERT INTO incident_legal(incident_id,assessment_key,details) VALUES(?,?,?)').run(id,l.key,JSON.stringify(l));}

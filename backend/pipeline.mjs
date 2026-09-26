@@ -9,6 +9,7 @@ import { feeds, sourceFor, parseFeed, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { checkReview,recordRequests } from './review.mjs';
+import { cheapDecision } from './triage.mjs';
 
 const iso=()=>new Date().toISOString();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
@@ -22,10 +23,11 @@ export function matchCandidates(event,rows){
   });
 }
 export class Pipeline {
-  constructor(store,{reader,model,reviewer,search,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??'police-brfk,okf-events,kekvillogo').split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??5)}={}){
+  constructor(store,{reader,model,reviewer,search,triage,preparation,archive,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??'police-brfk,okf-events,kekvillogo').split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??5)}={}){
     this.store=store;this.reader=reader;this.model=model;this.reviewer=reviewer;this.search=search;this.sourceIds=sourceIds;this.maxItems=maxItems;
     this.laws=JSON.parse(readFileSync(new URL('./verified-laws.json',import.meta.url),'utf8'));
     this.publicPath=publicPath;
+    this.triage=triage;this.preparation=preparation;this.archive=archive;this.campaignId=null;
     this.schema=zodToJsonSchema(extractionSchema,{name:'Extraction'});
   }
   publishedSources(){
@@ -35,6 +37,7 @@ export class Pipeline {
   seed(){
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
     for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
+    if(this.preparation)for(const e of this.store.db.prepare("SELECT id,revision,campaign_id FROM events WHERE state='draft'").all())if(!this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(e.id,e.revision))this.store.enqueue('prepare',e.id,{eventId:e.id,campaignId:e.campaign_id});
   }
   async readDocument(url,publishedAt=null){
     const source=sourceFor(url);if(!source)throw new Error('Unregistered source');
@@ -59,11 +62,14 @@ export class Pipeline {
     const doc=await this.readDocument(url,publishedAt);
     const processed=this.store.db.prepare("SELECT id FROM audit WHERE action='document-processed' AND subject=? LIMIT 1").get(`${doc.id}:${doc.contentHash}`);
     if(processed)return {unchanged:true,documentId:doc.id};
+    if(this.triage){
+      const result=await this.triage.check(doc);
+      this.store.db.prepare('INSERT OR REPLACE INTO triage_log VALUES(?,?,?,?,?,?)').run(doc.id,doc.contentHash,Number(result.keep),result.method,result.reason,iso());
+      if(!result.keep){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,irrelevantReason:result.reason,filtered:true});return {documentId:doc.id,events:0,filtered:true};}
+    }
     const input={schema:this.schema,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:this.laws};
     const options={validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
-    let result,extractionModel=this.model.model;
-    try{result=await this.model.json('extract',input,options);}
-    catch(e){if(!e.validationFailure||!this.reviewer)throw e;this.store.log('escalated-extraction',doc.id,{reason:e.message,model:this.reviewer.model});result=await this.reviewer.json('extract',{...input,previousValidationError:e.message},options);extractionModel=this.reviewer.model;}
+    const result=await this.model.json('extract',input,options),extractionModel=this.model.model;
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
     const events=result.events.map(event=>this.validate(event,[doc]));
     let firstId;
@@ -94,7 +100,7 @@ export class Pipeline {
         const seen=this.store.db.prepare('SELECT id FROM observations WHERE event_id=? AND document_id=? AND content_hash=?').get(target.id,doc.id,doc.contentHash);if(seen)return;
         const revision=target.revision+1;
         // Updated drafts never overwrite the public revision without review.
-        this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',review_reason=? WHERE id=?").run(JSON.stringify(event),event.occurredAt,revision,'Updated source: review changes',target.id);
+        this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',auto_repairs=0,review_reason=? WHERE id=?").run(JSON.stringify(event),event.occurredAt,revision,'Updated source: review changes',target.id);
         this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(target.id,revision,JSON.stringify(event),'source-update',now);
       }else{
         const slug=published?.slug??normalized(incoming.title).replace(/ /g,'-').slice(0,65)+'-'+hash({doc:doc.id,version:doc.contentHash,event:incoming.title,date:incoming.occurredAt}).slice(0,10);
@@ -103,11 +109,35 @@ export class Pipeline {
         target={id};this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,1,?,?,?)').run(id,JSON.stringify(event),'discovered',now);
       }
       this.store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(target.id,doc.id,doc.contentHash,JSON.stringify(incoming),now);
-      this.store.enqueue('translate',target.id,{eventId:target.id});
+      if(this.campaignId)this.store.db.prepare('UPDATE events SET campaign_id=? WHERE id=?').run(this.campaignId,target.id);
+      this.store.enqueue(this.preparation?'prepare':'translate',target.id,{eventId:target.id,campaignId:this.campaignId});
       const current=this.store.event(target.id);
-      if(intervalFor(current)!==null&&!this.store.db.prepare("SELECT id FROM jobs WHERE kind='recheck' AND job_key=?").get(String(target.id)))this.store.enqueue('recheck',target.id,{eventId:target.id});
+      if(intervalFor(current)!==null&&!this.store.db.prepare("SELECT id FROM jobs WHERE kind='recheck' AND job_key=?").get(String(target.id)))this.store.enqueue('recheck',target.id,{eventId:target.id},nextCheck(current));
     });
     return target?.id;
+  }
+  async prepare(id){
+    const row=this.store.event(id);if(!row)throw new Error('Unknown event');
+    if(this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision))return;
+    const result=await this.preparation.enrich(row,this.eventDocuments(id));
+    const event=eventSchema.parse(result.event),changed=!isDeepStrictEqual(event,row.canonical),revision=row.revision+(changed?1:0);
+    this.store.transaction(()=>{
+      if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during preparation; retry required');
+      if(changed){
+        this.store.db.prepare("UPDATE events SET canonical=?,revision=?,state='draft',review_reason='Automatic location and media preparation' WHERE id=?").run(JSON.stringify(event),revision,id);
+        this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,revision,JSON.stringify(event),'automatic-preparation',iso());
+      }
+      const {event:ignored,...metadata}=result;
+      this.store.db.prepare('INSERT OR REPLACE INTO preparation VALUES(?,?,?,?)').run(id,revision,JSON.stringify(metadata),iso());
+      this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,revision);
+      const old=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,row.revision);
+      if(old&&JSON.stringify(translationStrings(event))===JSON.stringify(translationStrings(row.canonical))){
+        const russian=applyTranslation(event,{language:'ru',strings:translationStrings(JSON.parse(old.payload))});
+        this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,revision,'ru',JSON.stringify(russian),'preparation-reuse',iso());
+        this.store.enqueue('review',`${id}:${revision}`,{eventId:id,revision,campaignId:this.campaignId});
+      }else this.store.enqueue('translate',id,{eventId:id,campaignId:this.campaignId});
+      this.store.log('prepared',id,{revision,...metadata});
+    });
   }
   async translate(id){
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
@@ -115,20 +145,43 @@ export class Pipeline {
     const translated=applyTranslation(event.canonical,payload);
     this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,event.revision,'ru',JSON.stringify(translated),this.model.model,iso());
-    if(this.reviewer)this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision});return translated;
+    if(this.reviewer)this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});return translated;
   }
   async review(id,revision){
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
     if(!this.reviewer)throw new Error('Review model is not configured');
+    if(this.preparation&&(!event.canonical.occurredAt||event.canonical.location.latitude===undefined)){this.store.log('review-deferred',id,{revision:event.revision,reason:'Not ready: date or prepared coordinates missing'});return {deferred:true};}
     const translated=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
     if(!translated)throw new Error('Translate the current revision before review');
     const docs=this.eventDocuments(id);
     const russian=JSON.parse(translated.payload);
-    const result=await this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,documents:docs,verifiedLawCatalog:this.laws},{maxTokens:4000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian})});
+    const preparation=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
+    const result=await this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,documents:docs,preparation:preparation?JSON.parse(preparation.payload):null,verifiedLawCatalog:this.laws},{maxTokens:4000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian})});
     this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,event.revision,this.reviewer.model,JSON.stringify(result),iso());
     this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
-    recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});return result;
+    recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});
+    if(this.preparation&&result.verdict==='revise'&&event.auto_repairs<2&&this.store.event(id).revision===event.revision)this.store.enqueue('repair',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});
+    return result;
+  }
+  async repair(id,revision){
+    const row=this.store.event(id);if(!row||row.revision!==revision||row.auto_repairs>=2)return;
+    const quality=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);
+    if(!quality||JSON.parse(quality.payload).verdict!=='revise')return;
+    const ru=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,revision);
+    const docs=this.eventDocuments(id);
+    const repaired=await this.model.json('repair',{schema:this.schema,event:row.canonical,russian:ru?JSON.parse(ru.payload):null,review:JSON.parse(quality.payload),documents:docs,verifiedLawCatalog:this.laws},{maxTokens:10000,validate:raw=>{
+      const event=this.validate(eventSchema.parse(raw.event),docs),russian=applyTranslation(event,raw.russian);return {event,russian};
+    }});
+    this.store.transaction(()=>{
+      if(this.store.event(id).revision!==revision)throw new Error('Event changed during automatic repair');
+      const next=revision+1;
+      this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',auto_repairs=auto_repairs+1,review_reason='Flash corrected final review issues' WHERE id=?").run(JSON.stringify(repaired.event),repaired.event.occurredAt,next,id);
+      this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,next,JSON.stringify(repaired.event),'flash-auto-repair',iso());
+      this.store.db.prepare('INSERT INTO translations VALUES(?,?,?,?,?,?)').run(id,next,'ru',JSON.stringify(repaired.russian),this.model.model,iso());
+      this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});
+      this.store.log('auto-repaired',id,{revision:next,model:this.model.model});
+    });
   }
   async recheck(id){
     let event=this.store.event(id);if(!event)throw new Error('Unknown event');
@@ -152,25 +205,36 @@ export class Pipeline {
     const job=this.store.claim();if(!job)return false;
     const timer=setInterval(()=>this.store.heartbeat(job),60000);timer.unref();
     try{
+      this.campaignId=job.payload.campaignId??null;
+      for(const model of [this.model,this.reviewer])if(model)model.campaignId=this.campaignId;
       let next=null;
       if(job.kind==='feed'){
         const page=await this.reader.read(job.payload.url),items=parseFeed(page.body,page.url).slice(0,this.maxItems);
-        for(const item of items){const existing=this.store.db.prepare("SELECT state FROM jobs WHERE kind='article' AND job_key=?").get(item.url);if(!existing||existing.state==='done')this.store.enqueue('article',item.url,item);}
+        for(const item of items){const filter=cheapDecision(item.title);if(this.triage&&filter.decision==='drop'){this.store.log('headline-filtered',item.url,{reason:filter.reason});continue;}const existing=this.store.db.prepare("SELECT state FROM jobs WHERE kind='article' AND job_key=?").get(item.url);if(!existing||existing.state==='done')this.store.enqueue('article',item.url,item);}
         next=new Date(Date.now()+job.payload.intervalSeconds*1000).toISOString();
       }else if(job.kind==='article')await this.ingest(job.payload.url,job.payload.publishedAt);
+      else if(job.kind==='prepare')await this.prepare(job.payload.eventId);
+      else if(job.kind==='repair')await this.repair(job.payload.eventId,job.payload.revision);
+      else if(job.kind==='archive')await this.archive.scan(job.payload);
       else if(job.kind==='translate')await this.translate(job.payload.eventId);
       else if(job.kind==='review')await this.review(job.payload.eventId,job.payload.revision);
       else if(job.kind==='recheck')next=await this.recheck(job.payload.eventId);
       else throw new Error('Unknown job kind');
       this.store.finish(job,next);
+      this.archive?.settle();
     }catch(e){
+      if(/Campaign model budget reached/.test(e.message)&&this.campaignId){
+        this.store.transaction(()=>{this.store.db.prepare("UPDATE campaigns SET state='budget-exhausted' WHERE id=?").run(this.campaignId);this.store.db.prepare("UPDATE jobs SET state='paused',lease_token=NULL,lease_until=NULL,last_error=? WHERE json_extract(payload,'$.campaignId')=? AND state IN ('running','queued')").run(e.message,this.campaignId);});
+        this.store.log('campaign-budget-stop',this.campaignId,{error:e.message});return true;
+      }
       const event=job.kind==='recheck'?this.store.event(job.payload.eventId):null;
+      if(this.campaignId&&job.attempts>=3){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId});this.archive?.settle();return true;}
       const retired=event&&intervalFor(event)===null;
       const budgetWait=/Daily (model budget|search limit)/.test(e.message)?Date.parse(new Date(Date.now()+86400000).toISOString().slice(0,10)+'T00:00:30Z')-Date.now():null;
       this.store.finish(job,retired?null:new Date(Date.now()+(budgetWait??retryDelay(job.attempts,e.retryAfter))).toISOString(),e.message);
       this.store.log('job-failure',job.id,{kind:job.kind,error:e.message});
       process.stderr.write(JSON.stringify({job:job.id,kind:job.kind,error:e.message})+'\n');
-    }finally{clearInterval(timer);}
+    }finally{clearInterval(timer);this.campaignId=null;for(const model of [this.model,this.reviewer])if(model)model.campaignId=null;}
     return true;
   }
 }
