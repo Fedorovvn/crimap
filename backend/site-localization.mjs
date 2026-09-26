@@ -18,7 +18,7 @@ export function validateSiteTranslation(raw,language,strings) {
   const result=z.object({language:z.literal(language),strings:z.record(z.string().trim().min(1).max(12000))}).strict().parse(raw);
   if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(result.strings).sort()))throw new Error('Site translation paths do not match');
   const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(n=>n.replace(',','.')).sort().join('|');
-  for(const key of Object.keys(strings))if(numbers(strings[key])!==numbers(result.strings[key]))throw new Error('Site translation changed numbers: '+key);
+  for(const key of Object.keys(strings))if(numbers(strings[key])!==numbers(result.strings[key]))throw new Error(`Site translation changed numbers: ${key}; preserve these numeric tokens exactly: [${numbers(strings[key])}], received [${numbers(result.strings[key])}]. Do not convert digits to words/Roman numerals or change leading zeroes in times.`);
   return result;
 }
 export async function translateSiteTexts(model,texts,feedback=[]) {
