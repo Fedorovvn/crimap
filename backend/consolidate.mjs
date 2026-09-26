@@ -17,7 +17,13 @@ export async function consolidate(pipeline,{limit=30}={}){
       pipeline.campaignId=target.campaign_id??duplicate.campaign_id;
       pipeline.model.campaignId=pipeline.campaignId;
       const documents=[...new Map([...pipeline.eventDocuments(target.id),...pipeline.eventDocuments(duplicate.id)].map(d=>[`${d.id}:${d.contentHash}`,d])).values()];
-      const result=await pipeline.merge(target.canonical,duplicate.canonical,documents);
+      let result;
+      try{result=await pipeline.merge(target.canonical,duplicate.canonical,documents);}
+      catch(e){
+        if(/budget reached/i.test(e.message))throw e;
+        store.log('merge-needs-retry',target.id,{duplicateId:duplicate.id,error:e.message});
+        continue;
+      }
       if(!result.sameEvent)continue;
       store.transaction(()=>{
         if(store.event(target.id).revision!==target.revision||store.event(duplicate.id).revision!==duplicate.revision||store.event(duplicate.id).merged_into)throw new Error('Event changed during consolidation');
