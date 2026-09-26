@@ -45,7 +45,7 @@ async function select(id){selected=await api('events/'+id);dirty=false;renderLis
 function discard(){return !dirty||window.confirm('Есть несохранённые правки. Оставить их и перейти?');}
 async function ready(){const session=await api('session');csrf=session.csrf;$('#login').hidden=true;$('#workspace').hidden=false;$('#logout').hidden=false;await loadList();if(events.length)await select(events[0].id);}
 async function run(fn){if(activeBusy)return;activeBusy=true;try{await fn();}catch(e){notify(e.message,true);}finally{activeBusy=false;}}
-$('#login-form').addEventListener('submit',e=>{e.preventDefault();run(async()=>{const s=await api('login',{password:$('#password').value});$('#password').value='';csrf=s.csrf;await ready();});});
+$('#login-form').addEventListener('submit',e=>{e.preventDefault();run(async()=>{const s=await api('login',{token:$('#token').value});$('#token').value='';csrf=s.csrf;await ready();});});
 $('#logout').onclick=()=>run(async()=>{if(!discard())return;await api('logout',{});csrf='';selected=null;dirty=false;$('#workspace').hidden=true;$('#detail').innerHTML='';$('#events').innerHTML='';$('#logout').hidden=true;$('#login').hidden=false;});
 $('#search').oninput=renderList;
 $('#refresh').onclick=()=>run(async()=>{if(!discard())return;await loadList();if(selected)await select(selected.id);notify('Лента обновлена');});
@@ -68,4 +68,15 @@ $('#detail').addEventListener('submit',e=>{if(e.target.id!=='edit-form')return;e
 $('#cancel-publish').onclick=()=>$('#confirmation').close();
 $('#confirm-publish').onclick=()=>run(async()=>{const b=$('#confirm-publish');b.disabled=true;try{await api(`events/${selected.id}/publish`,{revision:selected.revision,approvalToken:selected.approvalToken,confirm:true,includeContext:$('#context-approval').checked,includeLegal:$('#legal-approval').checked});$('#confirmation').close();await select(selected.id);await loadList();notify('Версия опубликована на сайте');}finally{b.disabled=false;}});
 window.addEventListener('beforeunload',e=>{if(dirty){e.preventDefault();e.returnValue='';}});
-ready().catch(e=>{if(!$('#login').hidden)return;notify(e.message,true);});
+async function bootstrap(){
+  const token=new URLSearchParams(window.location.hash.slice(1)).get('token');
+  if(token){
+    // Fragments are never sent in HTTP requests. Remove the credential before loading event data.
+    window.history.replaceState(null,'',window.location.pathname+window.location.search);
+    const session=await api('login',{token});csrf=session.csrf;
+  }
+  await ready();
+}
+const boot=()=>bootstrap().catch(e=>{if(!$('#login').hidden){if(!e.message.includes('Войдите'))notify(e.message,true);return;}notify(e.message,true);});
+window.addEventListener('hashchange',()=>{if(window.location.hash.startsWith('#token='))boot();});
+boot();

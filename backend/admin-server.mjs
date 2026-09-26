@@ -1,16 +1,13 @@
 import { createServer } from 'node:http';
-import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomBytes, timingSafeEqual } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 
-export function passwordHash(password, salt=randomBytes(16).toString('hex')) {
-  return `${salt}:${scryptSync(password,salt,32).toString('hex')}`;
-}
-export function createAdmin({store,publicPath,password,origin,reviewer='Редактор',secure=true}) {
-  if (!/^[a-f0-9]{32}:[a-f0-9]{64}$/.test(password??'')) throw new Error('Configure ADMIN_PASSWORD_HASH');
+export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
+  if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
   const base = new URL(origin);
   if (secure && base.protocol!=='https:') throw new Error('HTTPS admin origin required');
   store.db.exec('CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY,csrf TEXT NOT NULL,expires_at INTEGER NOT NULL)');
@@ -41,9 +38,8 @@ export function createAdmin({store,publicPath,password,origin,reviewer='Реда
         const a=attempts.get(ip)??{count:0,until:now+900_000};
         if(a.count>=5)fail(429,'Слишком много попыток. Попробуйте через 15 минут.');
         a.count++;attempts.set(ip,a);
-        const candidate=typeof body.password==='string'&&body.password.length<=1024?body.password:'';
-        const [salt,expected]=password.split(':');
-        if(!candidate||!timingSafeEqual(scryptSync(candidate,salt,32),Buffer.from(expected,'hex')))fail(401,'Неверный пароль');
+        const candidate=typeof body.token==='string'&&body.token.length<=1024?body.token:'';
+        if(!candidate||!timingSafeEqual(Buffer.from(hash(candidate),'hex'),Buffer.from(tokenHash,'hex')))fail(401,'Недействительный токен. Откройте вашу приватную ссылку.');
         attempts.delete(ip);
         const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
         store.db.prepare('DELETE FROM admin_sessions WHERE expires_at<?').run(now);
@@ -105,7 +101,7 @@ export function createAdmin({store,publicPath,password,origin,reviewer='Реда
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(process.argv[1]).href){
   const store=new Store(process.env.COLLECTOR_DATABASE_PATH??'data/collector.sqlite');
-  const server=createAdmin({store,publicPath:process.env.DATABASE_PATH,password:process.env.ADMIN_PASSWORD_HASH,origin:process.env.ADMIN_ORIGIN,reviewer:process.env.ADMIN_REVIEWER??'Редактор'});
+  const server=createAdmin({store,publicPath:process.env.DATABASE_PATH,tokenHash:process.env.ADMIN_TOKEN_HASH,origin:process.env.ADMIN_ORIGIN,reviewer:process.env.ADMIN_REVIEWER??'Редактор'});
   server.listen(Number(process.env.ADMIN_PORT??8083),'127.0.0.1',()=>console.log('Crimap editorial service ready'));
   const stop=()=>server.close(()=>{store.close();process.exit(0);});
   process.on('SIGTERM',stop);process.on('SIGINT',stop);
