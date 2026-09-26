@@ -25,7 +25,7 @@ export class Preparation{
     // Pro-resolved map point or reopen the same paid location search.
     const previous=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision<=? ORDER BY revision DESC LIMIT 1').get(row.id,row.revision);
     const prior=previous?JSON.parse(previous.payload):null;
-    const sameReviewedPlace=prior?.geocoding?.provider==='photon-pro-reviewed'
+    const sameReviewedPlace=['photon-pro-reviewed','osm-geometry-pro-reviewed'].includes(prior?.geocoding?.provider)
       && prior.geocoding.latitude===event.location.latitude && prior.geocoding.longitude===event.location.longitude
       && prior.geocoding.precision===event.location.precision
       && normalizePlace(prior.geocoding.anchor.label)===normalizePlace(event.location.label);

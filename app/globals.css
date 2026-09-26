@@ -861,3 +861,29 @@ body {
   .map-controls button { padding-inline: 9px; font-size: 12px; }
 }
 [data-theme='day'] .incident-signal--injury { color: #855d00; background: #fff0bb; }
+
+/* Keep the feed scrollbar quiet in both themes, without a native white track. */
+.mobile-incident-list {
+  scrollbar-width: thin;
+  scrollbar-color: color-mix(in srgb, var(--muted-text) 42%, transparent) transparent;
+}
+.mobile-incident-list:hover {
+  scrollbar-color: color-mix(in srgb, var(--muted-text) 70%, transparent) transparent;
+}
+.mobile-incident-list::-webkit-scrollbar { width: 7px; }
+.mobile-incident-list::-webkit-scrollbar-track { background: transparent; }
+.mobile-incident-list::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--muted-text) 42%, transparent);
+  border: 2px solid var(--app-bg);
+  border-radius: 999px;
+}
+.mobile-incident-list::-webkit-scrollbar-thumb:hover { background: var(--muted-text); }
+.mobile-incident-list::-webkit-scrollbar-button { display: none; }
+
+/* The compact feed uses one alert color; full incident badges retain their palette. */
+.incident-list-card .incident-type:not([data-type="Нападение"]) {
+  background: #30353b; color: #e2e6e9; border-color: #58616a;
+}
+[data-theme="day"] .incident-list-card .incident-type:not([data-type="Нападение"]) {
+  background: #eef0f1; color: #505c63; border-color: #c9d0d3;
+}

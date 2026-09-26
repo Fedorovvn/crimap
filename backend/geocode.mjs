@@ -1,5 +1,6 @@
 import { requestPage } from './network.mjs';
 import { hash } from './store.mjs';
+import {surfaceCandidates} from './map-surfaces.mjs';
 import {readFileSync} from 'node:fs';
 const institutions=JSON.parse(readFileSync(new URL('./institution-addresses.json',import.meta.url),'utf8'));
 export const normalizePlace=s=>String(s??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
@@ -27,6 +28,8 @@ export function choosePlace(features,location,mode='address'){
       if(!(district&&districtNumber(p.name)===district)&&!(place.length>4&&expected.includes(place)))continue;
       precision='district';score=2;
     }else{
+      // A same-named shop, subway station or information board is not a street.
+      if(p.osm_key!=='highway'&&!p.housenumber)continue;
       const roadMatch=street&&road&&(street===road||street.endsWith(' '+road)||street.startsWith(road+' '));
       const placeMatch=place.length>4&&(label===place||label.startsWith(place+' '));
       if(!roadMatch&&!placeMatch)continue;
@@ -83,12 +86,28 @@ export class Geocoder{
         }
       }
     }
-    const features = await this.query(`${anchor.label}, ${location.district??''}, Budapest`);
+    const mapLabel=anchor.mapQuery??anchor.streets?.[0]??anchor.label;
+    const features = await this.query(`${mapLabel}, ${location.district??''}, Budapest`);
+    if(anchor.kind==='intersection'||['road','tram','rail','waterfront'].includes(anchor.surface)){
+      const seed=features.find(f=>{
+        const p=f.properties??{},[lon,lat]=f.geometry?.coordinates??[];
+        const name=normalizePlace(p.name??p.street),label=normalizePlace(mapLabel);
+        const district=districtNumber(location.district),candidateDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
+        return bounds(lat,lon)&&String(p.countrycode).toUpperCase()==='HU'&&[p.city,p.state].some(v=>normalizePlace(v)==='budapest')&&(!district||!candidateDistrict||district===candidateDistrict)&&name.length>4&&(label.includes(name)||name.startsWith(label));
+      });
+      if(seed){
+        const [longitude,latitude]=seed.geometry.coordinates;
+        const places=surfaceCandidates(await this.mapAround({latitude,longitude}),anchor,{latitude,longitude});
+        if(places.length)return places.map(c=>({...c,id:hash(c).slice(0,20)}));
+      }
+      // Do not fall back to a namesake of the wrong surface type.
+      return [];
+    }
     if (['street','address'].includes(anchor.kind)) {
-      const found = choosePlace(features, {...location,label:anchor.label,precision:anchor.kind==='address'?'exact':'street'});
+      const found = choosePlace(features, {...location,label:mapLabel,precision:anchor.kind==='address'?'exact':'street'});
       return found ? [{...found,id:hash(found).slice(0,20)}] : [];
     }
-    const label = normalizePlace(anchor.label), district = districtNumber(location.district);
+    const label = normalizePlace(mapLabel), district = districtNumber(location.district);
     const candidates = [];
     for (const f of features) {
       const p=f.properties??{}, [longitude,latitude]=f.geometry?.coordinates??[];
@@ -97,6 +116,8 @@ export class Geocoder{
       const name=normalizePlace(p.name), foundDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
       if (district && foundDistrict && district!==foundDistrict) continue;
       if (!(name===label || name.startsWith(label+' ') || label.startsWith(name+' ') && name.length>4)) continue;
+      if(p.osm_key==='tourism'&&['information','board','map','guidepost'].includes(p.osm_value))continue;
+      if(['board','map','guidepost'].includes(p.osm_value))continue;
       if (anchor.kind==='stop' && !['tram_stop','bus_stop','stop_position','platform','station','halt','stop_area'].includes(p.osm_value)) continue;
       if (anchor.kind==='landmark' && ['highway','boundary'].includes(p.osm_key)) continue;
       if (!['N','W','R'].includes(p.osm_type) || !/^\d+$/.test(String(p.osm_id))) continue;
@@ -106,6 +127,24 @@ export class Geocoder{
       candidates.push({...candidate,id:hash(candidate).slice(0,20)});
     }
     return candidates.slice(0,8);
+  }
+  async mapAround(center){
+    const lat=Number(center.latitude.toFixed(3)),lon=Number(center.longitude.toFixed(3));
+    const key=hash({service:'osm-surface-v1',lat,lon});
+    const cached=this.store.db.prepare('SELECT payload FROM geocode_cache WHERE query_key=?').get(key);if(cached)return JSON.parse(cached.payload);
+    const now=Date.now();
+    const wait=this.store.transaction(()=>{
+      const n=this.store.db.prepare("SELECT count(*) n FROM audit WHERE action='geocode-request' AND created_at>=?").get(new Date(now).toISOString().slice(0,10)).n;
+      if(n>=this.dailyLimit)throw Object.assign(new Error('Geocoder daily request limit reached'),{retryAfter:3600});
+      const next=Math.max(now,this.store.db.prepare("SELECT next_at FROM service_limits WHERE service='geocoder'").get()?.next_at??0);
+      this.store.db.prepare("INSERT OR REPLACE INTO service_limits VALUES('geocoder',?)").run(next+this.delayMs);this.store.log('geocode-request',key,{service:'osm-surfaces',center});return next-now;
+    });
+    if(wait>0)await new Promise(r=>setTimeout(r,wait));
+    const bbox=[lon-.007,lat-.005,lon+.007,lat+.005].join(',');
+    const response=await this.request(`https://api.openstreetmap.org/api/0.6/map.json?bbox=${bbox}`,{headers:{Accept:'application/json'},maxBytes:12000000});
+    if(response.status!==200)throw new Error('OSM geometry HTTP '+response.status);
+    const data=JSON.parse(response.body);if(!Array.isArray(data.elements))throw new Error('Invalid OSM geometry response');
+    this.store.db.prepare('INSERT OR REPLACE INTO geocode_cache VALUES(?,?,?)').run(key,JSON.stringify(data.elements),new Date().toISOString());return data.elements;
   }
   async locate(location){
     if(['exact','street','landmark'].includes(location.precision)){

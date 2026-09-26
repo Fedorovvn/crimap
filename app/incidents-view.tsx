@@ -225,7 +225,7 @@ function IncidentSignals({ incident }: { incident: Pick<IncidentView, "title" | 
   );
 }
 
-function IncidentMeta({ incident }: { incident: Pick<IncidentView, "title" | "category" | "status" | "summary"> }) {
+function IncidentMeta({ incident, compact = false }: { incident: Pick<IncidentView, "title" | "category" | "status" | "summary" | "signals" | "eventType">; compact?: boolean }) {
   const {t}=useI18n();
   const incidentType = getIncidentType(incident);
 
@@ -235,7 +235,7 @@ function IncidentMeta({ incident }: { incident: Pick<IncidentView, "title" | "ca
         <IncidentTypeIcon type={incidentType} />
         {t(incidentType)}
       </span>
-      <IncidentSignals incident={incident} />
+      <IncidentSignals incident={compact ? {...incident, signals:getIncidentSignals(incident).filter(signal=>signal==="death")} : incident} />
     </div>
   );
 }
@@ -254,14 +254,12 @@ export function IncidentsView(props: { incidents: IncidentView[] }) {
 }
 function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const {locale,setLocale,t}=useI18n();
-  const [section,setSection]=useState<"incidents" | "missing">("incidents");
-  useEffect(()=>{ if(new URLSearchParams(window.location.search).get("section")==="missing"){setSection("missing");setPeriod(PERIODS[3]);} },[]);
   const typedIncidents = useMemo(()=>incidents.map(incident=>({...incident, eventType:incident.eventType ?? ({"ДТП":"traffic-accident","Нападение":"assault","Драка":"fight","Ограбление":"robbery","Несчастный случай":"accident","Пропавший человек":"missing-person"}[getIncidentType(incident)] ?? "other"), signals:getIncidentSignals(incident),updates:incident.updates.map(update=>({...update,signals:getIncidentSignals({title:update.title,status:"",summary:update.detail,eventType:incident.eventType})}))})),[incidents]);
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>(PERIODS[2]);
   const [theme, setTheme] = useState<"day" | "night">("night");
   const visibleIncidents = useMemo(
-    () => filterIncidents(typedIncidents.filter(incident=>(incident.eventType==="missing-person")===(section==="missing")), period.hours).map(incident=>translateContent(incident,locale,locale==="ru"?{}:incident.translations?.[locale])),
-    [typedIncidents, period, section, locale],
+    () => filterIncidents(typedIncidents.filter(incident=>incident.eventType!=="missing-person"), period.hours).map(incident=>translateContent(incident,locale,locale==="ru"?{}:incident.translations?.[locale])),
+    [typedIncidents, period, locale],
   );
   const [selectedSlug, setSelectedSlug] = useState(incidents[0]?.slug ?? "");
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
@@ -331,23 +329,6 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     return () => window.cancelAnimationFrame(frame);
   }, [updatePreselectedIncident]);
 
-  const sectionSwitch = (placement: "desktop" | "map") => (
-    <nav className={`section-switch section-switch--${placement}`} aria-label={t("Раздел")}>
-      {(["incidents", "missing"] as const).map(value => (
-        <button type="button" key={value} aria-pressed={section === value} onClick={() => {
-          setSection(value);
-          setPeriod(value === "missing" ? PERIODS[3] : PERIODS[2]);
-          setMobileDetailOpen(false);
-          setSelectedSlug("");
-          setPreselectedSlug("");
-          const url = new URL(window.location.href);
-          url.searchParams.set("section", value);
-          window.history.replaceState(null, "", url);
-        }}>{t(value === "missing" ? "Пропавшие люди" : "Происшествия")}</button>
-      ))}
-    </nav>
-  );
-
   return (
     <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] md:block md:h-auto md:min-h-screen md:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
@@ -376,11 +357,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       </header>
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
-        {sectionSwitch("desktop")}
         <div className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
-          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t(section==="missing"?"Карта пропавших людей":"Карта инцидентов Будапешта")} role="region">
+          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
-            {sectionSwitch("map")}
             <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label={t('Период событий')}>
               {PERIODS.map((item) => (
                 <button
@@ -394,7 +373,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
                 </button>
               ))}
             </div>
-            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t(section==="missing"?"Всего {n} сообщений о пропаже на карте":"Всего {n} происшествий на карте",{n:visibleIncidents.length})}>
+            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t("Всего {n} происшествий на карте",{n:visibleIncidents.length})}>
               {visibleIncidents.length}
             </span>
             <button type="button" onClick={closeMobileDetail} className="mobile-map-back absolute left-4 top-4 z-[1100] size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t('Назад к списку происшествий')}>
@@ -409,7 +388,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </section>
 
           <div ref={feedRef} onScroll={updatePreselectedIncident} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:contents" data-testid="incident-feed">
-            <aside className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label={t(section==="missing"?"Лента пропавших людей":"Лента происшествий")}>
+            <aside className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label={t("Лента происшествий")}>
               {visibleIncidents.length ? (
                 visibleIncidents.map((incident) => (
                   <button
@@ -424,7 +403,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
                     className="incident-list-card w-full p-4 text-left transition"
                   >
                     <div className="mb-3 flex items-center justify-between gap-3 text-xs font-medium">
-                      <IncidentMeta incident={incident} />
+                      <IncidentMeta incident={incident} compact />
                       <span className="text-[var(--subtle-text)]">{formatDate(incident.occurredAt,locale)}</span>
                     </div>
                     <h2 className="text-base font-semibold leading-5 tracking-[-0.02em]">{incident.title}</h2>
@@ -432,7 +411,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">{t(section==="missing"?"За этот период нет опубликованных сообщений о пропаже.":"За этот период нет внесённых происшествий.")}</div>
+                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">{t("За этот период нет внесённых происшествий.")}</div>
               )}
             </aside>
 
@@ -482,7 +461,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             </div>
 
             <div className="mobile-text-stack space-y-6">
-              <IncidentParticipants missingPeople={section==='missing'} participants={selected.participants ?? []} context={selected.context ?? []} legal={selected.legal} />
+              <IncidentParticipants participants={selected.participants ?? []} context={selected.context ?? []} legal={selected.legal} />
               <IncidentLocation incident={selected} placement="sidebar" />
               <div className="pt-2">
                 <h3 className="font-semibold">{t('Источники')}</h3>

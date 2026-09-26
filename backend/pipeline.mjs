@@ -198,7 +198,7 @@ export class Pipeline {
     const russian=null; // Content is checked before translation. Older translations do not gate review.
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
     const preparation=prepared?JSON.parse(prepared.payload):null;
-    const enabled=!!(preparation&&this.preparation?.geocoder?.landmarks&&event.canonical.location.precision!=='exact');
+    const enabled=!!(preparation&&this.preparation?.geocoder?.landmarks);
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2};

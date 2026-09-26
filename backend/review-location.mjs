@@ -4,7 +4,10 @@ import { normalizePlace, districtNumber } from './geocode.mjs';
 
 const anchor = z.object({
   label: z.string().trim().min(3).max(160),
-  kind: z.enum(['stop', 'landmark', 'street', 'address']),
+  kind: z.enum(['stop', 'landmark', 'street', 'address', 'intersection']),
+  streets: z.array(z.string().trim().min(3).max(100)).length(2).optional(),
+  surface: z.enum(['road','tram','rail','waterfront','building','area']).optional(),
+  mapQuery: z.string().trim().min(3).max(160).optional(),
   documentId: z.string(),
   quote: z.string().trim().min(3).max(2000),
 }).strict();
@@ -22,6 +25,7 @@ export function checkLocationResolution(result, documents, lookup) {
   if (action.action === 'search') {
     if (lookup.searched || lookup.applied) throw new Error('Location search already completed; select a supplied candidate or keep the approximation');
     for (const query of action.queries) {
+      if(query.kind==='intersection'&&!query.streets)throw new Error('Intersection lookup requires both street names');
       const supported = documents.some(d => String(d.id) === query.documentId && normalizeQuote(d.text).includes(normalizeQuote(query.quote)));
       if (!supported || !normalizePlace(query.quote).includes(normalizePlace(query.label))) throw new Error('Location anchor must occur in an exact original-source quote; preserve Hungarian place names');
     }
@@ -63,7 +67,7 @@ export function applyReviewedLocation(store, row, preparation, candidate, reason
   event.evidence.push({field:'location', documentId:candidate.anchor.documentId, quote:candidate.anchor.quote});
   eventSchema.parse(event);
   const revision = row.revision + 1, now = new Date().toISOString();
-  preparation.geocoding = {...candidate, provider:'photon-pro-reviewed', reason};
+  preparation.geocoding = {...candidate, provider:candidate.provider==='osm-geometry'?'osm-geometry-pro-reviewed':'photon-pro-reviewed', reason};
   preparation.locationReview = {...preparation.locationReview, applied:true, selectedCandidateId:candidate.id};
   store.transaction(() => {
     if (store.event(row.id)?.revision !== row.revision) throw new Error('Event changed during location review');

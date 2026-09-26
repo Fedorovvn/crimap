@@ -130,3 +130,8 @@ Reader проверяет robots.txt, ограничивает размер, в�
 Фото выбирает Flash только из фактически прочитанных URL и подписей, максимум три. Программа повторно проверяет источник и публичный сетевой адрес. Существующие публичные фотографии сохраняются. Новые внешние ссылки показываются с атрибуцией, rights=unknown не переименовывается в лицензию; link-only не встраивается. Визуальное распознавание, гарантированное наличие фото у любого события и глобальный поиск изображений не реализованы.
 
 Автоподготовка и исправления создают новые редакции; любое изменение сбрасывает допуск к публикации. После двух неуспешных исправлений или недостаточных данных карточка остаётся черновиком с причиной, а не заполняется догадками.
+
+
+## Geographic plausibility (2026-09-27)
+
+Pro verifies approximate positions against the physical setting, including existing exact-labelled coordinates. Source anchors can request road, tram, rail, waterfront, building or area. For linear surfaces the server reads a bounded cached OpenStreetMap extract around a real geocoder result, projects candidate positions onto the mapped lines, and supplies their type, route references when available and OSM URLs to Pro. The model cannot invent numeric candidates. Junctions use actual shared road nodes; mapQuery can correct the spelling of the same source-named place, with final identity verification by Pro. Same-named subway stations and information boards no longer silently qualify as streets. All extra map requests share the geocoder rate and daily limits. There is no unrestricted route search: absent map evidence remains an explicit unresolved approximation, never a fabricated exact point. Public corrections still require editor publication.
