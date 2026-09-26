@@ -28,6 +28,7 @@ export async function consolidate(pipeline,{limit=30}={}){
       store.transaction(()=>{
         if(store.event(target.id).revision!==target.revision||store.event(duplicate.id).revision!==duplicate.revision||store.event(duplicate.id).merged_into)throw new Error('Event changed during consolidation');
         store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) SELECT ?,document_id,content_hash,extracted,created_at FROM observations WHERE event_id=?').run(target.id,duplicate.id);
+        if(pipeline.campaignId)store.db.prepare('UPDATE events SET campaign_id=coalesce(campaign_id,?) WHERE id=?').run(pipeline.campaignId,target.id);
         if(result.hasNewInformation){
           const revision=target.revision+1,now=new Date().toISOString();
           store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',auto_repairs=0,review_reason='Merged sources; awaiting content review' WHERE id=?").run(JSON.stringify(result.event),result.event.occurredAt,revision,target.id);

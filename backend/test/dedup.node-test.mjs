@@ -36,6 +36,7 @@ test('consolidation keeps the published identity and sources, archives duplicate
     s.db.prepare('INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical,public_id,published_revision) VALUES(?,?,?,?,?,?,?)').run(id,`event-${id}`,now,event.occurredAt,JSON.stringify(event),id===2?7:null,id===2?1:null);
     s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(id,d.id,d.contentHash,JSON.stringify(event),now);
   }
+  s.db.prepare("UPDATE events SET campaign_id='archive-test' WHERE id=1").run();
   const pipeline={store:s,model:{},eventDocuments:id=>[{id:String(id),contentHash:'x',text:event.summary}],merge:async()=>({sameEvent:true,hasNewInformation:true,event,reason:'Same incident'})};
-  try{const result=await consolidate(pipeline);assert.deepEqual(result.merged,[{from:1,into:2}]);assert.equal(s.event(2).public_id,7);assert.equal(s.event(2).revision,2);assert.equal(s.event(1).merged_into,2);assert.equal(s.db.prepare('SELECT count(*) n FROM observations WHERE event_id=2').get().n,2);assert.equal(s.event(2).published_revision,1);assert.equal(s.event(2).state,'draft');assert.equal((await consolidate(pipeline)).comparisons,0);}finally{s.close();}
+  try{const result=await consolidate(pipeline);assert.deepEqual(result.merged,[{from:1,into:2}]);assert.equal(s.event(2).public_id,7);assert.equal(s.event(2).campaign_id,'archive-test');assert.equal(s.event(2).revision,2);assert.equal(s.event(1).merged_into,2);assert.equal(s.db.prepare('SELECT count(*) n FROM observations WHERE event_id=2').get().n,2);assert.equal(s.event(2).published_revision,1);assert.equal(s.event(2).state,'draft');assert.equal((await consolidate(pipeline)).comparisons,0);}finally{s.close();}
 });
