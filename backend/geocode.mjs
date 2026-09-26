@@ -88,8 +88,10 @@ export class Geocoder{
     }
     const mapLabel=anchor.mapQuery??anchor.streets?.[0]??anchor.label;
     const features = await this.query(`${mapLabel}, ${location.district??''}, Budapest`);
-    if(anchor.kind==='intersection'||['road','tram','rail','waterfront'].includes(anchor.surface)){
-      const seed=features.find(f=>{
+    const mappedTramStop=anchor.kind==='stop'&&anchor.surface==='tram'&&features.some(f=>f.properties?.osm_value==='tram_stop');
+    if(!mappedTramStop&&(anchor.kind==='intersection'||['road','tram','rail','waterfront'].includes(anchor.surface))){
+      const seeds=anchor.surface==='rail'?[...features].sort((a,b)=>Number(['station','train_station','halt'].includes(b.properties?.osm_value))-Number(['station','train_station','halt'].includes(a.properties?.osm_value))):features;
+      const seed=seeds.find(f=>{
         const p=f.properties??{},[lon,lat]=f.geometry?.coordinates??[];
         const names=[p.name,p.street].map(normalizePlace),label=normalizePlace(mapLabel);
         const district=districtNumber(location.district),candidateDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
@@ -119,6 +121,7 @@ export class Geocoder{
       if(p.osm_key==='tourism'&&['information','board','map','guidepost'].includes(p.osm_value))continue;
       if(['board','map','guidepost'].includes(p.osm_value))continue;
       if (anchor.kind==='stop' && !['tram_stop','bus_stop','stop_position','platform','station','halt','stop_area'].includes(p.osm_value)) continue;
+      if(anchor.surface==='tram'&&p.osm_value!=='tram_stop')continue;
       if (anchor.kind==='landmark' && ['highway','boundary'].includes(p.osm_key)) continue;
       if (!['N','W','R'].includes(p.osm_type) || !/^\d+$/.test(String(p.osm_id))) continue;
       const candidate={latitude,longitude,precision:'landmark',provider:'photon',label:p.name,district:foundDistrict,

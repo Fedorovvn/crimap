@@ -201,7 +201,7 @@ export class Pipeline {
     const enabled=!!(preparation&&this.preparation?.geocoder?.landmarks);
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
-      const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2};
+      const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
       return this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,siteTranslations:null,documents:docs,preparation,locationLookup,verifiedLawCatalog:this.laws},{maxTokens:5000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,translations:languages,locationLookup})});
     };
     let result=await assess();

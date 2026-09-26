@@ -7,7 +7,7 @@ import {Pipeline} from '../pipeline.mjs';
 import {checkReview} from '../review.mjs';
 
 const quote='A 4-es villamoson, a Wesselényi utca Erzsébet körút megállónál egy férfit megszúrtak.';
-const anchor={label:'Wesselényi utca Erzsébet körút',kind:'stop',documentId:'1',quote};
+const anchor={label:'Wesselényi utca Erzsébet körút',kind:'stop',surface:'tram',documentId:'1',quote};
 const feature=(value='tram_stop',postcode='1073',coordinates=[19.0688684,47.5003839])=>({properties:{name:'Wesselényi utca / Erzsébet körút',osm_key:'railway',osm_value:value,osm_type:'N',osm_id:826166180,city:'Budapest',countrycode:'HU',postcode},geometry:{type:'Point',coordinates}});
 const base={verdict:'revise',summary:'Проверка места',issues:[],requests:[]};
 

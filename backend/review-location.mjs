@@ -25,6 +25,7 @@ export function checkLocationResolution(result, documents, lookup) {
   if (action.action === 'search') {
     if (lookup.searched || lookup.applied) throw new Error('Location search already completed; select a supplied candidate or keep the approximation');
     for (const query of action.queries) {
+      if(lookup.requireSurface&&!query.surface)throw new Error('Location query must specify surface: road, tram, rail, waterfront, building or area. Match the physical incident setting, not merely the place name.');
       if(query.kind==='intersection'&&!query.streets)throw new Error('Intersection lookup requires both street names');
       const supported = documents.some(d => String(d.id) === query.documentId && normalizeQuote(d.text).includes(normalizeQuote(query.quote)));
       if (!supported || !normalizePlace(query.quote).includes(normalizePlace(query.label))) throw new Error('Location anchor must occur in an exact original-source quote; preserve Hungarian place names');
