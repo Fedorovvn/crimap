@@ -50,6 +50,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     const strings=Object.fromEntries(displayStrings({...modified,retainedMedia:[retained]}).map(text=>[text,text]));
     s.db.prepare('INSERT INTO site_translations VALUES(1,3,?,?)').run(JSON.stringify({en:strings,hu:strings}),now);
     detail=await(await request('events/1')).json();assert.equal(detail.blockers.length,0);
+    const listing=await(await request('events')).json();assert.equal(listing.events[0].ready,true);assert.equal(listing.events[0].first_seen_at,now);assert.equal(listing.events[0].facets.homicide,false);assert.equal(listing.events[0].canonical,undefined);
     assert.equal((await request('events/1/publish',{revision:3,approvalToken:'stale',confirm:true})).status,409);
     assert.equal((await request('events/1/publish',{revision:3,approvalToken:detail.approvalToken,confirm:true})).status,200);
     assert.equal(s.event(1).published_revision,3);

@@ -1,3 +1,4 @@
+import {defaults,readFilters,saveFilters,normalizeFilters,filterEvents,activeCount} from './filters.mjs';
 const $=s=>document.querySelector(s);
 const escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const link=(url,label)=>/^https?:\/\//.test(url??'')?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)} ↗</a>`:escape(label);
@@ -6,6 +7,12 @@ const names={detained:'Задержан',wanted:'Разыскивается','in
 const fieldNames={title:'Заголовок',summary:'Описание события',label:'Название',note:'Примечание',description:'Описание',offense:'Правонарушение',subjectLabel:'К кому относится',condition:'Условие',text:'Текст',detail:'Подробности',caption:'Подпись',participants:'Участник',updates:'Хронология',context:'Сообщение источника',legal:'Правовая информация',media:'Фотография',location:'Место',source:'Источник'};
 const labelFor=path=>path.split('.').map(p=>/^\d+$/.test(p)?Number(p)+1:fieldNames[p]??p).join(' · ');
 let csrf='',selected=null,events=[],tab='preview',dirty=false,activeBusy=false,messageTimer;
+let filters={...defaults};try{filters=readFilters(window.localStorage);}catch{}
+const filterControl=key=>$(key==='search'?'#search':`#${key}-filter`);
+function restoreControls(){for(const key of Object.keys(defaults))filterControl(key).value=filters[key];}
+restoreControls();
+function visibleEvents(){return filterEvents(events,filters);}
+function clearSelection(){selected=null;dirty=false;$('#detail').innerHTML='<div class="empty">Выберите событие из отфильтрованной ленты</div>';}
 function notify(text,error=false){$('#message').textContent=text;$('#message').className=error?'error':'';clearTimeout(messageTimer);messageTimer=setTimeout(()=>$('#message').textContent='',9000);}
 async function api(path,body){
   const response=await fetch('/admin/api/'+path,{method:body===undefined?'GET':'POST',headers:body===undefined?{}:{'Content-Type':'application/json','X-CSRF-Token':csrf},body:body===undefined?undefined:JSON.stringify(body)});
@@ -17,9 +24,28 @@ function badge(event){const published=event.published_revision===event.revision;
 const isUpdate=e=>Boolean(e.public_id||e.published);
 const kindLabel=e=>e.published_revision===e.revision?'Опубликовано':isUpdate(e)?'Обновление события':'Новое событие';
 function kindBadge(e){return `<span class="pill ${e.published_revision===e.revision?'good':isUpdate(e)?'update':'new'}">${kindLabel(e)}</span>`;}
-function renderList(){const search=$('#search').value.toLowerCase();$('#events').innerHTML=events.filter(e=>e.title.toLowerCase().includes(search)&&($('#section-filter').value==='all'||(e.eventType==='missing-person')===($('#section-filter').value==='missing'))).map(e=>`<button class="event ${selected?.id===e.id?'active':''}" data-id="${e.id}"><div class="event-badges">${kindBadge(e)}${e.published_revision!==e.revision?badge(e):''}</div><strong>${escape(e.title)}</strong><small>${escape(date(e.occurred_at))} · v${e.revision}</small></button>`).join('')||'<p class="muted">Событий пока нет</p>';}
+function renderList(){
+  const list=visibleEvents();
+  $('#filter-count').textContent=activeCount(filters)?String(activeCount(filters)):'Все';
+  $('#filter-results').textContent=`Показано ${list.length} из ${events.length}`;
+  $('#filter-error').hidden=!(filters.from&&filters.to&&filters.from>filters.to);
+  $('#filter-error').textContent='Начальная дата позже конечной. Измените диапазон или сбросьте фильтры.';
+  $('#events').innerHTML=list.map(e=>`<button class="event ${selected?.id===e.id?'active':''}" data-id="${e.id}"><div class="event-badges">${kindBadge(e)}${e.published_revision!==e.revision?badge(e):''}</div><strong>${escape(e.title)}</strong><small>Событие: ${escape(date(e.occurred_at))}</small>${filters.sort.startsWith('received')?`<small class="received-date">Поступило: ${escape(date(e.first_seen_at))}</small>`:''}<div class="event-facets">${[names[e.eventType],e.facets?.homicide?'Убийство / покушение':null,e.facets?.fatal?'Есть погибшие':null,e.facets?.impact==='minor'?'Незначительные последствия':null].filter(Boolean).map(escape).join(' · ')}</div></button>`).join('')||'<p class="muted">По выбранным фильтрам событий нет. Измените условия или нажмите «Сбросить».</p>';
+  return list;
+}
+function changeFilters(reset=false){
+  if(activeBusy){restoreControls();return;}
+  const next=reset?{...defaults}:normalizeFilters(Object.fromEntries(Object.keys(defaults).map(key=>[key,filterControl(key).value])));
+  const nextList=filterEvents(events,next);
+  if(selected&&!nextList.some(e=>e.id===selected.id)&&!discard()){restoreControls();return;}
+  filters=next;restoreControls();
+  let saved=false;try{saved=saveFilters(window.localStorage,filters);}catch{}
+  $('#filter-saved').textContent=saved?'Настройки сохранены в этом браузере':'Настройки применены; браузер не разрешил их сохранить';
+  if(selected&&!nextList.some(e=>e.id===selected.id))clearSelection();
+  renderList();
+}
 async function loadList(){
-  const data=await api('events');events=data.events;renderList();
+  const data=await api('events');events=data.events;if(selected&&!visibleEvents().some(e=>e.id===selected.id))clearSelection();renderList();
   const pending=events.filter(e=>e.published_revision!==e.revision);
   $('#stats').textContent=`Всего: ${events.length} · Новых: ${pending.filter(e=>!isUpdate(e)).length} · Обновлений: ${pending.filter(isUpdate).length}`;
   $('#service').innerHTML=`<p>Сегодня: ${data.usage.calls} вызовов моделей, оценка $${data.usage.usd.toFixed(3)}.</p><p>Даты на странице — по Будапешту. Поиск по интернету требует отдельно подключённого провайдера.</p>`+(data.errors.length?data.errors.map(e=>`<details><summary>${escape(e.kind)} · повтор ${escape(date(e.due_at))}</summary><pre>${escape(e.last_error)}</pre></details>`).join(''):'<p>Ошибок в очереди нет.</p>');
@@ -54,12 +80,12 @@ function renderDetail(){if(!selected)return;const e=selected,queued=e.jobs.map(j
 }
 async function select(id){selected=await api('events/'+id);dirty=false;renderList();renderDetail();}
 function discard(){return !dirty||window.confirm('Есть несохранённые правки. Оставить их и перейти?');}
-async function ready(){const session=await api('session');csrf=session.csrf;$('#login').hidden=true;$('#workspace').hidden=false;$('#logout').hidden=false;await loadList();if(events.length)await select(events[0].id);}
+async function ready(){const session=await api('session');csrf=session.csrf;$('#login').hidden=true;$('#workspace').hidden=false;$('#logout').hidden=false;await loadList();const list=visibleEvents();if(list.length)await select(list[0].id);else clearSelection();}
 async function run(fn){if(activeBusy)return;activeBusy=true;try{await fn();}catch(e){notify(e.message,true);}finally{activeBusy=false;}}
 $('#login-form').addEventListener('submit',e=>{e.preventDefault();run(async()=>{const s=await api('login',{token:$('#token').value});$('#token').value='';csrf=s.csrf;await ready();});});
 $('#logout').onclick=()=>run(async()=>{if(!discard())return;await api('logout',{});csrf='';selected=null;dirty=false;$('#workspace').hidden=true;$('#detail').innerHTML='';$('#events').innerHTML='';$('#logout').hidden=true;$('#login').hidden=false;});
-$('#search').oninput=renderList;
-$('#section-filter').onchange=()=>run(async()=>{if(!discard())return;renderList();const item=events.find(e=>$('#section-filter').value==='all'||(e.eventType==='missing-person')===($('#section-filter').value==='missing'));if(item)await select(item.id);else {selected=null;$('#detail').innerHTML='<div class="empty">В этом разделе пока нет событий</div>';}});
+for(const key of Object.keys(defaults))filterControl(key).addEventListener(key==='search'?'input':'change',()=>changeFilters());
+$('#reset-filters').onclick=()=>changeFilters(true);
 $('#refresh').onclick=()=>run(async()=>{if(!discard())return;await loadList();if(selected)await select(selected.id);notify('Лента обновлена');});
 $('#events').onclick=e=>{const b=e.target.closest('[data-id]');if(b)run(async()=>{if(discard()){tab='preview';await select(Number(b.dataset.id));}});};
 $('#detail').addEventListener('input',e=>{if(e.target.closest('#edit-form')){dirty=true;$('#dirty-label').textContent='Есть несохранённые правки';$('#publish').disabled=true;}});

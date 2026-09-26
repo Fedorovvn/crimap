@@ -6,6 +6,7 @@ import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 import { catalog } from './sources.mjs';
+import { eventFacets } from './admin-facets.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -48,7 +49,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         res.setHeader('Set-Cookie',cookie(token));return send(200,{csrf,reviewer});
       }
       // The shell contains no private data. Every API except login requires a valid session.
-      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
+      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
       if (assets[path] && req.method==='GET') return send(200,readFileSync(new URL('./admin/'+assets[path][0],import.meta.url)),assets[path][1]);
       const token=req.headers.cookie?.match(/(?:^|;\s*)crimap_editor=([a-f0-9]{64})(?:;|$)/)?.[1];
       const session=token&&store.db.prepare('SELECT * FROM admin_sessions WHERE token_hash=? AND expires_at>?').get(hash(token),Date.now());
@@ -59,11 +60,18 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         store.db.prepare('DELETE FROM admin_sessions WHERE token_hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});
       }
       if(path==='/admin/api/events'&&req.method==='GET'){
-        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.review_reason,
+        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.first_seen_at,e.review_reason,e.canonical,
+          t.payload IS NOT NULL hasRussian,
+          EXISTS(SELECT 1 FROM preparation p WHERE p.event_id=e.id AND p.revision=e.revision) prepared,
+          EXISTS(SELECT 1 FROM site_translations l WHERE l.event_id=e.id AND l.revision=e.revision) localized,
+          EXISTS(SELECT 1 FROM observations o WHERE o.event_id=e.id) hasDocuments,
           coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title,
           json_extract(q.payload,'$.verdict') verdict, json_extract(e.canonical,'$.type') eventType
           FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'
-          LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision ORDER BY e.first_seen_at DESC LIMIT 500`).all();
+          LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision ORDER BY e.first_seen_at DESC`).all().map(({canonical,hasRussian,prepared,localized,hasDocuments,...row})=>{
+            const event=JSON.parse(canonical);
+            return {...row,searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
+          });
           return send(200,{events,requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
           campaigns:store.db.prepare(`SELECT c.*,coalesce((SELECT sum(coalesce(cost_usd,reserved_usd)) FROM usage WHERE campaign_id=c.id),0) spent,
             (SELECT count(*) FROM events WHERE campaign_id=c.id) events,
