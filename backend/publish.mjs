@@ -41,6 +41,7 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     for(const l of event.legal){if(includeLegal)l.reviewStatus='approved';if(isPublishableLegal(l))db.prepare('INSERT INTO incident_legal(incident_id,assessment_key,details) VALUES(?,?,?)').run(id,l.key,JSON.stringify(l));}
     db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision}));
     db.exec('COMMIT');
-    store.transaction(()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=? WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});});return id;
+    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=? WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
+    if(store.db.isTransaction)record();else store.transaction(record);return id;
   }catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}finally{db.close();}
 }
