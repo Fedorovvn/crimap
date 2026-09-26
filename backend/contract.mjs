@@ -43,7 +43,8 @@ export function validateEvidence(event,documents){
   const urls=new Set(documents.map(d=>d.url));
   for(const e of event.evidence){
     const matching=documents.filter(d=>String(d.id)===e.documentId);
-    if(!matching.some(doc=>normalizeQuote(doc.text).includes(normalizeQuote(e.quote))))throw new Error(`Unverifiable quotation for ${e.field}`);
+    const supported=matching.some(doc=>normalizeQuote(doc.text).includes(normalizeQuote(e.quote))||e.field.startsWith('media.')&&doc.imageUrls.includes(e.quote.trim()));
+    if(!supported)throw new Error(`Unverifiable quotation for ${e.field}: quote must be exact source text, or an observed image URL for media; omit optional unsupported media`);
   }
   const required=['title','summary','type','location','status'];
   if(event.signals.length)required.push('signals');
