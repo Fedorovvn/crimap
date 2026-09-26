@@ -331,6 +331,23 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     return () => window.cancelAnimationFrame(frame);
   }, [updatePreselectedIncident]);
 
+  const sectionSwitch = (placement: "desktop" | "map") => (
+    <nav className={`section-switch section-switch--${placement}`} aria-label={t("Раздел")}>
+      {(["incidents", "missing"] as const).map(value => (
+        <button type="button" key={value} aria-pressed={section === value} onClick={() => {
+          setSection(value);
+          setPeriod(value === "missing" ? PERIODS[3] : PERIODS[2]);
+          setMobileDetailOpen(false);
+          setSelectedSlug("");
+          setPreselectedSlug("");
+          const url = new URL(window.location.href);
+          url.searchParams.set("section", value);
+          window.history.replaceState(null, "", url);
+        }}>{t(value === "missing" ? "Пропавшие люди" : "Происшествия")}</button>
+      ))}
+    </nav>
+  );
+
   return (
     <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] md:block md:h-auto md:min-h-screen md:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
@@ -359,10 +376,11 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       </header>
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
-        <nav className="section-switch" aria-label={t("Раздел")}>{(["incidents","missing"] as const).map(value=><button type="button" key={value} aria-pressed={section===value} onClick={()=>{setSection(value);setPeriod(value==="missing"?PERIODS[3]:PERIODS[2]);setMobileDetailOpen(false);setSelectedSlug("");setPreselectedSlug("");const url=new URL(window.location.href);url.searchParams.set("section",value);window.history.replaceState(null,"",url);}}>{t(value==="missing"?"Пропавшие люди":"Происшествия")}</button>)}</nav>
+        {sectionSwitch("desktop")}
         <div className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
           <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t(section==="missing"?"Карта пропавших людей":"Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
+            {sectionSwitch("map")}
             <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label={t('Период событий')}>
               {PERIODS.map((item) => (
                 <button
