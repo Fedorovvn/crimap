@@ -6,7 +6,7 @@ import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 import { catalog } from './sources.mjs';
-import {changeBudget,resumeCampaign,withdraw} from './admin-actions.mjs';
+import {changeBudget,resumeCampaign,setEditorialMark,withdraw} from './admin-actions.mjs';
 import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 
@@ -62,7 +62,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         store.db.prepare('DELETE FROM admin_sessions WHERE token_hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});
       }
       if(path==='/admin/api/events'&&req.method==='GET'){
-        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.first_seen_at,e.review_reason,e.canonical,e.withdrawn_at,
+        const events=store.db.prepare(`SELECT e.id,e.slug,e.revision,e.published_revision,e.public_id,e.state,e.occurred_at,e.first_seen_at,e.review_reason,e.canonical,e.withdrawn_at,e.editorial_mark,
           t.payload IS NOT NULL hasRussian,
           EXISTS(SELECT 1 FROM preparation p WHERE p.event_id=e.id AND p.revision=e.revision) prepared,
           EXISTS(SELECT 1 FROM site_translations l WHERE l.event_id=e.id AND l.revision=e.revision) localized,
@@ -95,11 +95,12 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(campaign&&req.method==='POST')return send(200,changeBudget(store,decodeURIComponent(campaign[1]),body.budget,reviewer));
       const resume=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/resume$/);
       if(resume&&req.method==='POST')return send(200,resumeCampaign(store,decodeURIComponent(resume[1]),reviewer));
-      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw))?$/);
+      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw|mark))?$/);
       if(!match)fail(404,'Не найдено');
       const id=Number(match[1]),action=match[2];
       if(!action&&req.method==='GET')return send(200,eventDetail(store,id,publicPath));
       if(!action||req.method!=='POST')fail(405,'Метод недоступен');
+      if(action==='mark')return send(200,setEditorialMark(store,id,body.mark,reviewer));
       if(action==='save')return send(200,reviseEvent(store,id,body,reviewer));
       const event=eventDetail(store,id,publicPath);
       if(body.revision!==event.revision)fail(409,'Есть новая версия события. Обновите страницу.');

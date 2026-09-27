@@ -39,3 +39,18 @@ test('homicide is separate from fatal accidents; free minor classification keeps
 });
 
 test('withdrawn publications stay out of published results even at the same revision',()=>{const rows=[row(1,{public_id:10,published_revision:2,withdrawn_at:'2026-09-27'}),row(2,{public_id:11,published_revision:1})];assert.deepEqual(filterEvents(rows,{publication:'published'}).map(e=>e.id),[2]);assert.deepEqual(filterEvents(rows,{publication:'unpublished'}).map(e=>e.id),[1]);assert.equal(normalizeFilters({publication:'live'}).publication,'published');});
+
+test('editorial marks hide uninteresting by default, compose with filters and sort priority before recency',()=>{
+  const rows=[row(1,{editorial_mark:'priority',occurred_at:'2026-08-01T12:00:00Z'}),row(2,{editorial_mark:'uninteresting'}),row(3),row(4,{editorial_mark:'priority',public_id:10})];
+  assert.deepEqual(filterEvents(rows,{}).map(e=>e.id),[4,3,1]);
+  assert.deepEqual(filterEvents(rows,{mark:'all'}).map(e=>e.id),[4,3,2,1]);
+  assert.deepEqual(filterEvents(rows,{mark:'uninteresting'}).map(e=>e.id),[2]);
+  assert.deepEqual(filterEvents(rows,{mark:'priority',publication:'published'}).map(e=>e.id),[4]);
+  assert.deepEqual(filterEvents(rows,{sort:'priority-desc'}).map(e=>e.id),[4,1,3]);
+  assert.equal(normalizeFilters({mark:'bad'}).mark,'hide-uninteresting');
+  let saved=JSON.stringify({publication:'published'});const storage={getItem:()=>saved,setItem:(_,v)=>{saved=v;}};
+  assert.equal(readFilters(storage).mark,'hide-uninteresting');
+  saveFilters(storage,{mark:'uninteresting',sort:'priority-desc'});
+  assert.equal(readFilters(storage).mark,'uninteresting');assert.equal(readFilters(storage).sort,'priority-desc');
+  saveFilters(storage,defaults);assert.equal(readFilters(storage).mark,'hide-uninteresting');
+});

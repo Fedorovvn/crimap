@@ -1,6 +1,19 @@
 import {DatabaseSync} from 'node:sqlite';
 import {fail} from './editorial.mjs';
 
+export function setEditorialMark(store,id,mark,reviewer){
+  if(!['normal','uninteresting','priority'].includes(mark))fail(400,'Неизвестная отметка события');
+  return store.transaction(()=>{
+    const event=store.event(id);if(!event)fail(404,'Событие не найдено');
+    if(event.merged_into)fail(409,'Событие уже объединено. Откройте основную карточку');
+    if(event.editorial_mark!==mark){
+      store.db.prepare('UPDATE events SET editorial_mark=? WHERE id=?').run(mark,id);
+      store.log('editorial-mark-changed',id,{before:event.editorial_mark,mark,reviewer});
+    }
+    return {id,editorial_mark:mark};
+  });
+}
+
 export function changeBudget(store,id,budget,reviewer){
   if(typeof budget!=='number'||!Number.isFinite(budget)||budget<=0||Math.abs(Math.round(budget*100)-budget*100)>1e-8)fail(400,'Укажите положительный лимит в долларах с точностью до цента');
   return store.transaction(()=>{

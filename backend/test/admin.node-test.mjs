@@ -73,6 +73,18 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
       assert.equal(s.event(1).withdrawn_at,null);assert.equal(s.event(1).public_id,1);
       assert.equal(publicDb.prepare("SELECT json_extract(details,'$.hidden') hidden FROM incident_metadata WHERE incident_id=1").get().hidden,null);
 
+      const beforeMark=s.event(1),approvalBeforeMark=(await(await request('events/1')).json()).approvalToken;
+      assert.equal((await request('events/1/mark',{mark:'priority'},{'X-CSRF-Token':''})).status,403);
+      assert.equal((await request('events/1/mark',{mark:'invalid'})).status,400);
+      assert.equal((await request('events/999/mark',{mark:'priority'})).status,404);
+      for(const mark of ['priority','uninteresting','normal']){
+        const response=await request('events/1/mark',{mark});assert.equal(response.status,200);assert.equal((await response.json()).editorial_mark,mark);
+        assert.equal((await(await request('events')).json()).events[0].editorial_mark,mark);
+        const markedDetail=await(await request('events/1')).json();assert.equal(markedDetail.editorial_mark,mark);assert.equal(markedDetail.approvalToken,approvalBeforeMark);
+        assert.deepEqual(s.event(1),{...beforeMark,editorial_mark:mark});
+        assert.equal(publicDb.prepare("SELECT json_extract(details,'$.hidden') hidden FROM incident_metadata WHERE incident_id=1").get().hidden,null);
+      }
+
     }finally{publicDb.close();}
 
     s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);

@@ -8,10 +8,11 @@
 <section class="list-tools" aria-label="Настройки ленты">
   <div class="filter-primary">
     <label>Найти событие<input id="search" type="search" placeholder="Заголовок, место или текст…"></label>
-    <label>Сортировка<select id="sort-filter"><option value="occurred-desc">Дата события · сначала новые</option><option value="occurred-asc">Дата события · сначала старые</option><option value="received-desc">Дата поступления · сначала новые</option><option value="received-asc">Дата поступления · сначала старые</option></select></label>
+    <label>Сортировка<select id="sort-filter"><option value="priority-desc">Приоритетные · затем новые</option><option value="occurred-desc">Дата события · сначала новые</option><option value="occurred-asc">Дата события · сначала старые</option><option value="received-desc">Дата поступления · сначала новые</option><option value="received-asc">Дата поступления · сначала старые</option></select></label>
   </div>
   <details id="filter-options" open><summary>Фильтры <span id="filter-count" class="pill"></span></summary>
     <div class="filter-grid">
+      <label>Мои отметки<select id="mark-filter"><option value="hide-uninteresting">Скрывать неинтересные</option><option value="priority">Только приоритетные</option><option value="uninteresting">Только неинтересные</option><option value="all">Все, включая неинтересные</option></select></label>
       <label>Публикация<select id="publication-filter"><option value="all">Все версии</option><option value="unpublished">Неопубликованные события</option><option value="published">Опубликованные на сайте</option><option value="withdrawn">Снятые с сайта</option><option value="new">Только новые события</option><option value="updates">Неопубликованные обновления</option></select></label>
       <label>Проверка текущей версии<select id="review-filter"><option value="all">Любой результат</option><option value="ready">Готовы к публикации</option><option value="pass">Прошли проверку Pro</option><option value="pending">Ещё не проверены</option><option value="failed">Не прошли / нужны правки</option><option value="revise">Нужны правки</option><option value="reject">Отклонены Pro</option></select></label>
       <label>Раздел<select id="section-filter"><option value="all">Все разделы</option><option value="incidents">Происшествия</option><option value="missing">Пропавшие люди</option></select></label>
