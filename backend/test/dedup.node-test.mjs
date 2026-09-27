@@ -2,10 +2,17 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
 import {Pipeline} from '../pipeline.mjs';
-import {matchCandidates} from '../dedup.mjs';
+import {matchCandidates,compareBrief} from '../dedup.mjs';
 import {consolidate} from '../consolidate.mjs';
 import {cheapDecision} from '../triage.mjs';
 const event={title:'Man stabbed on a Budapest tram',summary:'A man was stabbed at Wesselényi utca.',type:'assault',status:'investigating',occurredAt:'2026-09-09T07:50:00Z',timePrecision:'exact',location:{city:'Budapest',label:'Wesselényi utca / Erzsébet körút',district:'VII',precision:'landmark'},signals:[],caseReferences:[],participants:[],updates:[],media:[],context:[],legal:[],evidence:[]};
+test('no match may return a null ID, but a repeat still requires a known event ID',async()=>{
+ for(const decision of ['new','repeat']){
+  const m={json:async(stage,payload,{validate})=>validate({decision,eventId:null,reason:'No match'})};
+  if(decision==='new')assert.equal((await compareBrief(m,event,[{id:1,canonical:event}])).decision,'new');
+  else await assert.rejects(compareBrief(m,event,[{id:1,canonical:event}]),/Unknown duplicate candidate/);
+ }
+});
 test('merge schema describes the decision envelope and validates it without accepting a bare event',async()=>{
  const s=new Store(':memory:');try{
   const p=new Pipeline(s,{model:{json:async(stage,payload,{validate})=>{
@@ -73,5 +80,26 @@ test('an update identity survives later location extraction differences and cann
   assert.equal(seen,true);assert.equal(s.db.prepare('SELECT count(*) n FROM events').get().n,1);
   p.merge=async()=>({sameEvent:false});await assert.rejects(p.upsert(incoming,{url:'https://www.police.hu/update'},{confirmedTarget:1}),/do not create a duplicate/);
   assert.equal(s.db.prepare('SELECT count(*) n FROM events').get().n,1);
+ }finally{s.close();}
+});
+
+test('an already queued duplicate is merged before Pro and cannot spend on final review',async()=>{
+ const s=new Store(':memory:'),stages=[];try{
+  for(const id of [1,2])s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,occurred_at,public_id) VALUES(?,?,?,?,?,?)').run(id,'queued-'+id,new Date().toISOString(),JSON.stringify(event),event.occurredAt,id===1?9:null);
+  const p=new Pipeline(s,{model:{json:async(stage,payload,{validate})=>{stages.push(stage);return validate({decision:'repeat',eventId:1,reason:'Same facts'});}},reviewer:{json:()=>{throw new Error('Pro must not run');}}});
+  assert.equal((await p.review(2,1)).deduplicated,true);
+  assert.equal(s.event(2).merged_into,1);assert.equal(s.event(1).public_id,9);
+  assert.ok(stages.every(stage=>stage==='compare'));
+ }finally{s.close();}
+});
+
+test('negative identity checks are reused until the event or a candidate changes',async()=>{
+ const s=new Store(':memory:');let calls=0;try{
+  for(const id of [1,2])s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,occurred_at) VALUES(?,?,?,?,?)').run(id,'separate-'+id,new Date().toISOString(),JSON.stringify(event),event.occurredAt);
+  const p=new Pipeline(s,{model:{json:async(stage,payload,{validate})=>{calls++;return validate({decision:'new',reason:'Different incidents'});}}});
+  assert.equal(await p.deduplicateExisting(2),false);
+  assert.equal(await p.deduplicateExisting(2),false);assert.equal(calls,1);
+  s.db.prepare('UPDATE events SET canonical=? WHERE id=1').run(JSON.stringify({...event,summary:'A second suspect identified at the tram stop.'}));
+  assert.equal(await p.deduplicateExisting(2),false);assert.equal(calls,2);
  }finally{s.close();}
 });

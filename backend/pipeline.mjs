@@ -1,6 +1,7 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
-import {matchCandidates,identify,compareBrief} from './dedup.mjs';
+import {matchCandidates,identify,compareBrief,comparisonCard} from './dedup.mjs';
+import {consolidate} from './consolidate.mjs';
 import {completeDetails,detailFingerprint,validateLegalLinks} from './details.mjs';
 import {retainLocationCoordinates} from './map-surfaces.mjs';
 import { readFileSync,existsSync } from 'node:fs';
@@ -234,9 +235,28 @@ export class Pipeline {
       if(r.event){retainLocationCoordinates(existing.location,r.event.location);r.event=this.validate(r.event,documents);}return r;
     }});
   }
+  async deduplicateExisting(id){
+    const row=this.store.event(id);if(!row)return false;
+    if(row.merged_into||row.state==='excluded'||row.editorial_mark==='uninteresting')return true;
+    const candidates=this.store.candidates(row.canonical,{excludeId:id});if(!candidates.length)return false;
+    const key=hash({id,event:comparisonCard(row.canonical),candidates:candidates.map(r=>({id:r.id,mark:r.editorial_mark,event:comparisonCard(r.canonical)}))});
+    if(this.store.db.prepare("SELECT 1 FROM audit WHERE action='identity-gate-clear' AND subject=? LIMIT 1").get(key))return false;
+    const comparison=await compareBrief(this.model,row.canonical,candidates);
+    this.ensureActive(id);
+    if(comparison.decision==='new'){
+      this.store.log('identity-gate-clear',key,{eventId:id,candidates:candidates.map(r=>r.id)});return false;
+    }
+    const scope=this.campaignId,modelScope=this.model.campaignId;
+    let result;try{result=await consolidate(this,{eventIds:[id],candidateIds:[comparison.eventId],limit:1});}
+    finally{this.campaignId=scope;this.model.campaignId=modelScope;}
+    if(!result.merged.length)throw new Error('Flash identified a duplicate but merge needs retry; expensive preparation blocked');
+    const current=this.store.event(id);
+    return !!current.merged_into||current.editorial_mark==='uninteresting'||current.revision!==row.revision;
+  }
   async gather(id){
     this.ensureActive(id);
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
+    if(await this.deduplicateExisting(id))return {deduplicated:true};
     const row=this.store.event(id);if(!row||row.merged_into||row.state==='excluded')return;
     const key=`${id}:${new Date().toISOString().slice(0,10)}`;
     if(this.search?.key&&!this.store.db.prepare("SELECT 1 FROM audit WHERE action='gather-complete' AND subject=?").get(key)){
@@ -249,6 +269,7 @@ export class Pipeline {
   async prepare(id,{refresh=false}={}){
     this.ensureActive(id);
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
+    if(await this.deduplicateExisting(id))return {deduplicated:true};
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
     if(!refresh&&this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision))return;
     const documents=this.eventDocuments(id);
@@ -330,6 +351,7 @@ export class Pipeline {
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
+    if(await this.deduplicateExisting(id))return {deduplicated:true};
     if(!this.reviewer)throw new Error('Review model is not configured');
     this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     // Missing dates/coordinates are facts for Pro to inspect, not a reason to

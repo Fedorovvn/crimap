@@ -53,7 +53,7 @@ export async function compareBrief(model,incoming,candidates){
   for(const group of groups)for(let offset=0;offset<group.length;offset+=4){
     const shortlist=group.slice(offset,offset+4);
     const result=await model.json('compare',{incoming:comparisonCard(incoming),candidates:shortlist.map(r=>({id:r.id,published:!!r.public_id,sourceKinds:r.sourceKinds,event:comparisonCard(r.canonical)}))},{maxTokens:700,validate:raw=>{
-      const r=z.object({decision:z.enum(['new','repeat','update']),eventId:z.number().int().optional(),reason:z.string()}).strict().parse(raw);
+      const r=z.object({decision:z.enum(['new','repeat','update']),eventId:z.number().int().nullable().optional(),reason:z.string()}).strict().parse(raw);
       if(r.decision!=='new'&&!shortlist.some(e=>e.id===r.eventId))throw new Error('Unknown duplicate candidate');
       return r;
     }});
