@@ -19,7 +19,7 @@ import { displayStrings, translateSiteTexts, siteTranslations } from './site-loc
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
 import { finalEditorSchema, sourceExcerpts, assembleFinal, normalizeFinalResponse } from './final-editor.mjs';
 import { readPublication, comparisonFor, reviewChanges } from './publication-comparison.mjs';
-import {queueEditorialPreparation} from './editorial-workflow.mjs';
+import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
 import {validateResolvedDate} from './date-resolution.mjs';
 
 const iso=()=>new Date().toISOString();
@@ -240,7 +240,7 @@ export class Pipeline {
     const row=this.store.event(id);if(!row)return false;
     if(row.merged_into||row.state==='excluded'||row.editorial_mark==='uninteresting')return true;
     const candidates=this.store.candidates(row.canonical,{excludeId:id});if(!candidates.length)return false;
-    const key=hash({id,event:comparisonCard(row.canonical),candidates:candidates.map(r=>({id:r.id,mark:r.editorial_mark,event:comparisonCard(r.canonical)}))});
+    const key=hash({id,event:comparisonCard(row.canonical),candidates:candidates.map(r=>({id:r.id,mark:r.editorial_mark,reasons:r.editorial_reasons,event:comparisonCard(r.canonical)}))});
     if(this.store.db.prepare("SELECT 1 FROM audit WHERE action='identity-gate-clear' AND subject=? LIMIT 1").get(key))return false;
     const comparison=await compareBrief(this.model,row.canonical,candidates);
     this.ensureActive(id);
@@ -347,11 +347,32 @@ export class Pipeline {
       this.store.log('translations-ready',id,{revision:row.revision});
     });
   }
+  async relevanceBeforeReview(id){
+    if(!this.triage)return true;
+    const row=this.store.event(id),e=row.canonical;
+    const input={title:e.title,text:[e.summary,e.location?.city,...(e.participants??[]).map(p=>p.note??'')].filter(Boolean).join('\n')};
+    const key=hash({id,input,policy:readFileSync(new URL('./prompts/editorial-scope.md',import.meta.url),'utf8')});
+    const cached=this.store.db.prepare("SELECT detail FROM audit WHERE action='event-relevance-checked' AND subject=? ORDER BY id DESC LIMIT 1").get(key);
+    const result=cached?JSON.parse(cached.detail):await this.triage.check(input);
+    this.ensureActive(id);
+    if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during relevance check');
+    if(!cached)this.store.log('event-relevance-checked',key,{eventId:id,...result});
+    if(!result.keep){
+      this.store.transaction(()=>{
+        stopEventJobs(this.store,id);
+        this.store.db.prepare("UPDATE events SET state=CASE WHEN public_id IS NULL THEN 'excluded' ELSE state END,next_check_at=NULL,review_reason=? WHERE id=?").run(result.reason,id);
+        this.store.log('event-filtered',id,{reason:result.reason,method:result.method});
+      });
+    }
+    return result.keep;
+  }
   async review(id,revision){
     this.ensureActive(id);
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
+    if(event.merged_into||event.state==='excluded')return {skipped:'Inactive event'};
+    if(!await this.relevanceBeforeReview(id))return {filtered:true};
     if(await this.deduplicateExisting(id))return {deduplicated:true};
     if(!this.reviewer)throw new Error('Review model is not configured');
     this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
@@ -360,6 +381,12 @@ export class Pipeline {
     const docs=this.eventDocuments(id);
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
     const preparation=prepared?JSON.parse(prepared.payload):null;
+    if(this.preparation&&!prepared){
+      this.store.enqueue('gather',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
+      this.store.log('review-deferred',id,{reason:'Сначала нужно завершить сбор источников, фотографий и координат',revision:event.revision});
+      return {deferred:true,awaitingPreparation:true};
+    }
+    if(this.preparation&&!docs.length)throw new Error('Final review prerequisites: no saved sources');
     const published=readPublication(this.publicPath,event.slug);
     // Persist inexpensive translation drafts separately, so a retry of Pro does
     // not pay for or regenerate them. None of these drafts is a publication.

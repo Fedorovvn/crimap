@@ -1,7 +1,7 @@
 import {renderUsage} from './usage-ui.mjs';
 const $=s=>document.querySelector(s),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Budapest',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Ещё не было';
-const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Ошибка','waiting-date':'Ожидает даты',stale:'Прервано'};
+const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Обработка остановлена','waiting-date':'Ожидает даты',stale:'Прервано'};
 const external=(url,label)=>/^https?:\/\//.test(url??'')?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)} ↗</a>`:escape(label);
 const title=r=>r.eventId?`<a href="/admin/?event=${r.eventId}">${escape(r.title??`Событие №${r.eventId}`)}</a>`:external(r.url,r.title??r.sourceName??'Без отдельного события');
 let busy=false,nextBefore=null,older=false,view='queue',logs=[],sourceOptions='';
@@ -18,7 +18,7 @@ function render(data,append){
  const selected=$('#activity-source').value;
  const options=data.sources.map(s=>`<option value="${escape(s.id)}">${escape(s.name)}</option>`).join('');
  if(options!==sourceOptions){sourceOptions=options;$('#activity-source').innerHTML='<option value="all">Все источники</option>'+options;$('#activity-source').value=selected;}
- $('#activity-queue').innerHTML=data.queue.map(j=>`<article class="activity-record"><div class="activity-record-meta"><span class="pill ${j.state==='running'?'good':['paused','failed','stale'].includes(j.state)?'warn':''}">${states[j.state]??j.state}</span>${j.priority?'<span class="pill good">★ Приоритет</span>':''}<span>${escape(j.label)}</span><span class="muted">№${j.id}</span></div><h3>${title(j)}</h3><p class="fact">${j.sourceName?escape(j.sourceName)+' · ':''}${j.archive?'Сохранённые материалы · ':''}${j.state==='running'?'Начало: '+escape(date(j.startedAt)):'Запуск не ранее: '+escape(date(j.dueAt))}</p>${j.reason?`<p class="activity-reason">${escape(j.reason)}</p>`:''}</article>`).join('')||'<p class="empty">Задач с такими условиями нет.</p>';
+ $('#activity-queue').innerHTML=data.queue.map(j=>`<article class="activity-record" data-state="${j.state}"><div class="activity-record-meta"><span class="pill ${j.state==='running'?'good':['paused','failed'].includes(j.state)?'danger':j.state==='stale'?'warn':''}">${states[j.state]??j.state}</span>${j.priority?'<span class="pill good">★ Приоритет</span>':''}<span>${escape(j.label)}</span><span class="muted">№${j.id}</span></div><h3>${title(j)}</h3><p class="fact">${j.sourceName?escape(j.sourceName)+' · ':''}${j.archive?'Сохранённые материалы · ':''}${j.state==='running'?'Начало: '+escape(date(j.startedAt)):'Запуск не ранее: '+escape(date(j.dueAt))}</p>${j.reason?`<p class="activity-reason">${escape(j.reason)}</p><p class="fact">${j.state==="failed"?"Автоматические попытки закончились; задача сама больше не повторяется.":["ready","scheduled"].includes(j.state)?"Автоматический повтор в очереди. Выполнено попыток: "+j.attempts:""}</p>`:''}</article>`).join('')||'<p class="empty">Задач с такими условиями нет.</p>';
  $('#activity-queue-count').textContent=`Показано ${data.queue.length} из ${data.queueTotal}. В очередь не входят завершённые и отменённые задачи; их результаты — в журнале.`;
  logs=append?[...logs,...data.logs]:data.logs;nextBefore=data.nextBefore;
  $('#activity-journal').innerHTML=logs.map(r=>`<article class="activity-record"><div class="activity-record-meta"><time>${escape(date(r.at))}</time><span class="pill ${r.category==='errors'?'warn':r.category==='duplicates'?'good':''}">${escape(r.label)}</span>${r.kind?`<span>${escape(r.kind)}</span>`:''}${r.durationSeconds!==null?`<span>${r.durationSeconds} сек.</span>`:''}</div><h3>${title(r)}</h3>${r.description?`<p>${escape(r.description)}</p>`:''}${r.sourceName?`<p class="fact">${escape(r.sourceName)}</p>`:''}</article>`).join('')||'<p class="empty">За этот период действий с такими условиями нет.</p>';
@@ -40,6 +40,8 @@ $('#activity-refresh').addEventListener('click',()=>load());$('#activity-more').
 for(const id of ['period','source','category','state'])$('#activity-'+id).addEventListener('change',()=>load());
 setInterval(()=>{if(!document.hidden&&$('#activity-auto').checked&&!older)load();},15000);
 if(['queue','journal','sources','usage'].includes(location.hash.slice(1)))tab(location.hash.slice(1));
+const requestedCategory=new URLSearchParams(location.search).get('category');
+if([...$('#activity-category').options].some(o=>o.value===requestedCategory))$('#activity-category').value=requestedCategory;
+const requestedQueue=new URLSearchParams(location.search).get('queueState');
+if([...$('#activity-state').options].some(o=>o.value===requestedQueue))$('#activity-state').value=requestedQueue;
 load();
-
-

@@ -103,3 +103,24 @@ test('negative identity checks are reused until the event or a candidate changes
   assert.equal(await p.deduplicateExisting(2),false);assert.equal(calls,2);
  }finally{s.close();}
 });
+
+test('duplicate-only editorial rejection does not swallow updates to the retained event',async()=>{
+ const calls=[],model={json:async(stage,payload,{validate})=>{calls.push(payload.candidates.map(c=>c.id));return validate({decision:'update',eventId:payload.candidates[0].id,reason:'Same incident'});}};
+ const rows=[{id:1,canonical:event,editorial_mark:'uninteresting',editorial_reasons:'["duplicate"]'},{id:2,canonical:event,public_id:7,editorial_mark:'normal'}];
+ assert.equal((await compareBrief(model,event,rows)).eventId,2);assert.deepEqual(calls,[[2]]);
+ rows[0].editorial_reasons='["outside-topic"]';assert.equal((await compareBrief(model,event,rows)).eventId,1);
+});
+
+test('old queue cannot invoke Pro before relevance and preparation checks',async()=>{
+ const s=new Store(':memory:');let calls=0;try{
+  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,occurred_at) VALUES(1,?,?,?,?)').run('pending',new Date().toISOString(),JSON.stringify(event),event.occurredAt);
+  const p=new Pipeline(s,{triage:{check:async()=>{calls++;return {keep:true,method:'flash-short',reason:'Relevant violence'};}},preparation:{},reviewer:{json:()=>{throw new Error('Pro must not run before preparation');}}});
+  assert.equal((await p.review(1,1)).awaitingPreparation,true);
+  assert.equal((await p.review(1,1)).awaitingPreparation,true);assert.equal(calls,1);
+  assert.equal(s.db.prepare("SELECT kind FROM jobs WHERE state='queued'").get().kind,'gather');
+  s.db.prepare("DELETE FROM audit WHERE action='event-relevance-checked'").run();
+  p.triage.check=async()=>({keep:false,method:'rules',reason:'Outside editorial scope'});
+  assert.equal((await p.review(1,1)).filtered,true);assert.equal(s.event(1).state,'excluded');
+  assert.equal(s.db.prepare("SELECT count(*) n FROM jobs WHERE state='queued'").get().n,0);
+ }finally{s.close();}
+});

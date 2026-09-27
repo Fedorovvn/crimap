@@ -52,12 +52,10 @@ export function choosePlace(features,location,mode='address'){
   const {score,district:ignored,...result}=top[0];return result;
 }
 export class Geocoder{
-  constructor(store,{request=requestPage,endpoint=process.env.GEOCODER_URL??'https://photon.komoot.io/api/',delayMs=16000,dailyLimit=80}={}){this.store=store;this.request=request;this.endpoint=endpoint;this.delayMs=delayMs;this.dailyLimit=dailyLimit;}
+  constructor(store,{request=requestPage,endpoint=process.env.GEOCODER_URL??'https://photon.komoot.io/api/',delayMs=16000}={}){this.store=store;this.request=request;this.endpoint=endpoint;this.delayMs=delayMs;}
   async query(q){
     const key=hash({endpoint:this.endpoint,q});const cached=this.store.db.prepare('SELECT payload FROM geocode_cache WHERE query_key=?').get(key);if(cached)return JSON.parse(cached.payload);
     const now=Date.now();const wait=this.store.transaction(()=>{
-      const n=this.store.db.prepare("SELECT count(*) n FROM audit WHERE action='geocode-request' AND created_at>=?").get(new Date(now).toISOString().slice(0,10)).n;
-      if(n>=this.dailyLimit)throw Object.assign(new Error('Geocoder daily request limit reached'),{retryAfter:3600});
       const next=Math.max(now,this.store.db.prepare("SELECT next_at FROM service_limits WHERE service='geocoder'").get()?.next_at??0);
       this.store.db.prepare("INSERT OR REPLACE INTO service_limits VALUES('geocoder',?)").run(next+this.delayMs);
       this.store.log('geocode-request',key,{query:q});return next-now;
@@ -137,8 +135,6 @@ export class Geocoder{
     const cached=this.store.db.prepare('SELECT payload FROM geocode_cache WHERE query_key=?').get(key);if(cached)return JSON.parse(cached.payload);
     const now=Date.now();
     const wait=this.store.transaction(()=>{
-      const n=this.store.db.prepare("SELECT count(*) n FROM audit WHERE action='geocode-request' AND created_at>=?").get(new Date(now).toISOString().slice(0,10)).n;
-      if(n>=this.dailyLimit)throw Object.assign(new Error('Geocoder daily request limit reached'),{retryAfter:3600});
       const next=Math.max(now,this.store.db.prepare("SELECT next_at FROM service_limits WHERE service='geocoder'").get()?.next_at??0);
       this.store.db.prepare("INSERT OR REPLACE INTO service_limits VALUES('geocoder',?)").run(next+this.delayMs);this.store.log('geocode-request',key,{service:'osm-surfaces',center});return next-now;
     });

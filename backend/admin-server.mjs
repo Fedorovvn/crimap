@@ -9,7 +9,7 @@ import { catalog } from './sources.mjs';
 import {changeTotalBudget,changeBudget,resumeCampaign,setEditorialMark,withdraw} from './admin-actions.mjs';
 import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
-import {activityData} from './activity.mjs';
+import {activityData,eventProcessing} from './activity.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -80,7 +80,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
             const event=JSON.parse(canonical);
             const baseline=row.public_id&&row.published_revision!==row.revision?readPublication(publicPath,row.slug):null;
             const comparisonReady=!baseline||row.publicationBaseline===baseline.fingerprint;
-            return {...row,searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
+            return {...row,processing:eventProcessing(store,row),searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
           });
           return send(200,{events,budget:store.totalBudget(),requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
           campaigns:store.db.prepare(`SELECT c.*,coalesce((SELECT sum(coalesce(cost_usd,reserved_usd)) FROM usage WHERE campaign_id=c.id),0) spent,

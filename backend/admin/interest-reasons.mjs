@@ -1,4 +1,5 @@
 export const interestReasons={
+  duplicate:'Дубликат',
   animals:'Происшествие с животными',
   'industrial-disaster':'Промышленная / химическая авария',
   drugs:'Наркотики',

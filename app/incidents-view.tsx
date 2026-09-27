@@ -5,7 +5,7 @@ import { LocaleProvider, useI18n } from "./i18n";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { ArrowLeftIcon, CarFrontIcon, CrossIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
-import { filterIncidents, PERIODS, selectVisibleIncident } from "./incidents-model";
+import { filterIncidents, matchesSeverity, PERIODS, SEVERITIES, type Severity, selectVisibleIncident } from "./incidents-model";
 import { HandcuffsIcon } from "./incident-icons";
 import { IncidentParticipants } from "./incident-participants";
 import type { Participant } from "./participants-model";
@@ -256,10 +256,11 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const {locale,setLocale,t}=useI18n();
   const typedIncidents = useMemo(()=>incidents.map(incident=>({...incident, eventType:incident.eventType ?? ({"ДТП":"traffic-accident","Нападение":"assault","Драка":"fight","Ограбление":"robbery","Несчастный случай":"accident","Пропавший человек":"missing-person"}[getIncidentType(incident)] ?? "other"), signals:getIncidentSignals(incident),updates:incident.updates.map(update=>({...update,signals:getIncidentSignals({title:update.title,status:"",summary:update.detail,eventType:incident.eventType})}))})),[incidents]);
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>(PERIODS[3]);
+  const [severity, setSeverity] = useState<Severity>("all");
   const [theme, setTheme] = useState<"day" | "night">("night");
   const visibleIncidents = useMemo(
-    () => filterIncidents(typedIncidents.filter(incident=>incident.eventType!=="missing-person"), period.hours).map(incident=>translateContent(incident,locale,locale==="ru"?{}:incident.translations?.[locale])),
-    [typedIncidents, period, locale],
+    () => filterIncidents(typedIncidents.filter(incident=>incident.eventType!=="missing-person" && matchesSeverity(incident,severity)), period.hours).map(incident=>translateContent(incident,locale,locale==="ru"?{}:incident.translations?.[locale])),
+    [typedIncidents, period, severity, locale],
   );
   const [selectedSlug, setSelectedSlug] = useState(incidents[0]?.slug ?? "");
   const [hoveredSlug, setHoveredSlug] = useState("");
@@ -394,9 +395,10 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
         <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
-          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
+          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[475px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} hoveredSlug={desktop ? hoveredSlug : ""} onHover={hoverMapIncident} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
-            <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label={t('Период событий')}>
+            <div className="map-filter-stack">
+            <div className="map-controls flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" role="group" aria-label={t('Период событий')}>
               {PERIODS.map((item) => (
                 <button
                   key={item.label}
@@ -409,7 +411,11 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
                 </button>
               ))}
             </div>
-            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t("Всего {n} происшествий на карте",{n:visibleIncidents.length})}>
+            <div className="map-controls map-severity-controls flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" role="group" aria-label={t('Тяжесть происшествий')}>
+              {SEVERITIES.map(item=><button key={item.value} type="button" aria-pressed={severity===item.value} onClick={()=>{setSeverity(item.value);setMobileDetailOpen(false);setHoveredSlug("");}} className={`rounded-full px-3 py-1.5 text-sm font-medium transition ${severity===item.value?"bg-[var(--control-active)] text-[var(--control-active-text)]":"text-[var(--map-overlay-text)] hover:text-[var(--app-text)]"}`}>{t(item.label)}</button>)}
+            </div>
+            </div>
+            <span className="map-counter absolute right-4 top-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] font-mono text-sm font-semibold tabular-nums text-[var(--accent-text)] shadow-sm backdrop-blur-md" aria-label={t("Всего {n} происшествий на карте",{n:visibleIncidents.length})}>
               {visibleIncidents.length}
             </span>
             <button type="button" onClick={closeMobileDetail} className="mobile-map-back absolute left-4 top-4 z-[1100] size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t('Назад к списку происшествий')}>
@@ -452,7 +458,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
                   </button>
                 ))
               ) : (
-                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">{t("За этот период нет внесённых происшествий.")}</div>
+                <div className="rounded-2xl bg-[var(--card)] p-6 text-sm text-[var(--muted-text)]">{t(severity==="all"?"За этот период нет внесённых происшествий.":"Нет происшествий с выбранными фильтрами.")}</div>
               )}
             </aside>
 

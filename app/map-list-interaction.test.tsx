@@ -30,3 +30,23 @@ it('all time is default and a period change clears single-marker camera focus',a
  await user.click(screen.getByRole('button',{name:'7 дней'}));expect(screen.getByTestId('map').dataset.focused).toBe('');
  expect(screen.queryByRole('button',{name:'Map old'})).toBeNull();
 });
+it('severity and period filters share markers, cards, count and selected details',async()=>{
+ const user=userEvent.setup();
+ const rows=[event('assault','2026-09-25T00:00:00Z'),{...event('fatal-crash','2026-09-25T00:00:00Z'),eventType:'traffic-accident',signals:['death'] as const},{...event('minor-crash','2026-09-25T00:00:00Z'),eventType:'traffic-accident',signals:[]},{...event('old-fatal','2026-07-01T00:00:00Z'),eventType:'fire',signals:['death'] as const}].map(r=>({...r,signals:r.signals?[...r.signals]:[]}));
+ render(<IncidentsView incidents={rows}/>);
+ expect(screen.getByRole('button',{name:'Все'}).getAttribute('aria-pressed')).toBe('true');
+ await user.click(screen.getByRole('button',{name:'Серьёзные'}));
+ expect(screen.getByLabelText('Всего 3 происшествий на карте').textContent).toBe('3');
+ expect(screen.queryByRole('button',{name:'Map minor-crash'})).toBeNull();
+ expect(screen.getByRole('button',{name:'Map assault'})).toBeTruthy();
+ await user.click(screen.getByRole('button',{name:'Смертельные'}));
+ expect(screen.queryByRole('button',{name:'Map assault'})).toBeNull();
+ expect(screen.getByText('Details fatal-crash')).toBeTruthy();
+ await user.click(screen.getByRole('button',{name:'7 дней'}));
+ expect(screen.getByLabelText('Всего 1 происшествий на карте').textContent).toBe('1');
+ expect(screen.queryByRole('button',{name:'Map old-fatal'})).toBeNull();
+ expect(screen.getByTestId('map').dataset.focused).toBe('');
+ await user.click(screen.getByRole('button',{name:'24 ч'}));
+ expect(screen.getByText('Нет происшествий с выбранными фильтрами.')).toBeTruthy();
+ expect(screen.getByLabelText('Всего 0 происшествий на карте').textContent).toBe('0');
+});

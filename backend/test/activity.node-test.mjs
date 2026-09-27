@@ -1,10 +1,48 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
-import {activityData} from '../activity.mjs';
+import {activityData,readableError,eventProcessing} from '../activity.mjs';
 import {Pipeline} from '../pipeline.mjs';
 const stamp='2026-09-27T12:00:00.000Z';
+test('translation and merge failures do not pretend a new publication exists',()=>{
+ assert.match(readableError('Site translation changed numbers: sample'),/Числа в переводе/);
+ assert.match(readableError('Event changed during final review'),/новая версия/);
+ assert.match(readableError('Flash identified a duplicate but merge needs retry'),/Flash/);
+ assert.match(readableError('Geocoder daily request limit reached'),/отменён/);
+});
 const put=(s,id,mark='normal')=>s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,occurred_at,editorial_mark) VALUES(?,?,?,?,?,?)').run(id,'event-'+id,stamp,JSON.stringify({title:'Event '+id,occurredAt:stamp,location:{label:'Budapest'},participants:[]}),stamp,mark);
+
+test('stopped status ignores old revisions and distinguishes automatic retries',()=>{
+ const s=new Store(':memory:');try{
+  put(s,1);const event={id:1,revision:2};
+  s.enqueue('review','old',{eventId:1,revision:1},stamp);
+  s.db.prepare("UPDATE jobs SET state='failed',last_error='private sk-secret'").run();
+  assert.equal(eventProcessing(s,event).stopped,false);
+  s.enqueue('prepare','current',{eventId:1,revision:2},stamp);
+  s.db.prepare("UPDATE jobs SET last_error='timeout',attempts=1 WHERE job_key='current'").run();
+  assert.equal(eventProcessing(s,event).retrying,true);
+  assert.equal(eventProcessing(s,event).stopped,false);
+  s.db.prepare("UPDATE jobs SET state='failed',attempts=3,last_error='Site translation changed numbers: sk-secret' WHERE job_key='current'").run();
+  const result=eventProcessing(s,event);assert.equal(result.stopped,true);assert.equal(result.retrying,false);
+  assert.match(result.issues[0].reason,/Числа в переводе/);assert.ok(!JSON.stringify(result).includes('sk-secret'));
+  s.db.prepare("UPDATE jobs SET state='paused',last_error='Total model budget reached' WHERE job_key='current'").run();
+  assert.match(eventProcessing(s,event).issues[0].reason,/бюджета/);
+ }finally{s.close();}
+});
+
+test('filtered articles expose original headline, source, reason and whether rules or Flash rejected them',()=>{
+ const s=new Store(':memory:');try{
+  for(const method of ['rules','flash-short']){
+   const doc=s.saveDocument({url:'https://www.police.hu/'+method,sourceId:'police-brfk',sourceKind:'official',title:'Headline '+method,text:'Article text'});
+   s.db.prepare('INSERT INTO triage_log VALUES(?,?,?,?,?,?)').run(doc.id,doc.contentHash,0,method,'Routine police raid',stamp);
+   s.log('document-processed',`${doc.id}:${doc.contentHash}`,{filtered:true,irrelevantReason:'Routine police raid'});
+  }
+  s.db.prepare('UPDATE audit SET created_at=?').run(stamp);
+  const r=activityData(s,{now:new Date(stamp),category:'filtered'});
+  assert.equal(r.logs.length,2);assert.deepEqual(r.logs.map(l=>l.label),['Отсеяно Flash','Отсеяно бесплатно']);
+  assert.equal(r.logs[0].title,'Headline flash-short');assert.equal(r.logs[0].description,'Routine police raid');assert.equal(r.logs[0].url,'https://www.police.hu/flash-short');
+ }finally{s.close();}
+});
 test('activity shows current queue priority, scheduled jobs, safe error reasons and linked source decisions',()=>{
  const s=new Store(':memory:');try{
   put(s,1);put(s,2,'priority');s.enqueue('review','1',{eventId:1},stamp);s.enqueue('review','2',{eventId:2},stamp);

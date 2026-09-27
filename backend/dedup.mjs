@@ -47,9 +47,12 @@ export async function identify(model,doc){
   }});
 }
 export async function compareBrief(model,incoming,candidates){
-  // Check ignored identities first so an older visible duplicate cannot bypass
-  // the editor's decision. Reasons are deliberately absent from the model input.
-  const groups=[candidates.filter(e=>e.editorial_mark==='uninteresting'),candidates.filter(e=>e.editorial_mark!=='uninteresting')];
+  // Topic/editorial exclusions win, but a duplicate-only rejection must not
+  // swallow updates belonging to the retained active event. No reason text is
+  // sent to the model or generalized to other incidents.
+  const duplicateOnly=e=>{try{const reasons=JSON.parse(e.editorial_reasons??'[]');return reasons.length===1&&reasons[0]==='duplicate';}catch{return false;}};
+  const ignored=e=>e.editorial_mark==='uninteresting';
+  const groups=[candidates.filter(e=>ignored(e)&&!duplicateOnly(e)),candidates.filter(e=>!ignored(e)),candidates.filter(e=>ignored(e)&&duplicateOnly(e))];
   for(const group of groups)for(let offset=0;offset<group.length;offset+=4){
     const shortlist=group.slice(offset,offset+4);
     const result=await model.json('compare',{incoming:comparisonCard(incoming),candidates:shortlist.map(r=>({id:r.id,published:!!r.public_id,sourceKinds:r.sourceKinds,event:comparisonCard(r.canonical)}))},{maxTokens:700,validate:raw=>{

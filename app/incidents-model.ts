@@ -12,6 +12,18 @@ export const PERIODS = [
 
 export const REFERENCE_TIME = new Date("2026-09-25T00:00:00+02:00").getTime();
 
+export const SEVERITIES = [
+  { value: "all", label: "Все" },
+  { value: "serious", label: "Серьёзные" },
+  { value: "fatal", label: "Смертельные" },
+] as const;
+export type Severity = (typeof SEVERITIES)[number]["value"];
+
+export function matchesSeverity(incident: { eventType?: string; signals?: string[]; participants?: { status: string }[] }, severity: Severity) {
+  const fatal = incident.signals?.includes("death") || incident.participants?.some(person => person.status === "deceased");
+  return severity === "all" || !!fatal || (severity === "serious" && incident.eventType === "assault");
+}
+
 export function filterIncidents<T extends TimedIncident>(
   incidents: T[],
   hours: number,

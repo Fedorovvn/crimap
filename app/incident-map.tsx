@@ -33,7 +33,9 @@ function FitVisibleIncidents({ incidents, focusedSlug, layoutMode }: { incidents
 
     map.fitBounds(
       L.latLngBounds(incidents.map((incident) => [incident.latitude, incident.longitude])),
-      { padding: [56, 56], maxZoom: 14 },
+      window.matchMedia("(max-width: 767px), (max-height: 500px) and (orientation: landscape)").matches && layoutMode === "list"
+        ? { paddingTopLeft: [32, 56], paddingBottomRight: [32, 116], maxZoom: 14 }
+        : { padding: [56, 56], maxZoom: 14 },
     );
   }, [focusedSlug, incidents, layoutMode, map]);
 

@@ -46,6 +46,16 @@ test('geocoding is cached and failed requests do not create fake locations',asyn
     await assert.rejects(new Geocoder(s,{delayMs:0,endpoint:'https://different.example/api/',request:async()=>({status:503})}).locate({label:'Missing',precision:'city'}),/503/);
   }finally{s.close();}
 });
+
+test('coordinate and road-geometry lookup continue beyond the former daily cap, retaining cache',async()=>{
+ const s=new Store(':memory:');let calls=0;try{
+  for(let i=0;i<90;i++)s.log('geocode-request',String(i),{});
+  const g=new Geocoder(s,{delayMs:0,request:async url=>{calls++;return {status:200,body:JSON.stringify(url.includes('/api/0.6/')?{elements:[]}:{features:[feature('1072')]})};}});
+  await g.query('Akácfa utca, Budapest');await g.mapAround({latitude:47.5,longitude:19.06});
+  await g.query('Akácfa utca, Budapest');await g.mapAround({latitude:47.5,longitude:19.06});
+  assert.equal(calls,2);assert.equal(s.db.prepare("SELECT count(*) n FROM audit WHERE action='geocode-request'").get().n,92);
+ }finally{s.close();}
+});
 test('archive budget is cumulative across dates and models, separate from recurring daily budget',()=>{
   const s=new Store(':memory:');try{
     s.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,created_at) VALUES(?,?,?,?,?)').run('two-months','2026-07-25T22:00:00Z','2026-09-26T21:59:59Z',5,'2026-09-26T00:00:00Z');

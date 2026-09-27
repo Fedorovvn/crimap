@@ -10,23 +10,32 @@ const actions={
  'job-started':['tasks','Задача начата'], 'job-finished':['tasks','Задача завершена'], 'job-failure':['errors','Ошибка задачи'],
  'archive-job-failed':['errors','Обработка остановлена'], 'total-budget-stop':['errors','Ожидание бюджета'], 'merge-needs-retry':['errors','Не удалось объединить'],
  'recheck':['sources','Обновления проверены'], 'archive-stopped':['sources','Архивный сбор остановлен'],
+ 'event-filtered':['filtered','Событие отсеяно до Pro'], 'review-deferred':['events','Сначала подготовка, затем Pro'],
 };
-const eventActions=new Set(['repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck']);
+const eventActions=new Set(['repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred']);
 export function readableError(text){
  if(!text)return null;
  if(/budget reached/i.test(text))return 'Недостаточно общего бюджета для следующего запроса. Увеличьте лимит и нажмите «Сохранить и продолжить».';
- if(/geocoder daily/i.test(text))return 'Достигнут суточный лимит сервиса координат. Повтор будет выполнен позднее.';
- if(/429|rate.limit/i.test(text))return 'Сервис временно ограничил частоту запросов. Ожидаем повтор.';
- if(/timeout|timed out|abort/i.test(text))return 'Источник или модель не ответили вовремя. Запланирован повтор.';
+ if(/geocoder daily/i.test(text))return 'Сработал прежний суточный лимит координат. Этот лимит отменён; запись сохранена для истории.';
+ if(/429|rate.limit/i.test(text))return 'Сервис временно ограничил частоту запросов.';
+ if(/timeout|timed out|abort/i.test(text))return 'Источник или модель не ответили вовремя.';
+ if(/changed numbers|numeric tokens|digit tokens/i.test(text))return 'Числа в переводе не совпали с исходным текстом. Требуется исправление перевода.';
+ if(/translation required|translation paths|Unknown final .*display text/i.test(text))return 'В итоговой карточке не хватает согласованного перевода изменённых полей.';
  if(/quotation|quote|evidence/i.test(text))return 'Не удалось подтвердить одну из цитат или фактов по оригиналу источника.';
- if(/duplicate|merge/i.test(text))return 'Найден возможный дубль. Объединение нужно повторить; дорогая обработка остановлена.';
+ if(/duplicate|merge/i.test(text))return 'Найден возможный дубль. Flash не завершила объединение; переход к Pro заблокирован.';
  if(/HTTP (\d{3})/.test(text))return `Внешний сервис вернул ошибку HTTP ${text.match(/HTTP (\d{3})/)[1]}.`;
- if(/changed|superseded/i.test(text))return 'Пока выполнялась задача, появилась новая версия. Требуется повторная обработка.';
+ if(/event changed|version changed|content changed|superseded/i.test(text))return 'Пока выполнялась задача, появилась новая версия. Требуется повторная обработка.';
+ if(/legal|catalog sanctions/i.test(text))return 'Правовые поля не согласованы с фактами или проверенным каталогом. Требуется исправление.';
  return 'Ошибка обработки данных. Подробная диагностика сохранена в серверном журнале.';
 }
 const parse=s=>{try{return JSON.parse(s??'{}');}catch{return {};}};
 const redact=value=>String(value??'').replace(/sk-[A-Za-z0-9_-]+/g,'[скрыто]').replace(/Bearer\s+\S+/gi,'Bearer [скрыто]').replace(/([?&](?:token|key|api_key|password|secret)=)[^\s&#]+/gi,'$1[скрыто]');
 const safeUrl=value=>{try{const u=new URL(value);return ['http:','https:'].includes(u.protocol)&&!u.username&&!u.password?u.origin+u.pathname:null;}catch{return null;}};
+export function eventProcessing(store,event){
+ const jobs=store.db.prepare("SELECT kind,state,last_error,attempts,due_at FROM jobs WHERE json_extract(payload,'$.eventId')=? AND state IN ('failed','paused','queued','running') AND (json_extract(payload,'$.revision') IS NULL OR json_extract(payload,'$.revision')=?) ORDER BY CASE state WHEN 'failed' THEN 0 WHEN 'paused' THEN 1 WHEN 'running' THEN 2 ELSE 3 END,id").all(event.id,event.revision);
+ const stopped=jobs.filter(j=>['failed','paused'].includes(j.state));
+ return {stopped:stopped.length>0,issues:stopped.map(j=>({stage:jobLabels[j.kind]??'Обработка',reason:readableError(j.last_error)??'Задача приостановлена.',attempts:j.attempts,state:j.state})),retrying:jobs.some(j=>j.state==='queued'&&j.last_error)};
+}
 export function activityData(store,{now=new Date(),before=Infinity,category='all',source='all',period='day',queueState='all'}={}){
  const db=store.db,stamp=now.toISOString(),since=period==='all'?'1970-01-01T00:00:00Z':new Date(now.getTime()-(period==='week'?7:1)*86400000).toISOString();
  const events=new Map(db.prepare(`SELECT e.id,e.merged_into,coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'`).all().map(r=>[r.id,r]));
@@ -58,6 +67,10 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
    const jobId=row.action.startsWith('job-')||['total-budget-stop','archive-job-failed'].includes(row.action)?Number(row.subject):null;
    const job=jobId?db.prepare('SELECT payload,kind FROM jobs WHERE id=?').get(jobId):null,p=parse(job?.payload);
    const documentId=d.documentId??(row.action==='document-processed'?row.subject.split(':')[0]:null);
+   if(row.action==='document-processed'&&d.filtered){
+     const method=db.prepare('SELECT method FROM triage_log WHERE document_id=? AND content_hash=?').get(documentId,row.subject.split(':')[1])?.method;
+     label=method==='rules'?'Отсеяно бесплатно':method==='flash-short'?'Отсеяно Flash':'Отсеяно при разборе Flash';
+   }
    const doc=documentId?db.prepare('SELECT url,source_id,(SELECT title FROM document_versions WHERE document_id=d.id ORDER BY id DESC LIMIT 1) title FROM documents d WHERE id=?').get(documentId):null;
    const info=eventInfo(d.eventId??(eventActions.has(row.action)?row.subject:p.eventId));
    const src=sourceInfo(d.sourceId??doc?.source_id??p.sourceId??p.discoveredBy??eventSources.get(info.eventId)?.[0]??row.subject,d.url??doc?.url??p.url);

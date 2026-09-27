@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { filterIncidents, selectVisibleIncident, REFERENCE_TIME } from "./incidents-model";
+import { filterIncidents, selectVisibleIncident, matchesSeverity, REFERENCE_TIME } from "./incidents-model";
 
 const incidents = [
   { slug: "soroksari-fatal-crash", occurredAt: "2026-09-03T05:55:00+02:00" },
@@ -7,6 +7,17 @@ const incidents = [
 ];
 
 describe("incident filtering", () => {
+  it('serious means assaults or deaths, not every injury or other crime',()=>{
+    for(const eventType of ['traffic-accident','fire','accident','robbery','fight','other']){
+      expect(matchesSeverity({eventType,signals:['injury']},'serious')).toBe(false);
+      expect(matchesSeverity({eventType,signals:['death']},'serious')).toBe(true);
+      expect(matchesSeverity({eventType,signals:['death']},'fatal')).toBe(true);
+    }
+    expect(matchesSeverity({eventType:'assault',signals:[]},'serious')).toBe(true);
+    expect(matchesSeverity({eventType:'assault',signals:[]},'fatal')).toBe(false);
+    expect(matchesSeverity({participants:[{status:'deceased'}]},'fatal')).toBe(true);
+    expect(matchesSeverity({},'fatal')).toBe(false);
+  });
   it("shows no seeded stories in the last 24 hours", () => {
     expect(filterIncidents(incidents, 24, REFERENCE_TIME)).toEqual([]);
   });

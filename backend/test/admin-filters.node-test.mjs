@@ -5,6 +5,11 @@ import {eventFacets} from '../admin-facets.mjs';
 const row=(id,extra={})=>({id,revision:2,published_revision:null,public_id:null,title:'Event '+id,verdict:null,occurred_at:'2026-09-20T12:00:00Z',first_seen_at:'2026-09-22T12:00:00Z',eventType:'assault',facets:{homicide:false,fatal:false,impact:'unknown'},...extra});
 const list=[row(1,{published_revision:2,public_id:10,verdict:'pass'}),row(2,{published_revision:1,public_id:11,verdict:'revise'}),row(3,{verdict:'pass',ready:true,facets:{homicide:true,fatal:true,impact:'significant'}}),row(4,{verdict:'reject',eventType:'traffic-accident',facets:{impact:'minor'}}),row(5,{eventType:'missing-person'})];
 const ids=f=>filterEvents(list,{...defaults,...f}).map(e=>e.id).sort();
+
+test('stopped filter separates failed processing from a queued retry',()=>{
+ const events=[row(1,{processing:{stopped:true}}),row(2,{processing:{stopped:false,retrying:true}}),row(3)];
+ assert.deepEqual(filterEvents(events,{...defaults,review:'stopped'}).map(e=>e.id),[1]);
+});
 test('publication filters distinguish all live events from unpublished drafts and pending updates',()=>{
   assert.deepEqual(ids({publication:'published'}),[1,2]);assert.deepEqual(ids({publication:'live'}),[1,2]);assert.deepEqual(ids({publication:'unpublished'}),[3,4,5]);assert.deepEqual(ids({publication:'updates'}),[2]);assert.deepEqual(ids({publication:'new'}),[3,4,5]);
   assert.deepEqual(ids({publication:'unpublished',review:'pass'}),[3]);assert.deepEqual(ids({review:'failed'}),[2,4]);assert.deepEqual(ids({review:'pending'}),[5]);assert.deepEqual(ids({review:'ready'}),[3]);
@@ -38,7 +43,7 @@ test('homicide is separate from fatal accidents; free minor classification keeps
   assert.equal(eventFacets(event('Traffic restriction after stabbing','No one was injured in the traffic jam.','transport-disruption',['injury'])).impact,'significant');
 });
 
-test('withdrawn publications stay out of published results even at the same revision',()=>{const rows=[row(1,{public_id:10,published_revision:2,withdrawn_at:'2026-09-27'}),row(2,{public_id:11,published_revision:1})];assert.deepEqual(filterEvents(rows,{publication:'published'}).map(e=>e.id),[2]);assert.deepEqual(filterEvents(rows,{publication:'unpublished'}).map(e=>e.id),[1]);assert.equal(normalizeFilters({publication:'live'}).publication,'published');});
+test('withdrawn publications are hidden by default but explicitly selecting withdrawn reveals them',()=>{const rows=[row(1,{public_id:10,published_revision:2,withdrawn_at:'2026-09-27'}),row(2,{public_id:11,published_revision:1})];assert.deepEqual(filterEvents(rows,{publication:'published'}).map(e=>e.id),[2]);assert.deepEqual(filterEvents(rows,{publication:'unpublished'}).map(e=>e.id),[]);assert.deepEqual(filterEvents(rows,{publication:'withdrawn'}).map(e=>e.id),[1]);assert.deepEqual(filterEvents(rows,{mark:'uninteresting'}).map(e=>e.id),[1]);assert.deepEqual(filterEvents(rows,{publication:'unpublished',mark:'all'}).map(e=>e.id),[1]);assert.equal(normalizeFilters({publication:'live'}).publication,'published');});
 
 test('editorial marks hide uninteresting by default, compose with filters and sort priority before recency',()=>{
   const rows=[row(1,{editorial_mark:'priority',occurred_at:'2026-08-01T12:00:00Z'}),row(2,{editorial_mark:'uninteresting'}),row(3),row(4,{editorial_mark:'priority',public_id:10})];

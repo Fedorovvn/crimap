@@ -863,7 +863,7 @@ body {
 .section-switch button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .section-switch--map { display: none; }
 @media (min-width:1280px) {
-  .mobile-incidents-workspace { --desktop-map-height:min(70dvh,calc(94dvh - 180px),780px);grid-template-rows:var(--desktop-map-height) auto; }
+  .mobile-incidents-workspace { --desktop-map-height:min(66.5dvh,calc(89.3dvh - 171px),741px);grid-template-rows:var(--desktop-map-height) auto; }
   .mobile-incidents-workspace > .map-frame { height:var(--desktop-map-height);min-height:0; }
   .mobile-incident-list { padding-inline-end:12px; height:var(--desktop-map-height);min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable; }
 }
@@ -928,4 +928,19 @@ html:has(.signal-shell[data-theme="day"]) { scrollbar-color: #a4b0aa #f5f6f2; }
 }
 [data-theme="day"] .incident-list-card .incident-type:not([data-type="Нападение"]) {
   background: #eef0f1; color: #505c63; border-color: #c9d0d3;
+}
+
+/* Shared filters: one desktop toolbar; mobile period above the map, severity below. */
+.map-filter-stack { position:absolute;left:16px;right:76px;top:16px;z-index:1100;display:flex;flex-wrap:wrap;align-items:flex-start;gap:8px;pointer-events:none; }
+.map-filter-stack .map-controls { pointer-events:auto;flex:none; }
+.map-controls button { white-space:nowrap; }
+.map-controls button:focus-visible { outline:2px solid var(--accent-text);outline-offset:2px; }
+@media (max-width:767px), (max-height:500px) and (orientation:landscape) {
+  .map-filter-stack { top:16px;bottom:14px;right:16px;flex-direction:column;justify-content:space-between;gap:6px; }
+  .map-filter-stack .map-controls { max-width:100%; }
+  .map-controls button { padding:7px 10px;font-size:12px; }
+  .signal-shell[data-mobile-detail="true"] .map-filter-stack { display:none; }
+}
+@media (max-width:767px) and (orientation:portrait) {
+  .signal-shell[data-mobile-detail="false"] .mobile-incidents-workspace > .map-frame { flex-basis:45%; }
 }
