@@ -30,3 +30,9 @@ test('index backfills existing data, follows inserts, corrections and deletes; a
   assert.doesNotThrow(()=>s.candidates({...query,title:'" OR * NEAR( ) --'}));
  }finally{s.close();}
 });
+test('a distinctive full participant name nominates a retrospective report despite date and place differences',()=>{
+ const s=new Store(':memory:');try{
+  insert(s,1,{...cyclist,participants:[{profile:{name:'Réka Papacsek'}}]});
+  assert.deepEqual(s.candidates({title:'Reka Papacsek memorial',summary:'',occurredAt:'2025-09-17T00:00:00Z',location:{label:'Unknown'}}).map(r=>r.id),[1]);
+ }finally{s.close();}
+});

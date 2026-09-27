@@ -6,6 +6,16 @@ import {matchCandidates} from '../dedup.mjs';
 import {consolidate} from '../consolidate.mjs';
 import {cheapDecision} from '../triage.mjs';
 const event={title:'Man stabbed on a Budapest tram',summary:'A man was stabbed at Wesselényi utca.',type:'assault',status:'investigating',occurredAt:'2026-09-09T07:50:00Z',timePrecision:'exact',location:{city:'Budapest',label:'Wesselényi utca / Erzsébet körút',district:'VII',precision:'landmark'},signals:[],caseReferences:[],participants:[],updates:[],media:[],context:[],legal:[],evidence:[]};
+test('merge schema describes the decision envelope and validates it without accepting a bare event',async()=>{
+ const s=new Store(':memory:');try{
+  const p=new Pipeline(s,{model:{json:async(stage,payload,{validate})=>{
+   assert.equal(stage,'merge');assert.ok(payload.schema.properties.sameEvent);assert.ok(payload.schema.properties.event);
+   assert.ok(payload.verifiedLawCatalog);assert.throws(()=>validate(event));
+   return validate({sameEvent:true,hasNewInformation:false,reason:'No change',event:null});
+  }}});
+  assert.equal((await p.merge(event,event,[])).hasNewInformation,false);
+ }finally{s.close();}
+});
 test('candidate selection crosses categories, accents and street formatting but not different districts/dates',()=>{
   const row={id:1,canonical:event};
   assert.equal(matchCandidates({...event,type:'transport-disruption',location:{...event.location,label:'Wesselenyi utcai megallo',district:'7. kerület'}},[row]).length,1);

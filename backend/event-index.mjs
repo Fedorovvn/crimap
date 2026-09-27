@@ -37,10 +37,11 @@ export function indexedCandidates(store,event,{excludeId,limit=12}={}){
   const selected=hits.map(hit=>rows.find(r=>r.id===hit.id)).filter(row=>{
     const old=row.canonical,other=new Set(words(searchable(old)));
     const overlap=tokens.filter(w=>other.has(w)).length;
+    const sameName=(old.participants??[]).some(p=>{const name=words(p.profile?.name);return name.length>=2&&name.every(w=>tokens.includes(w));});
     const near=Math.abs(Date.parse(event.occurredAt)-Date.parse(old.occurredAt))<=3*86400000;
     // Dates/categories/administrative districts are hints, never hard exclusions.
     // Wider search rescues missing or incorrectly inferred years and addresses.
-    return overlap>=(near?2:3);
+    return sameName||overlap>=(near?2:3);
   });
   return [...new Map([...direct,...selected.slice(0,limit)].map(r=>[r.id,r])).values()];
 }

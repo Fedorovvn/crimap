@@ -227,8 +227,9 @@ export class Pipeline {
     return target?.id;
   }
   async merge(existing,incoming,documents){
-    return this.model.json('merge',{schema:zodToJsonSchema(eventSchema),existing,incoming,documents},{maxTokens:10000,validate:raw=>{
-      const r=z.object({sameEvent:z.boolean(),hasNewInformation:z.boolean().default(true),reason:z.string().default('Flash comparison of source facts'),event:eventSchema.nullable()}).strict().parse(raw);
+    const responseSchema=z.object({sameEvent:z.boolean(),hasNewInformation:z.boolean().default(true),reason:z.string().default('Flash comparison of source facts'),event:eventSchema.nullable()}).strict();
+    return this.model.json('merge',{schema:zodToJsonSchema(responseSchema),existing,incoming,documents:sourceExcerpts(documents,{evidence:[...(existing.evidence??[]),...(incoming.evidence??[])]}),verifiedLawCatalog:this.laws},{maxTokens:10000,validate:raw=>{
+      const r=responseSchema.parse(raw);
       if(r.sameEvent&&r.hasNewInformation&&!r.event)throw new Error('A material update requires a complete merged event');
       if(r.event){retainLocationCoordinates(existing.location,r.event.location);r.event=this.validate(r.event,documents);}return r;
     }});
