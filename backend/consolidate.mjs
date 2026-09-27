@@ -4,11 +4,11 @@ import {stopEventJobs} from './editorial-workflow.mjs';
 
 // Existing records use the same cheap candidate selection and Flash merge as
 // incoming sources. Originals and revision histories remain recoverable.
-export async function consolidate(pipeline,{limit=30}={}){
+export async function consolidate(pipeline,{limit=30,eventIds}={}){
   const store=pipeline.store,merged=[],checked=new Set();
   let calls=0;
   const rows=()=>store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>store.event(r.id));
-  for(const start of rows()){
+  for(const start of rows().filter(r=>!eventIds||eventIds.includes(r.id))){
     let row=store.event(start.id);if(row.merged_into)continue;
     for(const candidate of matchCandidates(row.canonical,rows().filter(r=>r.id!==row.id))){
       const key=[row.id,candidate.id].sort((a,b)=>a-b).join(':');if(checked.has(key))continue;checked.add(key);
@@ -20,8 +20,9 @@ export async function consolidate(pipeline,{limit=30}={}){
       const documents=[...new Map([...pipeline.eventDocuments(target.id),...pipeline.eventDocuments(duplicate.id)].map(d=>[`${d.id}:${d.contentHash}`,d])).values()];
       let result;
       try{
-        if([target,duplicate].some(e=>e.editorial_mark==='uninteresting')){
-          const comparison=await compareBrief(pipeline.model,duplicate.canonical,[target]);
+        const comparison=await compareBrief(pipeline.model,duplicate.canonical,[target]);
+        if(comparison.decision==='new')continue;
+        if(comparison.decision==='repeat'||[target,duplicate].some(e=>e.editorial_mark==='uninteresting')){
           result={sameEvent:comparison.decision!=='new',hasNewInformation:false,reason:comparison.reason};
         }else result=await pipeline.merge(target.canonical,duplicate.canonical,documents);
       }

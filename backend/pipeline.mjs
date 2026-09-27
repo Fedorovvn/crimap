@@ -143,7 +143,7 @@ export class Pipeline {
       this.store.db.prepare('INSERT OR REPLACE INTO triage_log VALUES(?,?,?,?,?,?)').run(doc.id,doc.contentHash,Number(result.keep),result.method,result.reason,iso());
       if(!result.keep){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,irrelevantReason:result.reason,filtered:true});return {documentId:doc.id,events:0,filtered:true};}
     }
-    let focusIncidents;
+    let focusIncidents;const identityTargets=[];
     if(this.triage||this.store.db.prepare("SELECT 1 FROM events WHERE editorial_mark='uninteresting' AND merged_into IS NULL LIMIT 1").get()){
       const briefs=await identify(this.model,doc),rows=this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>this.store.event(r.id));
       focusIncidents=[];
@@ -151,7 +151,7 @@ export class Pipeline {
         const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},matchCandidates(brief,rows).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
         if(comparison.decision!=='new'&&this.store.event(comparison.eventId)?.editorial_mark==='uninteresting')this.ignoreUpdate(comparison.eventId,doc,brief,comparison.reason);
         else if(comparison.decision==='repeat')this.store.log('repeat-skipped',comparison.eventId,{documentId:doc.id,contentHash:doc.contentHash,reason:comparison.reason});
-        else focusIncidents.push(brief);
+        else {focusIncidents.push(brief);if(comparison.decision==='update')identityTargets.push(comparison.eventId);}
       }
       if(!focusIncidents.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,repeat:true});return {documentId:doc.id,events:0,repeat:true};}
     }
@@ -162,18 +162,20 @@ export class Pipeline {
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
     const events=result.events.filter(e=>e.type!=='missing-person').map(event=>this.validate(event,[doc]));
     let firstId;
-    for(const event of events){const id=await this.upsert(event,doc);firstId??=id;}
+    for(const event of events){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&events.length===1?identityTargets[0]:undefined});firstId??=id;}
     if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
     this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,irrelevantReason:result.irrelevantReason});
     return {documentId:doc.id,events:events.length};
   }
-  async upsert(incoming,doc){
+  async upsert(incoming,doc,{confirmedTarget}={}){
     const rows=this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>this.store.event(r.id));
     const street=normalized(incoming.location.label.split(',')[0]);
     const publishedMatches=this.publishedSources().filter(p=>p.source_url===doc.url&&incoming.occurredAt&&Math.abs(Date.parse(p.occurred_at)-Date.parse(incoming.occurredAt))<86400000&&street===normalized(p.location_label.split(',')[0]));
     let published=publishedMatches.length===1?publishedMatches[0]:null;
     const linked=published?rows.filter(r=>r.public_id===published.id):[];
-    const candidates=linked.length?linked:matchCandidates(incoming,rows);
+    const confirmed=confirmedTarget?rows.find(r=>r.id===confirmedTarget):null;
+    if(confirmedTarget&&!confirmed)throw new Error('Flash-matched event changed; retry identity check');
+    const candidates=confirmed?[confirmed]:(linked.length?linked:matchCandidates(incoming,rows));
     // Same article may cover several incidents. Do not merge by URL alone.
     let target=null,event=incoming,reason=candidates.length>1?'Several possible matching events':null;
     let noChange=false;
@@ -188,6 +190,7 @@ export class Pipeline {
       if(merged.sameEvent){target=candidate;event=merged.event??candidate.canonical;noChange=merged.hasNewInformation===false;break;}
     }
     const now=iso();
+    if(confirmed&&!target)throw new Error('Flash identity and merge disagree; do not create a duplicate event');
     this.store.transaction(()=>{
       if(target){
         if(this.store.event(target.id)?.editorial_mark==='uninteresting'){this.ignoreUpdate(target.id,doc,incoming,'Совпадение установлено во время остановки обработки');return;}

@@ -9,7 +9,7 @@ const event={title:'Man stabbed on a Budapest tram',summary:'A man was stabbed a
 test('candidate selection crosses categories, accents and street formatting but not different districts/dates',()=>{
   const row={id:1,canonical:event};
   assert.equal(matchCandidates({...event,type:'transport-disruption',location:{...event.location,label:'Wesselenyi utcai megallo',district:'7. kerület'}},[row]).length,1);
-  assert.equal(matchCandidates({...event,location:{...event.location,district:'VIII'}},[row]).length,0);
+  assert.equal(matchCandidates({...event,location:{...event.location,district:'VIII'}},[row]).length,1);
   assert.equal(matchCandidates({...event,occurredAt:'2026-09-15T07:50:00Z'},[row]).length,0);
   assert.equal(matchCandidates(event,[{...row,merged_into:2}]).length,0);
 });
@@ -37,6 +37,31 @@ test('consolidation keeps the published identity and sources, archives duplicate
     s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(id,d.id,d.contentHash,JSON.stringify(event),now);
   }
   s.db.prepare("UPDATE events SET campaign_id='archive-test' WHERE id=1").run();
-  const pipeline={store:s,model:{},eventDocuments:id=>[{id:String(id),contentHash:'x',text:event.summary}],merge:async()=>({sameEvent:true,hasNewInformation:true,event,reason:'Same incident'})};
+  const pipeline={store:s,model:{json:async(stage,payload,{validate})=>validate({decision:'update',eventId:payload.candidates[0].id,reason:'Same incident with new facts'})},eventDocuments:id=>[{id:String(id),contentHash:'x',text:event.summary}],merge:async()=>({sameEvent:true,hasNewInformation:true,event,reason:'Same incident'})};
   try{const result=await consolidate(pipeline);assert.deepEqual(result.merged,[{from:1,into:2}]);assert.equal(s.event(2).public_id,7);assert.equal(s.event(2).campaign_id,'archive-test');assert.equal(s.event(2).revision,2);assert.equal(s.event(1).merged_into,2);assert.equal(s.db.prepare('SELECT count(*) n FROM observations WHERE event_id=2').get().n,2);assert.equal(s.event(2).published_revision,1);assert.equal(s.event(2).state,'draft');assert.equal((await consolidate(pipeline)).comparisons,0);}finally{s.close();}
+});
+
+
+test('distinctive scene nominates missing dates, workplace district errors and adjacent-year conflicts for Flash',()=>{
+ const original={...event,occurredAt:'2026-07-29T15:25:00+02:00',location:{...event.location,label:'Erzsébet körút and Király utca intersection',district:'VII'}};
+ for(const incoming of [
+  {...original,title:'Fatal bicycle collision',occurredAt:null},
+  {...original,occurredAt:'2025-07-29T00:00:00+02:00'},
+  {...original,location:{...original.location,district:'IX',label:'Király utca és Erzsébet körút sarka'}},
+ ])assert.equal(matchCandidates(incoming,[{id:62,canonical:original,public_id:18}])[0].id,62);
+ assert.equal(matchCandidates({...original,occurredAt:'2026-07-12T00:00:00+02:00'},[{id:62,canonical:original}]).length,0);
+ assert.equal(matchCandidates({...original,location:{...original.location,label:'Other utca',district:'IX'}},[{id:62,canonical:original}]).length,0);
+});
+
+test('an update identity survives later location extraction differences and cannot silently create another event',async()=>{
+ const s=new Store(':memory:');try{
+  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,occurred_at) VALUES(1,?,?,?,?)').run('original',new Date().toISOString(),JSON.stringify(event),event.occurredAt);
+  const p=new Pipeline(s);let seen=false;
+  p.merge=async existing=>{seen=true;assert.equal(existing.title,event.title);return {sameEvent:true,hasNewInformation:false};};
+  const incoming={...event,location:{...event.location,label:'Other place',district:'IX'}};
+  assert.equal(await p.upsert(incoming,{id:'9',contentHash:'test',url:'https://www.police.hu/update'},{confirmedTarget:1}),1);
+  assert.equal(seen,true);assert.equal(s.db.prepare('SELECT count(*) n FROM events').get().n,1);
+  p.merge=async()=>({sameEvent:false});await assert.rejects(p.upsert(incoming,{url:'https://www.police.hu/update'},{confirmedTarget:1}),/do not create a duplicate/);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM events').get().n,1);
+ }finally{s.close();}
 });
