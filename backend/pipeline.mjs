@@ -12,10 +12,11 @@ import {discoverFeed} from './discovery.mjs';
 import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
-import { checkReview,recordRequests,reviewSchema } from './review.mjs';
+import { checkReview,recordRequests } from './review.mjs';
 import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
+import { finalEditorSchema, sourceExcerpts, assembleFinal } from './final-editor.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -184,7 +185,9 @@ export class Pipeline {
   }
   async translate(id){
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
-    if(this.reviewer&&!this.passed(id,event.revision)){this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
+    const finalized=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,event.revision);
+    if(finalized&&JSON.parse(finalized.payload).finalized)return {skipped:'Final translations already checked by Pro'};
+    if(this.reviewer){this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
     const payload=await this.model.json('translate',{strings:translationStrings(event.canonical)},{validate:raw=>{applyTranslation(event.canonical,raw);return raw;}});
     const translated=applyTranslation(event.canonical,payload);
     if(this.store.event(id).revision!==event.revision)throw new Error('Event changed during translation');
@@ -195,7 +198,9 @@ export class Pipeline {
   passed(id,revision){const r=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);return r&&JSON.parse(r.payload).verdict==='pass';}
   async localize(id) {
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
-    if(this.reviewer&&!this.passed(id,row.revision)){this.store.enqueue('review',`${id}:${row.revision}`,{eventId:id,revision:row.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
+    const finalized=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,row.revision);
+    if(finalized&&JSON.parse(finalized.payload).finalized)return {skipped:'Final translations already checked by Pro'};
+    if(this.reviewer){this.store.enqueue('review',`${id}:${row.revision}`,{eventId:id,revision:row.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
     const russian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,row.revision);
     if(!russian)throw new Error('Current Russian translation is missing');
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
@@ -214,17 +219,30 @@ export class Pipeline {
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
     if(!this.reviewer)throw new Error('Review model is not configured');
+    this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     // Missing dates/coordinates are facts for Pro to inspect, not a reason to
     // silently finish a review job without ever invoking the reviewer.
     const docs=this.eventDocuments(id);
-    const russian=null; // Content is checked before translation. Older translations do not gate review.
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
     const preparation=prepared?JSON.parse(prepared.payload):null;
+    // Persist inexpensive translation drafts separately, so a retry of Pro does
+    // not pay for or regenerate them. None of these drafts is a publication.
+    const existingRussian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
+    const russian=existingRussian?JSON.parse(existingRussian.payload):applyTranslation(event.canonical,await this.model.json('translate',{strings:translationStrings(event.canonical)},{validate:raw=>{applyTranslation(event.canonical,raw,{draft:true});return raw;}}),{draft:true});
+    if(this.store.event(id).revision!==event.revision)throw new Error('Event changed while preparing review translations');
+    if(!existingRussian)this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,event.revision,'ru',JSON.stringify(russian),this.model.model,iso());
+    const translations=siteTranslations(this.store,id,event.revision)??await translateSiteTexts(this.model,displayStrings({...russian,retainedMedia:preparation?.retainedMedia}),[],{draft:true});
+    if(this.store.event(id).revision!==event.revision)throw new Error('Event changed while preparing review languages');
+    this.store.db.prepare('INSERT OR REPLACE INTO site_translations VALUES(?,?,?,?)').run(id,event.revision,JSON.stringify(translations),iso());
     const enabled=!!(preparation&&this.preparation?.geocoder?.landmarks);
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
-      return this.reviewer.json('review',{schema:zodToJsonSchema(reviewSchema),eventSchema:zodToJsonSchema(eventSchema),event:event.canonical,russian,siteTranslations:null,documents:docs,preparation,locationLookup,verifiedLawCatalog:this.laws},{maxTokens:5000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,locationLookup})});
+      const payload={schema:zodToJsonSchema(finalEditorSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws};
+      return this.reviewer.json('review',payload,{maxTokens:14000,validate:raw=>{
+        assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,validateEvent:e=>this.validate(e,docs)});
+        return finalEditorSchema.parse(raw);
+      }});
     };
     let result=await assess();
     if(result.verdict!=='reject'&&result.locationResolution?.action==='search'){
@@ -239,19 +257,31 @@ export class Pipeline {
       const candidate=preparation.locationReview.candidates.find(c=>c.id===result.locationResolution.candidateId);
       return applyReviewedLocation(this.store,event,preparation,candidate,result.locationResolution.reason,this.budgetScope==='daily'?null:this.campaignId??event.campaign_id);
     }
+    const final=assembleFinal(result,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup:{enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true},validateEvent:e=>this.validate(e,docs)});
+    const nextRevision=event.revision+(final.event&&!isDeepStrictEqual(final.event,event.canonical)?1:0);
     this.store.transaction(()=>{
       if(this.store.event(id)?.revision!==event.revision)throw new Error('Event changed during final review');
-      if(enabled){preparation.locationReview={...preparation.locationReview,checked:true};this.store.db.prepare('UPDATE preparation SET payload=? WHERE event_id=? AND revision=?').run(JSON.stringify(preparation),id,event.revision);}
-      this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,event.revision,this.reviewer.model,JSON.stringify(result),iso());
-      this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
+      if(final.event){
+        if(nextRevision!==event.revision){
+          this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft' WHERE id=?").run(JSON.stringify(final.event),final.event.occurredAt,nextRevision,id);
+          this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,nextRevision,JSON.stringify(final.event),'pro-final-editor',iso());
+        }
+        this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,nextRevision,'ru',JSON.stringify(final.russian),this.reviewer.model,iso());
+        this.store.db.prepare('INSERT OR REPLACE INTO site_translations VALUES(?,?,?,?)').run(id,nextRevision,JSON.stringify(final.translations),iso());
+      }
+      if(preparation){if(enabled)preparation.locationReview={...preparation.locationReview,checked:true};this.store.db.prepare('INSERT OR REPLACE INTO preparation VALUES(?,?,?,?)').run(id,nextRevision,JSON.stringify(preparation),iso());}
+      this.store.db.prepare('INSERT OR REPLACE INTO quality_reviews VALUES(?,?,?,?,?)').run(id,nextRevision,this.reviewer.model,JSON.stringify(final.review),iso());
+      this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,nextRevision);
+      this.store.log('pro-final-editor',id,{revision:nextRevision,verdict:result.verdict,changed:nextRevision!==event.revision});
     });
-    recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});
-    if(this.preparation&&result.verdict==='revise'&&event.auto_repairs<2&&this.store.event(id).revision===event.revision)this.store.enqueue('repair',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});
-    if(result.verdict==='pass')this.store.enqueue('translate',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
-    return result;
+    recordRequests(this.store,result.requests,{eventId:id,revision:nextRevision,model:this.reviewer.model});
+    return final.review;
   }
   async repair(id,revision){
     const row=this.store.event(id);if(!row||row.revision!==revision||row.auto_repairs>=2)return;
+    // Legacy repair jobs enter the new final editor; Flash must not rewrite a
+    // final Pro decision or require the owner to approve individual corrections.
+    if(this.reviewer)return this.review(id,revision);
     const quality=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);
     if(!quality||JSON.parse(quality.payload).verdict!=='revise')return;
     const docs=this.eventDocuments(id);

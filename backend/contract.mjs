@@ -72,13 +72,13 @@ export function translationStrings(event){
   }
   walk(event);return result;
 }
-export function applyTranslation(event,payload){
+export function applyTranslation(event,payload,{draft=false}={}){
   const {strings}=translationSchema.parse(payload), expected=translationStrings(event);
   if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(expected).sort()))throw new Error('Translation paths do not match');
   const copy=structuredClone(event);
   for(const [path,value] of Object.entries(strings)){
     const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(x=>x.replace(',','.')).sort().join('|');
-    if(!value.trim()||numbers(value)!==numbers(expected[path]))throw new Error(`Translation changed numbers at ${path}: preserve digit tokens [${numbers(expected[path])}], received [${numbers(value)}]. Keep words as words, Roman numerals and leading zeroes unchanged; do not add, drop or duplicate numbers.`);
+    if(!value.trim()||(!draft&&numbers(value)!==numbers(expected[path])))throw new Error(`Translation changed numbers at ${path}: preserve digit tokens [${numbers(expected[path])}], received [${numbers(value)}]. Keep words as words, Roman numerals and leading zeroes unchanged; do not add, drop or duplicate numbers.`);
     const parts=path.split('.');let parent=copy;for(const part of parts.slice(0,-1))parent=parent[part];parent[parts.at(-1)]=value;
   }
   return eventSchema.parse(copy);

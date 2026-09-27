@@ -31,12 +31,12 @@ test('recovery restores orphaned review once and does not wake daily jobs or rep
   assert.deepEqual(recoverArchive(s,'archive'),{alreadyRecovered:true});
  }finally{s.close();}
 });
-test('review runs on an unknown date; repair is given the same single-event schema its validator expects',async()=>{
+test('review runs on an unknown date; legacy repair jobs also use the final Pro editor',async()=>{
  const s=new Store(':memory:');try{campaign(s);seed(s);
   const doc=s.saveDocument({url:'https://www.police.hu/test',sourceId:'police',sourceKind:'official',title:event.title,text:event.summary,imageUrls:[]});
   s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(1,doc.id,doc.contentHash,JSON.stringify(event),'2026-09-26');
-  let reviewed=false,repaired=false;
-  const p=new Pipeline(s,{preparation:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{reviewed=true;assert.ok(payload.schema.properties.verdict);assert.equal(payload.event.occurredAt,null);return validate({verdict:'revise',summary:'Check date in source',issues:[],requests:[]});}},model:{model:'flash',json:async(stage,payload,{validate})=>{repaired=true;assert.ok(payload.schema.properties.event);assert.equal(payload.schema.properties.events,undefined);return validate({event});}}});
-  await p.review(1);assert.ok(reviewed);await p.repair(1,1);assert.ok(repaired);assert.equal(s.event(1).revision,2);
+  let reviewed=0;
+  const p=new Pipeline(s,{preparation:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{reviewed++;assert.ok(payload.schema.properties.verdict);assert.equal(payload.event.occurredAt,null);return validate({verdict:'revise',summary:'Check date in source',issues:[],requests:[]});}},model:{model:'flash',json:async(stage,payload,{validate})=>{assert.notEqual(stage,'repair');return validate({language:payload.language??'ru',strings:payload.strings});}}});
+  await p.review(1);assert.ok(reviewed);await p.repair(1,1);assert.equal(reviewed,2);assert.equal(s.event(1).revision,1);
  }finally{s.close();}
 });

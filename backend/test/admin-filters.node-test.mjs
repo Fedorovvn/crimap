@@ -5,8 +5,8 @@ import {eventFacets} from '../admin-facets.mjs';
 const row=(id,extra={})=>({id,revision:2,published_revision:null,public_id:null,title:'Event '+id,verdict:null,occurred_at:'2026-09-20T12:00:00Z',first_seen_at:'2026-09-22T12:00:00Z',eventType:'assault',facets:{homicide:false,fatal:false,impact:'unknown'},...extra});
 const list=[row(1,{published_revision:2,public_id:10,verdict:'pass'}),row(2,{published_revision:1,public_id:11,verdict:'revise'}),row(3,{verdict:'pass',ready:true,facets:{homicide:true,fatal:true,impact:'significant'}}),row(4,{verdict:'reject',eventType:'traffic-accident',facets:{impact:'minor'}}),row(5,{eventType:'missing-person'})];
 const ids=f=>filterEvents(list,{...defaults,...f}).map(e=>e.id).sort();
-test('publication filters distinguish current published versions, new drafts and unpublished updates',()=>{
-  assert.deepEqual(ids({publication:'published'}),[1]);assert.deepEqual(ids({publication:'live'}),[1,2]);assert.deepEqual(ids({publication:'unpublished'}),[2,3,4,5]);assert.deepEqual(ids({publication:'updates'}),[2]);assert.deepEqual(ids({publication:'new'}),[3,4,5]);
+test('publication filters distinguish all live events from unpublished drafts and pending updates',()=>{
+  assert.deepEqual(ids({publication:'published'}),[1,2]);assert.deepEqual(ids({publication:'live'}),[1,2]);assert.deepEqual(ids({publication:'unpublished'}),[3,4,5]);assert.deepEqual(ids({publication:'updates'}),[2]);assert.deepEqual(ids({publication:'new'}),[3,4,5]);
   assert.deepEqual(ids({publication:'unpublished',review:'pass'}),[3]);assert.deepEqual(ids({review:'failed'}),[2,4]);assert.deepEqual(ids({review:'pending'}),[5]);assert.deepEqual(ids({review:'ready'}),[3]);
 });
 test('type, homicide and impact filters compose without hiding unknown severity',()=>{
@@ -37,3 +37,5 @@ test('homicide is separate from fatal accidents; free minor classification keeps
   assert.equal(eventFacets(event('Crash in Budapest','Two vehicles collided.','traffic-accident')).impact,'unknown');
   assert.equal(eventFacets(event('Traffic restriction after stabbing','No one was injured in the traffic jam.','transport-disruption',['injury'])).impact,'significant');
 });
+
+test('withdrawn publications stay out of published results even at the same revision',()=>{const rows=[row(1,{public_id:10,published_revision:2,withdrawn_at:'2026-09-27'}),row(2,{public_id:11,published_revision:1})];assert.deepEqual(filterEvents(rows,{publication:'published'}).map(e=>e.id),[2]);assert.deepEqual(filterEvents(rows,{publication:'unpublished'}).map(e=>e.id),[1]);assert.equal(normalizeFilters({publication:'live'}).publication,'published');});

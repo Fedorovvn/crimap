@@ -2,7 +2,7 @@ export const FILTER_KEY='crimap-editor-filters-v1';
 export const defaults={search:'',sort:'occurred-desc',publication:'all',review:'all',section:'all',type:'all',homicide:'all',impact:'all',from:'',to:''};
 const choices={sort:['occurred-desc','occurred-asc','received-desc','received-asc'],publication:['all','unpublished','published','live','withdrawn','new','updates'],review:['all','ready','pass','pending','failed','revise','reject'],section:['all','incidents','missing'],type:['all','traffic-accident','assault','fight','robbery','accident','fire','rescue','missing-person','transport-disruption','weather','other'],homicide:['all','only','exclude'],impact:['all','hide-minor','significant','fatal','injured','minor','unknown']};
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
-export function normalizeFilters(value){const result={...defaults};if(!value||typeof value!=='object')return result;for(const [key,options] of Object.entries(choices))if(options.includes(value[key]))result[key]=value[key];if(typeof value.search==='string')result.search=value.search.slice(0,250);for(const key of ['from','to'])if(typeof value[key]==='string'&&validDate(value[key]))result[key]=value[key];return result;}
+export function normalizeFilters(value){const result={...defaults};if(!value||typeof value!=='object')return result;for(const [key,options] of Object.entries(choices))if(options.includes(value[key]))result[key]=value[key];if(typeof value.search==='string')result.search=value.search.slice(0,250);for(const key of ['from','to'])if(typeof value[key]==='string'&&validDate(value[key]))result[key]=value[key];if(result.publication==='live')result.publication='published';return result;}
 export function readFilters(storage){try{return normalizeFilters(JSON.parse(storage.getItem(FILTER_KEY)));}catch{return {...defaults};}}
 export function saveFilters(storage,filters){try{storage.setItem(FILTER_KEY,JSON.stringify(normalizeFilters(filters)));return true;}catch{return false;}}
 export const activeCount=f=>Object.keys(defaults).filter(k=>k!=='sort'&&f[k]!==defaults[k]).length;
@@ -15,7 +15,7 @@ export function filterEvents(events,input){
     if(query&&!`${e.title} ${e.searchText??''}`.toLocaleLowerCase().includes(query))return false;
     if(f.section!=='all'&&(e.eventType==='missing-person')!==(f.section==='missing'))return false;
     if(f.type!=='all'&&e.eventType!==f.type)return false;
-    if(f.publication==='unpublished'&&current||f.publication==='published'&&!current||f.publication==='live'&&!live||f.publication==='new'&&(live||current)||f.publication==='updates'&&(!live||current))return false;
+    if(f.publication==='unpublished'&&live||f.publication==='published'&&!live||f.publication==='live'&&!live||f.publication==='new'&&(live||current)||f.publication==='updates'&&(!live||current))return false;
     if(f.publication==='withdrawn'&&!e.withdrawn_at||f.publication==='new'&&e.withdrawn_at)return false;
     if(f.review==='ready'&&!e.ready||f.review==='pending'&&e.verdict||f.review==='failed'&&!['revise','reject'].includes(e.verdict)||['pass','revise','reject'].includes(f.review)&&e.verdict!==f.review)return false;
     if(f.homicide==='only'&&!flags.homicide||f.homicide==='exclude'&&flags.homicide)return false;

@@ -53,7 +53,7 @@ async function fixture({failSearch=false,empty=false,changeRevision=false}={}) {
     else if(!payload.locationLookup.searched)action={action:'search',queries:[anchor]};
     else if(!payload.locationLookup.candidates.length)action={action:'keep',reason:'Нет однозначного совпадения; оставлен район'};
     else action={action:'select',candidateId:payload.locationLookup.candidates[0].id,reason:'В статье нападение привязано к этой остановке, не к месту задержания'};
-    return opts.validate({...base,verdict:action.action==='keep'?'pass':'revise',locationResolution:action});
+    return opts.validate({...base,verdict:action.action==='keep'?'pass':'revise',final:action.action==='keep'?{}:undefined,locationResolution:action});
   }};
   const pipeline=new Pipeline(store,{reader:{read:async()=>({url:'https://www.police.hu/test',body:`<article>${quote}</article>`})},model:flash,reviewer:pro,preparation:new Preparation(store,{geocoder})});
   await pipeline.ingest('https://www.police.hu/test');await pipeline.prepare(1);

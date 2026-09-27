@@ -14,17 +14,17 @@ export function displayStrings(value) {
   for(const c of value.context??[])for(const e of c.evidence??[])if(e.attribution)strings.add(e.attribution);
   return [...strings].sort();
 }
-export function validateSiteTranslation(raw,language,strings) {
+export function validateSiteTranslation(raw,language,strings,{draft=false}={}) {
   const result=z.object({language:z.literal(language),strings:z.record(z.string().trim().min(1).max(12000))}).strict().parse(raw);
   if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(result.strings).sort()))throw new Error('Site translation paths do not match');
   const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(n=>n.replace(',','.')).sort().join('|');
-  for(const key of Object.keys(strings))if(numbers(strings[key])!==numbers(result.strings[key]))throw new Error(`Site translation changed numbers: ${key}; preserve these numeric tokens exactly: [${numbers(strings[key])}], received [${numbers(result.strings[key])}]. Do not convert digits to words/Roman numerals or change leading zeroes in times.`);
+  for(const key of Object.keys(strings))if(!draft&&numbers(strings[key])!==numbers(result.strings[key]))throw new Error(`Site translation changed numbers: ${key}; preserve these numeric tokens exactly: [${numbers(strings[key])}], received [${numbers(result.strings[key])}]. Do not convert digits to words/Roman numerals or change leading zeroes in times.`);
   return result;
 }
-export async function translateSiteTexts(model,texts,feedback=[]) {
+export async function translateSiteTexts(model,texts,feedback=[],{draft=false}={}) {
   const strings=Object.fromEntries(texts.map((text,i)=>['s'+i,text])),translations={};
   for(const language of ['en','hu']) {
-    const result=await model.json('site-translate',{language,strings,feedback},{maxTokens:8192,validate:raw=>validateSiteTranslation(raw,language,strings)});
+    const result=await model.json('site-translate',{language,strings,feedback},{maxTokens:8192,validate:raw=>validateSiteTranslation(raw,language,strings,{draft})});
     translations[language]=Object.fromEntries(texts.map((text,i)=>[text,result.strings['s'+i]]));
   }
   return translations;
