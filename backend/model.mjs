@@ -43,12 +43,12 @@ export class DeepSeek {
     const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget,new Date().toISOString(),this.campaignId??null);
     try{
       const userContent=images.length?[{type:'text',text:content},...images.map(url=>({type:'image_url',image_url:{url,detail:'low'}}))]:content;
-      const r=await this.fetcher('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify({model:this.model,thinking:{type:'disabled'},messages:[{role:'system',content:prompt+feedback},{role:'user',content:userContent}],response_format:{type:'json_object'},max_tokens:maxTokens,temperature:0}),signal:AbortSignal.timeout(this.model==='deepseek-v4-pro'?240000:90000)});
+      const r=await this.fetcher('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify({model:this.model,thinking:{type:'disabled'},messages:[{role:'system',content:prompt+feedback},{role:'user',content:userContent}],response_format:{type:'json_object'},max_tokens:maxTokens,temperature:0}),signal:AbortSignal.timeout(this.model==='deepseek-v4-pro'?360000:90000)});
       if(!r.ok){let detail='';try{const body=await r.json();detail=String(body.error?.message??'').replaceAll(this.key,'[REDACTED]').slice(0,300);}catch{}const e=new Error(`DeepSeek HTTP ${r.status}${detail?': '+detail:''}`);e.retryAfter=Number(r.headers.get('retry-after'))||0;throw e;}
       const data=await r.json(),usage=data.usage;
       if(usage)this.store.usageDone(id,usage.prompt_tokens??0,usage.completion_tokens??0,((usage.prompt_tokens??0)*prices.input+(usage.completion_tokens??0)*prices.output)/1e6);
       this.guard?.();
-      if(data.choices?.[0]?.finish_reason!=='stop')throw new Error('Model response incomplete');
+      if(data.choices?.[0]?.finish_reason!=='stop')throw new Error(`Model response incomplete (${data.choices?.[0]?.finish_reason??'missing finish reason'}; output tokens: ${usage?.completion_tokens??'unknown'})`);
       let result,raw;
       try{raw=parseJsonResponse(data.choices[0].message.content);result=validate(raw);}
       catch(e){this.store.log('model-validation-failure',cacheKey,{stage,error:e.message,response:data.choices[0].message.content.slice(0,30000)});if(attempt===1){e.validationFailure=true;throw e;}feedback='\nYour previous response failed server validation. Generate a fresh corrected JSON response. Validation error: '+e.message.slice(0,3000);continue;}

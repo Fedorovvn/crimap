@@ -347,7 +347,7 @@ export class Pipeline {
       const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
         proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
-      return this.reviewer.json('review',payload,{maxTokens:14000,validate:raw=>{
+      return this.reviewer.json('review',payload,{maxTokens:28000,validate:raw=>{
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
         assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
         return finalEditorSchema.parse(raw);
