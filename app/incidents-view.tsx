@@ -288,11 +288,11 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     measure();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", measure);
-      return () => window.removeEventListener("resize", measure);
+      return () => { window.removeEventListener("resize", measure); list.style.removeProperty("--mobile-list-end-space"); };
     }
     const observer = new ResizeObserver(measure);
     observer.observe(feed); observer.observe(last);
-    return () => observer.disconnect();
+    return () => { observer.disconnect(); list.style.removeProperty("--mobile-list-end-space"); };
   }, [visibleIncidents, mobileDetailOpen]);
 
   useEffect(() => {
