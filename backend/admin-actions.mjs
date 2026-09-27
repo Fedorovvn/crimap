@@ -1,16 +1,33 @@
 import {DatabaseSync} from 'node:sqlite';
 import {fail} from './editorial.mjs';
+import {interestReasons} from './admin/interest-reasons.mjs';
+import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
+import {nextCheck} from './scheduler.mjs';
 
-export function setEditorialMark(store,id,mark,reviewer){
+export function setEditorialMark(store,id,mark,reviewer,{reasons=[],note='',publicPath=process.env.DATABASE_PATH}={}){
   if(!['normal','uninteresting','priority'].includes(mark))fail(400,'Неизвестная отметка события');
+  if(!Array.isArray(reasons)||reasons.length>10||reasons.some(r=>typeof r!=='string'||!Object.hasOwn(interestReasons,r))||typeof note!=='string'||note.length>2000)fail(400,'Выберите причины из списка; комментарий — до 2000 символов');
+  reasons=mark==='uninteresting'?[...new Set(reasons)]:[];note=mark==='uninteresting'?note.trim():'';
   return store.transaction(()=>{
     const event=store.event(id);if(!event)fail(404,'Событие не найдено');
     if(event.merged_into)fail(409,'Событие уже объединено. Откройте основную карточку');
-    if(event.editorial_mark!==mark){
-      store.db.prepare('UPDATE events SET editorial_mark=? WHERE id=?').run(mark,id);
-      store.log('editorial-mark-changed',id,{before:event.editorial_mark,mark,reviewer});
+    const changed=event.editorial_mark!==mark||event.editorial_reasons!==JSON.stringify(reasons)||event.editorial_note!==note;
+    let stopped=0,queued=false;
+    if(changed){
+      store.db.prepare('UPDATE events SET editorial_mark=?,editorial_reasons=?,editorial_note=? WHERE id=?').run(mark,JSON.stringify(reasons),note,id);
+      if(mark==='uninteresting'){
+        stopped=stopEventJobs(store,id);
+        store.db.prepare('UPDATE events SET next_check_at=NULL WHERE id=?').run(id);
+      }else{
+        if(mark==='priority'||event.editorial_mark==='uninteresting')queued=queueEditorialPreparation(store,id,publicPath);
+        if(event.editorial_mark==='uninteresting'){
+          const next=nextCheck(event);if(next)store.enqueue('recheck',id,{eventId:id},next);
+          for(const doc of store.db.prepare('SELECT DISTINCT d.url,d.published_at FROM ignored_updates i JOIN documents d ON d.id=i.document_id WHERE i.event_id=?').all(id))store.enqueue('article',doc.url,{url:doc.url,publishedAt:doc.published_at,eventId:id,revisitIgnoredEvent:id,campaignId:event.campaign_id});
+        }
+      }
+      store.log('editorial-mark-changed',id,{before:event.editorial_mark,mark,reasons,note,reviewer,stopped,queued});
     }
-    return {id,editorial_mark:mark};
+    return {id,editorial_mark:mark,stopped,queued};
   });
 }
 

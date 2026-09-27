@@ -37,9 +37,12 @@ export function checkLocationResolution(result, documents, lookup) {
 
 // Lookup progress is revision-bound and persisted before network work, so retries
 // resume cached queries without asking Pro to plan the same search again.
+const ensureInterested=(store,id)=>{if(store.event(id)?.editorial_mark==='uninteresting')throw Object.assign(new Error('Обработка события остановлена редактором'),{code:'EDITORIAL_STOP'});};
+
 export async function resolveLocationSearch(store, row, preparation, geocoder) {
   const search = preparation.locationReview;
   for (let i = search.completed ?? 0; i < search.queries.length; i++) {
+    ensureInterested(store,row.id);
     const query = search.queries[i];
     const candidates = await geocoder.landmarks(query, row.canonical.location);
     search.candidates.push(...candidates.map(c => ({...c, anchor: query})));
@@ -53,6 +56,7 @@ export async function resolveLocationSearch(store, row, preparation, geocoder) {
 
 export function saveLocationPreparation(store, row, preparation) {
   store.transaction(() => {
+    ensureInterested(store,row.id);
     if (store.event(row.id)?.revision !== row.revision) throw new Error('Event changed during location review');
     store.db.prepare('UPDATE preparation SET payload=? WHERE event_id=? AND revision=?').run(JSON.stringify(preparation), row.id, row.revision);
   });
@@ -71,6 +75,7 @@ export function applyReviewedLocation(store, row, preparation, candidate, reason
   preparation.geocoding = {...candidate, provider:candidate.provider==='osm-geometry'?'osm-geometry-pro-reviewed':'photon-pro-reviewed', reason};
   preparation.locationReview = {...preparation.locationReview, applied:true, selectedCandidateId:candidate.id};
   store.transaction(() => {
+    ensureInterested(store,row.id);
     if (store.event(row.id)?.revision !== row.revision) throw new Error('Event changed during location review');
     store.db.prepare("UPDATE events SET canonical=?,revision=?,state='draft',review_reason='Pro уточнила место по источнику; готовятся переводы и повторная проверка' WHERE id=?").run(JSON.stringify(event), revision, row.id);
     store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(row.id, revision, JSON.stringify(event), 'pro-location-resolution', now);

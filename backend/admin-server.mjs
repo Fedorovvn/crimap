@@ -51,7 +51,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         res.setHeader('Set-Cookie',cookie(token));return send(200,{csrf,reviewer});
       }
       // The shell contains no private data. Every API except login requires a valid session.
-      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
+      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/interest-reasons.mjs':['interest-reasons.mjs','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
       if (assets[path] && req.method==='GET') return send(200,readFileSync(new URL('./admin/'+assets[path][0],import.meta.url)),assets[path][1]);
       const token=req.headers.cookie?.match(/(?:^|;\s*)crimap_editor=([a-f0-9]{64})(?:;|$)/)?.[1];
       const session=token&&store.db.prepare('SELECT * FROM admin_sessions WHERE token_hash=? AND expires_at>?').get(hash(token),Date.now());
@@ -100,9 +100,10 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       const id=Number(match[1]),action=match[2];
       if(!action&&req.method==='GET')return send(200,eventDetail(store,id,publicPath));
       if(!action||req.method!=='POST')fail(405,'Метод недоступен');
-      if(action==='mark')return send(200,setEditorialMark(store,id,body.mark,reviewer));
+      if(action==='mark')return send(200,setEditorialMark(store,id,body.mark,reviewer,{reasons:body.reasons,note:body.note,publicPath}));
       if(action==='save')return send(200,reviseEvent(store,id,body,reviewer));
       const event=eventDetail(store,id,publicPath);
+      if(['review','translate','recheck'].includes(action)&&event.editorial_mark==='uninteresting')fail(409,'Сначала верните событие из неинтересных');
       if(body.revision!==event.revision)fail(409,'Есть новая версия события. Обновите страницу.');
       if(action==='withdraw'){if(body.confirm!==true)fail(400,'Подтвердите снятие с публикации');return send(200,withdraw(store,id,publicPath,{revision:body.revision,reviewer}));}
       if(action==='publish'){

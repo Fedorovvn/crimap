@@ -11,6 +11,8 @@ export class Preparation{
     try{const event=db.prepare('SELECT * FROM incidents WHERE slug=?').get(row.slug);return event?{...event,media:db.prepare('SELECT * FROM incident_media WHERE incident_id=?').all(event.id)}:null;}finally{db.close();}
   }
   async enrich(row,documents){
+    const guard=()=>{if(this.store.event(row.id)?.editorial_mark==='uninteresting')throw Object.assign(new Error('Обработка события остановлена редактором'),{code:'EDITORIAL_STOP'});};
+    guard();
     const event=structuredClone(row.canonical),existing=this.published(row),notes=[];
     let geocoding=null;
     if(event.location.latitude===undefined){
@@ -21,6 +23,7 @@ export class Preparation{
       }else geocoding=await this.geocoder.locate(event.location);
       Object.assign(event.location,{latitude:geocoding.latitude,longitude:geocoding.longitude,precision:geocoding.precision});
     }else geocoding={provider:'source-or-editor',latitude:event.location.latitude,longitude:event.location.longitude,precision:event.location.precision};
+    guard();
     // Text-only Flash repairs must not discard the evidence for an unchanged
     // Pro-resolved map point or reopen the same paid location search.
     const previous=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision<=? ORDER BY revision DESC LIMIT 1').get(row.id,row.revision);
@@ -43,6 +46,7 @@ export class Preparation{
     // Only source-observed images may enter new media; previously published images are preserved separately.
     const eligible=[],mediaIndexes=new Map();
     for(const [oldIndex,m] of event.media.entries()){
+      guard();
       const observed=documents.some(d=>d.url===m.sourceUrl&&d.imageUrls.includes(m.imageUrl));
       if(!observed){notes.push('Фото исключено: ссылка не найдена в прочитанном источнике');continue;}
       try{await this.checkUrl(m.imageUrl);mediaIndexes.set(oldIndex,eligible.length);eligible.push(m);}catch{notes.push('Фото исключено: недоступный или непубличный адрес');}

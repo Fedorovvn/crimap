@@ -1,5 +1,6 @@
-import {matchCandidates} from './dedup.mjs';
+import {matchCandidates,compareBrief} from './dedup.mjs';
 import {setPublicHidden} from './admin-actions.mjs';
+import {stopEventJobs} from './editorial-workflow.mjs';
 
 // Existing records use the same cheap candidate selection and Flash merge as
 // incoming sources. Originals and revision histories remain recoverable.
@@ -18,7 +19,12 @@ export async function consolidate(pipeline,{limit=30}={}){
       pipeline.model.campaignId=pipeline.campaignId;
       const documents=[...new Map([...pipeline.eventDocuments(target.id),...pipeline.eventDocuments(duplicate.id)].map(d=>[`${d.id}:${d.contentHash}`,d])).values()];
       let result;
-      try{result=await pipeline.merge(target.canonical,duplicate.canonical,documents);}
+      try{
+        if([target,duplicate].some(e=>e.editorial_mark==='uninteresting')){
+          const comparison=await compareBrief(pipeline.model,duplicate.canonical,[target]);
+          result={sameEvent:comparison.decision!=='new',hasNewInformation:false,reason:comparison.reason};
+        }else result=await pipeline.merge(target.canonical,duplicate.canonical,documents);
+      }
       catch(e){
         if(/budget reached/i.test(e.message))throw e;
         store.log('merge-needs-retry',target.id,{duplicateId:duplicate.id,error:e.message});
@@ -28,8 +34,14 @@ export async function consolidate(pipeline,{limit=30}={}){
       store.transaction(()=>{
         if(store.event(target.id).revision!==target.revision||store.event(duplicate.id).revision!==duplicate.revision||store.event(duplicate.id).merged_into)throw new Error('Event changed during consolidation');
         store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) SELECT ?,document_id,content_hash,extracted,created_at FROM observations WHERE event_id=?').run(target.id,duplicate.id);
+        store.db.prepare('INSERT OR IGNORE INTO ignored_updates SELECT ?,document_id,content_hash,brief,reason,created_at FROM ignored_updates WHERE event_id=?').run(target.id,duplicate.id);
+        const ignored=[store.event(target.id),store.event(duplicate.id)].find(e=>e.editorial_mark==='uninteresting');
+        if(ignored){
+          store.db.prepare("UPDATE events SET editorial_mark='uninteresting',editorial_reasons=?,editorial_note=?,next_check_at=NULL WHERE id=?").run(ignored.editorial_reasons,ignored.editorial_note,target.id);
+          stopEventJobs(store,target.id);
+        }else if(duplicate.editorial_mark==='priority')store.db.prepare("UPDATE events SET editorial_mark='priority' WHERE id=?").run(target.id);
         if(pipeline.campaignId)store.db.prepare('UPDATE events SET campaign_id=coalesce(campaign_id,?) WHERE id=?').run(pipeline.campaignId,target.id);
-        if(result.hasNewInformation){
+        if(result.hasNewInformation&&!ignored){
           const revision=target.revision+1,now=new Date().toISOString();
           store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',auto_repairs=0,review_reason='Merged sources; awaiting content review' WHERE id=?").run(JSON.stringify(result.event),result.event.occurredAt,revision,target.id);
           store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(target.id,revision,JSON.stringify(result.event),'merged-from-'+duplicate.id,now);
@@ -37,6 +49,7 @@ export async function consolidate(pipeline,{limit=30}={}){
         }
         if(duplicate.public_id&&duplicate.public_id!==target.public_id)setPublicHidden(pipeline.publicPath,duplicate.slug,true);
         store.db.prepare("UPDATE events SET merged_into=?,state='merged',next_check_at=NULL WHERE id=?").run(target.id,duplicate.id);
+        stopEventJobs(store,duplicate.id);
         store.db.prepare("UPDATE jobs SET state='done',rerun=0 WHERE json_extract(payload,'$.eventId')=? AND state!='running'").run(duplicate.id);
         store.log('events-merged',target.id,{duplicateId:duplicate.id,reason:result.reason,hasNewInformation:result.hasNewInformation});
       });

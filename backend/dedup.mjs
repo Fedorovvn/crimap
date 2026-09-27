@@ -31,11 +31,17 @@ export async function identify(model,doc){
   }});
 }
 export async function compareBrief(model,incoming,candidates){
-  const shortlist=candidates.slice(0,4);
-  if(!shortlist.length)return {decision:'new'};
-  return model.json('compare',{incoming,candidates:shortlist.map(r=>({id:r.id,published:!!r.public_id,sourceKinds:r.sourceKinds,event:Object.fromEntries(Object.entries(r.canonical).filter(([key])=>!['evidence','media'].includes(key)))}))},{maxTokens:700,validate:raw=>{
-    const r=z.object({decision:z.enum(['new','repeat','update']),eventId:z.number().int().optional(),reason:z.string()}).strict().parse(raw);
-    if(r.decision!=='new'&&!shortlist.some(e=>e.id===r.eventId))throw new Error('Unknown duplicate candidate');
-    return r;
-  }});
+  // Check ignored identities first so an older visible duplicate cannot bypass
+  // the editor's decision. Reasons are deliberately absent from the model input.
+  const groups=[candidates.filter(e=>e.editorial_mark==='uninteresting'),candidates.filter(e=>e.editorial_mark!=='uninteresting')];
+  for(const group of groups)for(let offset=0;offset<group.length;offset+=4){
+    const shortlist=group.slice(offset,offset+4);
+    const result=await model.json('compare',{incoming,candidates:shortlist.map(r=>({id:r.id,published:!!r.public_id,sourceKinds:r.sourceKinds,event:Object.fromEntries(Object.entries(r.canonical).filter(([key])=>!['evidence','media'].includes(key)))}))},{maxTokens:700,validate:raw=>{
+      const r=z.object({decision:z.enum(['new','repeat','update']),eventId:z.number().int().optional(),reason:z.string()}).strict().parse(raw);
+      if(r.decision!=='new'&&!shortlist.some(e=>e.id===r.eventId))throw new Error('Unknown duplicate candidate');
+      return r;
+    }});
+    if(result.decision!=='new')return result;
+  }
+  return {decision:'new'};
 }

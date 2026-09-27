@@ -18,6 +18,7 @@ export class DeepSeek {
     this.store=store;this.key=key;this.model=model;this.budget=budget;this.fetcher=fetcher;
   }
   async json(stage,payload,{maxTokens=8192,validate=x=>x}={}){
+    this.guard?.();
     if(this.model==='deepseek-v4-pro'&&stage!=='review')throw new Error('Pro is reserved for final publication review');
     if(!this.key)throw new Error('DEEPSEEK_API_KEY is not configured');
     const instruction=readFileSync(new URL(`./prompts/${stage}.md`,import.meta.url),'utf8');
@@ -31,6 +32,7 @@ export class DeepSeek {
     if(!prices)throw new Error('Model has no configured spending tariff');
     let feedback='';
     for(let attempt=0;attempt<2;attempt++){
+    this.guard?.();
     const reserve=(Buffer.byteLength(prompt+content+feedback)*prices.input+maxTokens*prices.output)/1e6;
     const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget,new Date().toISOString(),this.campaignId??null);
     try{
@@ -38,6 +40,7 @@ export class DeepSeek {
       if(!r.ok){let detail='';try{const body=await r.json();detail=String(body.error?.message??'').replaceAll(this.key,'[REDACTED]').slice(0,300);}catch{}const e=new Error(`DeepSeek HTTP ${r.status}${detail?': '+detail:''}`);e.retryAfter=Number(r.headers.get('retry-after'))||0;throw e;}
       const data=await r.json(),usage=data.usage;
       if(usage)this.store.usageDone(id,usage.prompt_tokens??0,usage.completion_tokens??0,((usage.prompt_tokens??0)*prices.input+(usage.completion_tokens??0)*prices.output)/1e6);
+      this.guard?.();
       if(data.choices?.[0]?.finish_reason!=='stop')throw new Error('Model response incomplete');
       let result;
       try{result=validate(parseJsonResponse(data.choices[0].message.content));}

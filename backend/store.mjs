@@ -19,6 +19,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS document_versions(id INTEGER PRIMARY KEY,document_id INTEGER NOT NULL REFERENCES documents(id),content_hash TEXT NOT NULL,text TEXT NOT NULL,title TEXT NOT NULL,language TEXT NOT NULL,image_urls TEXT NOT NULL,fetched_at TEXT NOT NULL,UNIQUE(document_id,content_hash));
       CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,slug TEXT NOT NULL UNIQUE,first_seen_at TEXT NOT NULL,occurred_at TEXT,canonical TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'draft',review_reason TEXT,next_check_at TEXT,last_checked_at TEXT,revision INTEGER NOT NULL DEFAULT 1,published_revision INTEGER,public_id INTEGER);
       CREATE TABLE IF NOT EXISTS observations(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL REFERENCES events(id),document_id INTEGER NOT NULL REFERENCES documents(id),content_hash TEXT NOT NULL,extracted TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,document_id,content_hash));
+      CREATE TABLE IF NOT EXISTS ignored_updates(event_id INTEGER NOT NULL REFERENCES events(id),document_id INTEGER NOT NULL REFERENCES documents(id),content_hash TEXT NOT NULL,brief TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,document_id,content_hash));
       CREATE TABLE IF NOT EXISTS event_revisions(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,revision));
       CREATE TABLE IF NOT EXISTS translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,language TEXT NOT NULL,payload TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision,language));
       CREATE TABLE IF NOT EXISTS model_cache(cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -41,16 +42,20 @@ export class Store {
     if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name==='auto_repairs'))this.db.exec('ALTER TABLE events ADD COLUMN auto_repairs INTEGER NOT NULL DEFAULT 0');
     for(const column of ['merged_into INTEGER','withdrawn_at TEXT'])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
     if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name==='editorial_mark'))this.db.exec("ALTER TABLE events ADD COLUMN editorial_mark TEXT NOT NULL DEFAULT 'normal' CHECK(editorial_mark IN ('normal','uninteresting','priority'))");
+    for(const column of ["editorial_reasons TEXT NOT NULL DEFAULT '[]'","editorial_note TEXT NOT NULL DEFAULT ''"])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
+    this.db.exec("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE state IN ('queued','running','paused','failed') AND json_extract(payload,'$.eventId') IN (SELECT id FROM events WHERE editorial_mark='uninteresting'); UPDATE events SET next_check_at=NULL WHERE editorial_mark='uninteresting'");
   }
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const out=fn();this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
   log(action,subject,detail){this.db.prepare('INSERT INTO audit(action,subject,detail,created_at) VALUES(?,?,?,?)').run(action,String(subject??''),JSON.stringify(detail),new Date().toISOString());}
   enqueue(kind,key,payload={},due=new Date().toISOString()){
     const event=payload.eventId?this.event(payload.eventId):null;
+    if(event?.editorial_mark==='uninteresting')return false;
     payload={...payload,...jobBudget(kind,payload,event)};
     // An explicit retry of completed archive work resumes that same campaign,
     // never the daily allowance. reserveCost still enforces its original cap.
     if(payload.campaignId)this.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(payload.campaignId);
-    this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at) VALUES(?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE 'queued' END`).run(kind,String(key),JSON.stringify(payload),due);
+    const state=payload.campaignId&&this.db.prepare('SELECT state FROM campaigns WHERE id=?').get(payload.campaignId)?.state==='budget-exhausted'?'paused':'queued';
+    this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at,state) VALUES(?,?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE excluded.state END`).run(kind,String(key),JSON.stringify(payload),due,state);
   }
   claim(now=new Date().toISOString(),kinds=null){
     if(kinds&&(!kinds.length||kinds.some(k=>typeof k!=='string')))throw new Error('Invalid job kind filter');
@@ -59,7 +64,7 @@ export class Store {
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on
     // half-finished drafts. Due times still govern retries and rate limits.
-    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} ORDER BY CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'repair' THEN 2 WHEN 'prepare' THEN 3 WHEN 'translate' THEN 4 WHEN 'localize' THEN 5 WHEN 'review' THEN 6 ELSE 7 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
+    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='uninteresting') ORDER BY CASE WHEN kind!='recheck' AND EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='priority') THEN 0 ELSE 1 END,CASE WHEN json_extract(payload,'$.revisitIgnoredEvent') IS NOT NULL THEN 0 ELSE 1 END,CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'gather' THEN 2 WHEN 'repair' THEN 3 WHEN 'prepare' THEN 4 WHEN 'translate' THEN 5 WHEN 'localize' THEN 6 WHEN 'review' THEN 7 ELSE 8 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
     return row?{...row,payload:JSON.parse(row.payload)}:null;
   }
   heartbeat(job){return this.db.prepare("UPDATE jobs SET lease_until=? WHERE id=? AND lease_token=? AND state='running'").run(new Date(Date.now()+15*60_000).toISOString(),job.id,job.lease_token).changes===1;}
