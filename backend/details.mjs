@@ -28,7 +28,9 @@ export async function completeDetails(model,event,documents,laws,validate){
   const raw=await model.json('details',{schema:zodToJsonSchema(detailsSchema),event,documents,verifiedLawCatalog:laws},{maxTokens:10000,validate:raw=>{
     const result=detailsSchema.parse(raw);
     validateDetailLanguage(result);
-    if(result.evidence.some(e=>!detailPath(e.field)))throw new Error('Detail completion evidence may only reference participants, context or legal');
+    // Some responses echo source evidence from the input. Only the replacement
+    // fields belong to this stage; original evidence for other fields stays intact.
+    result.evidence=result.evidence.filter(e=>detailPath(e.field));
     const combined={...structuredClone(event),participants:result.participants,context:result.context,legal:result.legal,evidence:[...event.evidence.filter(e=>!detailPath(e.field)),...result.evidence]};
     validateLegalLinks(combined);
     if((result.coverage.legal==='mapped')!==Boolean(combined.legal.length))throw new Error('Legal coverage must agree with mapped assessments');

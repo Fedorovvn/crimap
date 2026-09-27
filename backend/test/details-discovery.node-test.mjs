@@ -43,6 +43,9 @@ test('detail enrichment preserves geometry and other fields, requires quotes and
  const result=await completeDetails(model,event,[doc],[],validate);
  assert.deepEqual(result.event.location,event.location);assert.equal(result.event.summary,event.summary);assert.equal(result.event.participants[0].note,participant.note);
  assert.notEqual(result.fingerprint,detailFingerprint(event,[doc],[]));
+ response.evidence.push({field:'title',documentId:'1',quote:'Untrusted extra title evidence'});
+ const echoed=await completeDetails(model,event,[doc],[],validate);
+ assert.deepEqual(echoed.event.evidence.filter(e=>e.field==='title'),event.evidence.filter(e=>e.field==='title'));
  response={...response,evidence:[]};await assert.rejects(completeDetails(model,event,[doc],[],validate),/Missing evidence/);
  assert.throws(()=>validateLegalLinks({...result.event,legal:[{}]}),/participantKey/);
  assert.throws(()=>validateLegalLinks({...result.event,participants:[{...participant,role:'victim'}],legal:[{participantKey:'suspect'}]}),/victim/);
