@@ -1,3 +1,4 @@
+import { formatEnglishDistricts } from './district-format';
 export type Locale = 'ru' | 'en' | 'hu';
 export const localeNames = { ru: 'Русский', en: 'English', hu: 'Magyar' };
 export const dateLocales = { ru: 'ru-RU', en: 'en-GB', hu: 'hu-HU' };
@@ -116,9 +117,12 @@ export function translate(text: string, locale: Locale, values: Record<string, s
   for (const [key, value] of Object.entries(values)) result = result.replaceAll(`{${key}}`, String(value));
   return result;
 }
-export function translateContent<T>(value: T, locale: Locale, translations: Record<string, string> = {}): T {
-  if (typeof value === 'string') return (locale === 'ru' ? value : translations[value] ?? translate(value, locale)) as T;
+export function translateContent<T>(value: T, locale: Locale, translations: Record<string, string> = {}, field?: string): T {
+  if (typeof value === 'string') {
+    const text = locale === 'ru' ? value : translations[value] ?? translate(value, locale);
+    return (locale === 'en' ? formatEnglishDistricts(text, field === 'district') : text) as T;
+  }
   if (Array.isArray(value)) return value.map(item => translateContent(item, locale, translations)) as T;
-  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'translations').map(([key, item]) => [key, ['role','kind','gender','code','key','eventType','signals','origin','topic','qualification','stage','reviewStatus','unit','statuteMatch','sourceUrl','imageUrl','url','act','section','slug'].includes(key)||(key==='status'||key==='verification')&&typeof item==='string'&&/^[a-z-]+$/.test(item)?item:translateContent(item, locale, translations)])) as T;
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([key]) => key !== 'translations').map(([key, item]) => [key, ['role','kind','gender','code','key','eventType','signals','origin','topic','qualification','stage','reviewStatus','unit','statuteMatch','sourceUrl','imageUrl','url','act','section','slug'].includes(key)||(key==='status'||key==='verification')&&typeof item==='string'&&/^[a-z-]+$/.test(item)?item:translateContent(item, locale, translations, key)])) as T;
   return value;
 }
