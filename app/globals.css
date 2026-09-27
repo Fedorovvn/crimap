@@ -673,7 +673,17 @@ body {
 
 @media (max-width: 767px) and (orientation: portrait) {
   .signal-shell[data-mobile-detail="true"] .mobile-incidents-workspace > .map-frame {
-    flex-basis: 33dvh;
+    flex-basis: clamp(25dvh, calc(33dvh - var(--mobile-detail-scroll, 0px)), 33dvh);
+  }
+  .signal-shell[data-mobile-detail="true"] .mobile-incident-feed {
+    overflow-anchor: none;
+  }
+  .signal-shell[data-mobile-detail="true"] .mobile-incident-detail {
+    /* First consume the gesture by collapsing the map, then scroll the story.
+       Reserve the offset in the flow so the final source stays reachable. */
+    --map-collapse: min(var(--mobile-detail-scroll, 0px), 8dvh);
+    transform: translateY(var(--map-collapse));
+    margin-bottom: var(--map-collapse);
   }
   .mobile-map-summary {
     top: 1rem;

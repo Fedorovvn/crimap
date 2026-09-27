@@ -265,9 +265,15 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [preselectedSlug, setPreselectedSlug] = useState(incidents[0]?.slug ?? "");
   const feedRef = useRef<HTMLDivElement>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
   const selected = selectVisibleIncident(visibleIncidents, selectedSlug);
   const activeMarkerSlug = mobileDetailOpen ? (selected?.slug ?? "") : preselectedSlug;
+
+  useEffect(() => {
+    workspaceRef.current?.style.setProperty("--mobile-detail-scroll", "0px");
+    if (mobileDetailOpen && feedRef.current) feedRef.current.scrollTop = 0;
+  }, [mobileDetailOpen, selected?.slug]);
 
   useEffect(() => {
     const savedTheme = window.localStorage.getItem("budapest-signal-theme");
@@ -329,6 +335,14 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     return () => window.cancelAnimationFrame(frame);
   }, [updatePreselectedIncident]);
 
+  function updateFeedScroll() {
+    if (mobileDetailOpen) {
+      // Keep scroll-linked sizing outside React so the map does not rerender
+      // on every gesture. CSS limits the collapse to 8% of the viewport.
+      workspaceRef.current?.style.setProperty("--mobile-detail-scroll", `${Math.max(0, feedRef.current?.scrollTop ?? 0)}px`);
+    } else updatePreselectedIncident();
+  }
+
   return (
     <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] md:block md:h-auto md:min-h-screen md:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
@@ -357,7 +371,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       </header>
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
-        <div className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
+        <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
           <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[500px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
             <div className="map-controls absolute left-4 top-4 z-[1100] flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" aria-label={t('Период событий')}>
@@ -387,7 +401,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             )}
           </section>
 
-          <div ref={feedRef} onScroll={updatePreselectedIncident} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:contents" data-testid="incident-feed">
+          <div ref={feedRef} onScroll={updateFeedScroll} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:contents" data-testid="incident-feed">
             <aside className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label={t("Лента происшествий")}>
               {visibleIncidents.length ? (
                 visibleIncidents.map((incident) => (
