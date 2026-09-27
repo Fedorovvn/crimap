@@ -61,10 +61,10 @@ export function publicationChanges(before,after){
       if(path==='signals')return add();
       // Stable identities prevent every subsequent item looking changed after
       // an insertion. Timeline entries without keys are matched by position.
-      const identity=v=>v?.key??v?.imageUrl??v?.url;
+      const identity=v=>v?.key??v?.imageUrl??v?.url??v?.publishedAt;
       if([...a,...b].every(v=>identity(v))&&new Set(a.map(identity)).size===a.length&&new Set(b.map(identity)).size===b.length){
         const am=new Map(a.map(v=>[identity(v),v])),bm=new Map(b.map(v=>[identity(v),v]));
-        for(const key of new Set([...am.keys(),...bm.keys()])){const item=bm.get(key)??am.get(key);walk(am.get(key),bm.get(key),`${path}.${encodeURIComponent(key)}`,[...labels,item.label??item.offense??item.caption??item.outlet??String(key)],group);}
+        for(const key of new Set([...am.keys(),...bm.keys()])){const item=bm.get(key)??am.get(key);walk(am.get(key),bm.get(key),`${path}.${encodeURIComponent(key)}`,[...labels,item.label??(item.offense?[item.offense,item.subjectLabel].filter(Boolean).join(' · '):null)??item.caption??item.outlet??item.text?.slice(0,90)??String(key)],group);}
       }else for(let i=0;i<Math.max(a.length,b.length);i++)walk(a[i],b[i],`${path}.${i}`,[...labels,String(i+1)],group);
     }else if(a&&b&&typeof a==='object'&&typeof b==='object'){
       for(const key of new Set([...Object.keys(a),...Object.keys(b)]))walk(a[key],b[key],path?`${path}.${key}`:key,[...labels,changeLabels[key]??key],group??groupFor(key));

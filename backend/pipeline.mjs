@@ -240,7 +240,10 @@ export class Pipeline {
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
-      const payload={schema:zodToJsonSchema(finalEditorSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
+      let outputSchema=finalEditorSchema;
+      if(enabled&&!locationLookup.applied)outputSchema=outputSchema.required({locationResolution:true});
+      if(published)outputSchema=outputSchema.required({publicationSummary:true});
+      const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
         proposedPublicationChanges:comparisonFor(published,russian,docs,preparation,translations)?.changes??[]};
       return this.reviewer.json('review',payload,{maxTokens:14000,validate:raw=>{

@@ -47,7 +47,7 @@ async function fixture({failSearch=false,empty=false,changeRevision=false}={}) {
   const geocoder=new Geocoder(store,{delayMs:0,request:async()=>{searches++;if(failSearch&&searches===1)throw new Error('Temporary map outage');if(changeRevision)store.db.prepare('UPDATE events SET revision=revision+1 WHERE id=1').run();return {status:200,body:JSON.stringify({features:empty?[]:[feature()]})};}});
   geocoder.locate=async()=>({latitude:47.5021998,longitude:19.0751535,precision:'district',provider:'photon'});
   const pro={model:'deepseek-v4-pro',json:async(stage,payload,opts)=>{
-    calls++;assert.equal(stage,'review');
+    calls++;assert.equal(stage,'review');if(!payload.locationLookup.applied)assert.ok(payload.schema.required.includes('locationResolution'));
     let action;
     if(payload.locationLookup.applied)action={action:'keep',reason:'Остановка подтверждена'};
     else if(!payload.locationLookup.searched)action={action:'search',queries:[anchor]};
