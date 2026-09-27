@@ -7,10 +7,21 @@ import {compareBrief} from '../dedup.mjs';
 import {DeepSeek} from '../model.mjs';
 import {displayStrings} from '../site-localization.mjs';
 import {consolidate} from '../consolidate.mjs';
+import {queueEditorialPreparation} from '../editorial-workflow.mjs';
 const now='2026-09-20T12:00:00Z';
 const event={title:'Man stabbed at Wesselényi utca in Budapest',summary:'A man was stabbed at Wesselényi utca in Budapest. Police are investigating.',type:'assault',status:'investigating',occurredAt:now,timePrecision:'day',location:{city:'Budapest',label:'Wesselényi utca',district:'VII',precision:'street',latitude:47.5,longitude:19.06},signals:[],caseReferences:[],participants:[],updates:[],media:[],context:[],legal:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote:'A man was stabbed at Wesselényi utca in Budapest. Police are investigating.'}))};
 const insert=(s,id=1,value=event)=>s.db.prepare('INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical) VALUES(?,?,?,?,?)').run(id,'incident-'+id,now,value.occurredAt,JSON.stringify(value));
 const job=(s,key)=>s.db.prepare('SELECT * FROM jobs WHERE job_key=?').get(key);
+
+test('a completed rejection is not automatically retried just because the event has priority',()=>{
+ const s=new Store(':memory:');try{
+  insert(s);s.db.prepare("UPDATE events SET editorial_mark='priority'").run();
+  s.db.prepare('INSERT INTO quality_reviews VALUES(1,1,?,?,?)').run('pro',JSON.stringify({verdict:'reject',summary:'Источник описывает другое событие.'}),now);
+  assert.equal(queueEditorialPreparation(s,1),false);assert.equal(s.db.prepare('SELECT count(*) n FROM jobs').get().n,0);
+  s.db.prepare('UPDATE events SET revision=2').run();
+  assert.equal(queueEditorialPreparation(s,1),true);
+ }finally{s.close();}
+});
 
 test('manual rebuild preserves preparation, resets failed translations and is idempotent',()=>{
  const s=new Store(':memory:');try{

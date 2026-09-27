@@ -18,6 +18,7 @@ const actions={
 const eventActions=new Set(['publication-update-compared','repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred','editorial-retry','review-auto-corrected']);
 export function readableError(text){
  if(!text)return null;
+ if(/Final editor must APPLY/.test(text))return 'Pro автоматически исправляет карточку. Ручные правки не требуются; повторная обработка запланирована.';
  if(/budget reached/i.test(text))return 'Недостаточно общего бюджета для следующего запроса. Увеличьте лимит и нажмите «Сохранить и продолжить».';
  if(/geocoder daily/i.test(text))return 'Сработал прежний суточный лимит координат. Этот лимит отменён; запись сохранена для истории.';
  if(/429|rate.limit/i.test(text))return 'Сервис временно ограничил частоту запросов.';

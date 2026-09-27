@@ -6,6 +6,18 @@ import {recoverArchive} from '../archive-recovery.mjs';
 const campaign=s=>s.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,created_at) VALUES(?,?,?,?,?)').run('archive','2026-07-01','2026-09-26',15,'2026-09-26');
 const event={title:'Robbery in Budapest',summary:'Police reported a robbery in Budapest.',type:'robbery',status:'investigating',occurredAt:'2026-09-20T12:00:00Z',timePrecision:'day',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote:'Police reported a robbery in Budapest.'}))};
 function seed(s,id=1){s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,campaign_id) VALUES(?,?,?,?,?)').run(id,'test-'+id,'2026-09-26',JSON.stringify(event),'archive');}
+
+test('final editing keeps retrying after the archive attempt cap without rejecting the article',async()=>{
+ const s=new Store(':memory:');try{
+  campaign(s);seed(s);s.enqueue('review','1:1',{eventId:1,revision:1,campaignId:'archive'});
+  s.db.prepare("UPDATE jobs SET attempts=3,due_at='2026-01-01'").run();
+  const p=new Pipeline(s,{model:{},reviewer:{}});p.review=async()=>{throw new Error('Final editor must APPLY corrections');};
+  await p.runOne();const job=s.db.prepare("SELECT * FROM jobs WHERE kind='review'").get();
+  assert.equal(job.state,'queued');assert.equal(job.attempts,4);assert.ok(Date.parse(job.due_at)>Date.now());
+  assert.equal(s.db.prepare('SELECT count(*) n FROM quality_reviews').get().n,0);
+  assert.equal(s.event(1).state,'draft');
+ }finally{s.close();}
+});
 test('legacy retries inherit archive allowance despite exhausted daily budget; explicit new work stays daily',async()=>{
  const s=new Store(':memory:');try{campaign(s);seed(s);s.reserveCost('test','flash','daily',.5,.5);
   s.db.prepare("INSERT INTO jobs(kind,job_key,payload,due_at) VALUES('review','1:1',?,?)").run(JSON.stringify({eventId:1,campaignId:null}),'2026-01-01');

@@ -440,6 +440,9 @@ export class Pipeline {
         proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[]),flashUpdateAssessment:updateAssessment};
       return this.reviewer.json('review',payload,{maxTokens:28000,validate:async response=>{
         let raw=normalizeFinalResponse(response,event.canonical,russian);
+        if(raw.verdict==='revise'&&!['search','select'].includes(raw.locationResolution?.action)){
+          throw new Error('Final editor must APPLY these corrections itself and return pass with the corrected final card, or reject only for unsuitable/fundamentally unsupported news. Do not leave a revise verdict for the owner. Findings: '+JSON.stringify({summary:raw.summary,issues:raw.issues}).slice(0,2200));
+        }
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
         const context={event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)};
         try{assembleFinal(raw,context);}catch(error){
@@ -582,7 +585,7 @@ export class Pipeline {
         this.store.log('campaign-budget-stop',this.campaignId,{error:e.message});return true;
       }
       const event=job.kind==='recheck'?this.store.event(job.payload.eventId):null;
-      if(this.campaignId&&job.attempts>=3){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId,budgetScope:this.budgetScope});this.archive?.settle();return true;}
+      if(this.campaignId&&job.attempts>=3&&!['review','repair'].includes(job.kind)){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId,budgetScope:this.budgetScope});this.archive?.settle();return true;}
       const retired=event&&intervalFor(event)===null;
       const budgetWait=/Daily (model budget|search limit)/.test(e.message)?Date.parse(new Date(Date.now()+86400000).toISOString().slice(0,10)+'T00:00:30Z')-Date.now():null;
       this.store.finish(job,retired?null:new Date(Date.now()+(budgetWait??retryDelay(job.attempts,e.retryAfter))).toISOString(),e.message);

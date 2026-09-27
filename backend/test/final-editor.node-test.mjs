@@ -5,6 +5,7 @@ import { Pipeline } from '../pipeline.mjs';
 import { assembleFinal,sourceExcerpts,assertSupportedDetention } from '../final-editor.mjs';
 import { applyTranslation,translationStrings,validateEvidence,eventSchema } from '../contract.mjs';
 import { displayStrings } from '../site-localization.mjs';
+import {DeepSeek} from '../model.mjs';
 const quote='A man was stabbed on a Budapest tram. Service was interrupted. The police are investigating.';
 const doc={id:'1',url:'https://www.police.hu/test',title:'Stabbing on a tram',text:quote,sourceKind:'official',imageUrls:[]};
 const event={title:'Tram service interrupted',summary:'Service was interrupted after a stabbing.',type:'transport-disruption',status:'resolved',occurredAt:'2026-09-20T12:00:00Z',timePrecision:'day',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote}))};
@@ -14,6 +15,25 @@ const context={event,russian,translations,documents:[doc],validateEvent:e=>valid
 const changed={...event,title:'Man stabbed on a tram',summary:'A man was stabbed on a Budapest tram. Police are investigating.',type:'assault',status:'investigating'};
 const final={event:changed,russian:{title:'Нападение с ножом в трамвае',summary:'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.'},siteTranslations:{en:{'Нападение с ножом в трамвае':changed.title,'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':changed.summary},hu:{'Нападение с ножом в трамвае':'Késelés egy villamoson','В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':'Egy férfit megszúrtak egy budapesti villamoson. A rendőrség nyomoz.'}}};
 const result={legalCoverage:{status:'no-suspect',reason:'В источнике нет описания подозреваемого для правовой оценки.',participants:[]},verdict:'pass',summary:'Исправлены категория, статус и переводы',issues:[],requests:[],final};
+
+test('a revise-only answer returns to Pro for correction instead of becoming a terminal review',async()=>{
+ const s=new Store(':memory:');try{
+  const saved=s.saveDocument({...doc,sourceId:'police'});
+  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('tram','2026-09-26',JSON.stringify(event));
+  s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(1,saved.id,saved.contentHash,JSON.stringify(event),'2026-09-26');
+  s.db.prepare('INSERT INTO translations VALUES(1,1,?,?,?,?)').run('ru',JSON.stringify(russian),'flash','2026-09-26');
+  s.db.prepare('INSERT INTO site_translations VALUES(1,1,?,?)').run(JSON.stringify(translations),'2026-09-26');
+  let calls=0;
+  const reviewer=new DeepSeek(s,{key:'fixture',model:'deepseek-v4-pro',fetcher:async(_url,options)=>{
+   const response=calls++===0?{verdict:'revise',summary:'Нужно исправить категорию.',issues:[{severity:'error',field:'type',reason:'Это нападение.'}],requests:[]}:result;
+   if(calls===2)assert.match(JSON.parse(options.body).messages[0].content,/APPLY these corrections/);
+   return new Response(JSON.stringify({choices:[{finish_reason:'stop',message:{content:JSON.stringify(response)}}],usage:{prompt_tokens:10,completion_tokens:10}}));
+  }});
+  const p=new Pipeline(s,{model:{},reviewer});
+  assert.equal((await p.review(1,1)).verdict,'pass');assert.equal(calls,2);assert.equal(s.event(1).canonical.type,'assault');
+  assert.equal(s.event(1).public_id,null);
+ }finally{s.close();}
+});
 test('questioning alone cannot support detained status, while an explicit apprehension quote can',()=>{
  const person={participants:[{status:'detained'}],evidence:[{field:'participants.0.status',quote:'M. Milánt is gyanúsítottként hallgatták ki.'}]};
  assert.throws(()=>assertSupportedDetention(person),/NOT detention/);

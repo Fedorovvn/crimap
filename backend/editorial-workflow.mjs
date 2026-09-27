@@ -12,6 +12,9 @@ export function queueEditorialPreparation(store,id,publicPath=process.env.DATABA
     return true;
   }
   const quality=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,event.revision);
+  // A substantive rejection is a completed editorial decision. New evidence
+  // creates a new revision; explicit manual review can still override this gate.
+  if(quality&&JSON.parse(quality.payload).verdict==='reject')return false;
   const publication=event.public_id&&event.published_revision!==event.revision?readPublication(publicPath,event.slug):null;
   if(currentUpdateAssessment(store,event,publication)?.skip)return false;
   const ready=quality&&JSON.parse(quality.payload).verdict==='pass'&&(!publication||JSON.parse(quality.payload).publicationBaseline===publication.fingerprint)&&event.canonical.occurredAt&&Number.isFinite(event.canonical.location.latitude)&&
