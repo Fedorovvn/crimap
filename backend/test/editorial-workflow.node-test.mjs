@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
 import {Pipeline} from '../pipeline.mjs';
-import {setEditorialMark,resumeCampaign} from '../admin-actions.mjs';
+import {setEditorialMark,resumeCampaign,retryEvent} from '../admin-actions.mjs';
 import {compareBrief} from '../dedup.mjs';
 import {DeepSeek} from '../model.mjs';
 import {displayStrings} from '../site-localization.mjs';
@@ -11,6 +11,41 @@ const now='2026-09-20T12:00:00Z';
 const event={title:'Man stabbed at Wesselényi utca in Budapest',summary:'A man was stabbed at Wesselényi utca in Budapest. Police are investigating.',type:'assault',status:'investigating',occurredAt:now,timePrecision:'day',location:{city:'Budapest',label:'Wesselényi utca',district:'VII',precision:'street',latitude:47.5,longitude:19.06},signals:[],caseReferences:[],participants:[],updates:[],media:[],context:[],legal:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote:'A man was stabbed at Wesselényi utca in Budapest. Police are investigating.'}))};
 const insert=(s,id=1,value=event)=>s.db.prepare('INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical) VALUES(?,?,?,?,?)').run(id,'incident-'+id,now,value.occurredAt,JSON.stringify(value));
 const job=(s,key)=>s.db.prepare('SELECT * FROM jobs WHERE job_key=?').get(key);
+
+test('manual rebuild preserves preparation, resets failed translations and is idempotent',()=>{
+ const s=new Store(':memory:');try{
+  insert(s);s.db.prepare("UPDATE events SET editorial_mark='priority'").run();
+  s.db.prepare('INSERT INTO preparation VALUES(?,?,?,?)').run(1,1,'{"media":["keep"]}',now);
+  s.db.prepare('INSERT INTO translations VALUES(?,?,?,?,?,?)').run(1,1,'ru','{}','flash',now);
+  s.db.prepare('INSERT INTO site_translations VALUES(?,?,?,?)').run(1,1,'{}',now);
+  s.enqueue('review','1:1',{eventId:1,revision:1});
+  s.db.prepare("UPDATE jobs SET state='failed',attempts=3,last_error='Site translation changed numbers'").run();
+  assert.deepEqual(retryEvent(s,1,1,'editor'),{queued:'review',translationReset:true});
+  assert.equal(job(s,'1:1').state,'queued');assert.equal(job(s,'1:1').attempts,0);assert.equal(job(s,'1:1').last_error,null);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM preparation').get().n,1);
+  assert.equal(s.db.prepare('SELECT count(*) n FROM translations').get().n,0);
+  assert.equal(s.event(1).editorial_mark,'priority');
+  assert.deepEqual(retryEvent(s,1,1,'editor'),{alreadyQueued:true});
+  assert.equal(s.db.prepare("SELECT count(*) n FROM audit WHERE action='editorial-retry'").get().n,1);
+  assert.throws(()=>retryEvent(s,1,2,'editor'),/новая версия/);
+  setEditorialMark(s,1,'uninteresting','editor');
+  assert.equal(s.event(1).editorial_reasons,'[]');assert.equal(s.event(1).editorial_note,'');assert.equal(job(s,'1:1').state,'cancelled');
+  assert.throws(()=>retryEvent(s,1,1,'editor'),/верните событие/);
+ }finally{s.close();}
+});
+
+test('manual rebuild begins with gathering if preparation is missing and respects budget',()=>{
+ const s=new Store(':memory:');try{
+  insert(s);s.enqueue('review','1:1',{eventId:1,revision:1});
+  s.db.prepare("UPDATE jobs SET state='failed',attempts=3").run();
+  s.db.prepare('INSERT INTO model_budget VALUES(1,1,?)').run(now);
+  s.db.prepare("INSERT INTO usage(request_key,stage,model,state,reserved_usd,cost_usd,created_at) VALUES('spent','review','pro','complete',1,1,?)").run(now);
+  assert.throws(()=>retryEvent(s,1,1,'editor'),/бюджет исчерпан/);
+  assert.equal(job(s,'1:1').state,'failed');s.db.prepare('DELETE FROM model_budget').run();
+  assert.equal(retryEvent(s,1,1,'editor').queued,'gather');assert.equal(job(s,'1:1').state,'cancelled');
+  assert.equal(job(s,'1').kind,'gather');assert.equal(s.db.prepare('SELECT count(*) n FROM usage').get().n,1);
+ }finally{s.close();}
+});
 
 test('uninteresting cancels all event work, persists reasons and blocks future jobs without touching other events',()=>{
   const s=new Store(':memory:');try{
@@ -125,4 +160,3 @@ test('merging an existing duplicate inherits the ignored mark without full enric
     await consolidate(pipeline);assert.equal(s.event(1).editorial_mark,'uninteresting');assert.equal(s.event(1).editorial_note,'Not this incident');assert.equal(job(s,'1:1').state,'cancelled');assert.equal(s.event(2).merged_into,1);
   }finally{s.close();}
 });
-

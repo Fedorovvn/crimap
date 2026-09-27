@@ -388,14 +388,18 @@ export class Pipeline {
     }
     if(this.preparation&&!docs.length)throw new Error('Final review prerequisites: no saved sources');
     const published=readPublication(this.publicPath,event.slug);
+    const retry=this.store.db.prepare("SELECT id,detail FROM audit WHERE action='editorial-retry' AND subject=? ORDER BY id DESC LIMIT 1").get(String(id));
+    const retryInfo=retry?JSON.parse(retry.detail):null;
+    const retryFeedback=retryInfo?.translationReset&&retryInfo.revision===event.revision
+      ? [{field:'translations',reason:'Rebuild incorrect translation drafts. Preserve all numeric facts and time values from the source exactly.',retryId:retry.id}]:[];
     // Persist inexpensive translation drafts separately, so a retry of Pro does
     // not pay for or regenerate them. None of these drafts is a publication.
     const existingRussian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
-    const russian=existingRussian?JSON.parse(existingRussian.payload):applyTranslation(event.canonical,await this.model.json('translate',{strings:translationStrings(event.canonical)},{validate:raw=>{applyTranslation(event.canonical,raw,{draft:true});return raw;}}),{draft:true});
+    const russian=existingRussian?JSON.parse(existingRussian.payload):applyTranslation(event.canonical,await this.model.json('translate',{strings:translationStrings(event.canonical),...(retryFeedback.length?{feedback:retryFeedback}:{})},{validate:raw=>{applyTranslation(event.canonical,raw,{draft:true});return raw;}}),{draft:true});
     this.ensureActive(id);
     if(this.store.event(id).revision!==event.revision)throw new Error('Event changed while preparing review translations');
     if(!existingRussian)this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,event.revision,'ru',JSON.stringify(russian),this.model.model,iso());
-    const translations=siteTranslations(this.store,id,event.revision)??await translateSiteTexts(this.model,displayStrings({...russian,retainedMedia:preparation?.retainedMedia}),[],{draft:true});
+    const translations=siteTranslations(this.store,id,event.revision)??await translateSiteTexts(this.model,displayStrings({...russian,retainedMedia:preparation?.retainedMedia}),retryFeedback,{draft:true});
     this.ensureActive(id);
     if(this.store.event(id).revision!==event.revision)throw new Error('Event changed while preparing review languages');
     this.store.db.prepare('INSERT OR REPLACE INTO site_translations VALUES(?,?,?,?)').run(id,event.revision,JSON.stringify(translations),iso());

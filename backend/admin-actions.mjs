@@ -4,6 +4,36 @@ import {interestReasons} from './admin/interest-reasons.mjs';
 import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
 import {nextCheck} from './scheduler.mjs';
 
+export function retryEvent(store,id,revision,reviewer){
+  return store.transaction(()=>{
+    const e=store.event(id);if(!e)fail(404,'Событие не найдено');
+    if(e.revision!==revision)fail(409,'Есть новая версия события. Обновите карточку');
+    if(e.merged_into||e.state==='excluded'||e.editorial_mark==='uninteresting'||e.withdrawn_at)fail(409,'Сначала верните событие в обработку');
+    const jobs=store.db.prepare("SELECT * FROM jobs WHERE json_extract(payload,'$.eventId')=? AND state IN ('running','queued','failed','paused','waiting-date') AND (json_extract(payload,'$.revision') IS NULL OR json_extract(payload,'$.revision')=?)").all(id,e.revision);
+    if(jobs.some(j=>j.state==='running'))return {alreadyQueued:true};
+    const stopped=jobs.filter(j=>['failed','paused'].includes(j.state));
+    if(!stopped.length){if(jobs.some(j=>j.state==='queued'))return {alreadyQueued:true};fail(409,'Остановленных задач нет. Обновите карточку');}
+    if(e.campaign_id&&store.db.prepare('SELECT state FROM campaigns WHERE id=?').get(e.campaign_id)?.state==='paused')fail(409,'Архивная обработка на паузе. Сначала возобновите её');
+    if(store.totalBudget()?.remaining<=0)fail(409,'Общий бюджет исчерпан. Сначала увеличьте лимит');
+    const prepared=store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(id,e.revision);
+    const kind=!e.canonical.occurredAt?'resolve-date':stopped.every(j=>j.kind==='recheck')?'recheck':prepared?'review':'gather';
+    const translationReset=stopped.some(j=>/translation|numeric tokens|digit tokens/i.test(j.last_error??''));
+    // Keep gathered evidence and media. Invalid translation drafts must not be
+    // fed back to Pro unchanged on every manual retry.
+    if(translationReset){
+      store.db.prepare('DELETE FROM translations WHERE event_id=? AND revision=?').run(id,e.revision);
+      store.db.prepare('DELETE FROM site_translations WHERE event_id=? AND revision=?').run(id,e.revision);
+    }
+    if(kind!=='recheck')store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,e.revision);
+    for(const j of jobs)if(j.state!=='running'&&(j.kind!=='recheck'||['failed','paused'].includes(j.state)))store.db.prepare("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL WHERE id=?").run(j.id);
+    const key=kind==='review'?`${id}:${e.revision}`:String(id);
+    store.enqueue(kind,key,{eventId:id,revision:e.revision,campaignId:kind==='recheck'?null:e.campaign_id});
+    store.db.prepare("UPDATE jobs SET attempts=0,last_error=NULL WHERE kind=? AND job_key=? AND state!='running'").run(kind,key);
+    store.log('editorial-retry',id,{revision:e.revision,kind,translationReset,reviewer});
+    return {queued:kind,translationReset};
+  });
+}
+
 export function setEditorialMark(store,id,mark,reviewer,{reasons=[],note='',publicPath=process.env.DATABASE_PATH}={}){
   if(!['normal','uninteresting','priority'].includes(mark))fail(400,'Неизвестная отметка события');
   if(!Array.isArray(reasons)||reasons.length>10||reasons.some(r=>typeof r!=='string'||!Object.hasOwn(interestReasons,r))||typeof note!=='string'||note.length>2000)fail(400,'Выберите причины из списка; комментарий — до 2000 символов');

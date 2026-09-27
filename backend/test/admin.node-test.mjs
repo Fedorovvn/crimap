@@ -33,6 +33,8 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     const login=await request('login',{token:'test-token'});assert.equal(login.status,200);cookie=login.headers.get('set-cookie').split(';')[0];csrf=(await login.json()).csrf;
     assert.ok(login.headers.get('set-cookie').includes('HttpOnly'));
     assert.equal((await request('events/1/review',{revision:1},{'X-CSRF-Token':''})).status,403);
+    assert.equal((await request('events/1/retry',{revision:1},{'X-CSRF-Token':''})).status,403);
+    assert.equal((await request('events/1/retry',{revision:999})).status,409);
     assert.equal((await request('events/1/review',{revision:1},{origin:'https://evil.example'})).status,403);
     assert.equal((await request('events')).status,200);
     const activity=await request('activity');assert.equal(activity.status,200);assert.ok(Array.isArray((await activity.json()).logs));
@@ -120,4 +122,3 @@ test('login rate limit and secure production cookie',async()=>{
     assert.equal((await post('correct')).status,429);
   }finally{await new Promise(resolve=>server.close(resolve));s.close();}
 });
-
