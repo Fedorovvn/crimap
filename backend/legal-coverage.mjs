@@ -17,6 +17,13 @@ export function validateLegalCoverage(raw,event,documents=[]){
     if(item.status==='not-applicable'&&!(item.basis??[]).some(e=>documents.some(d=>d.id===e.documentId&&d.sourceKind==='official')))throw new Error('No legal consequences requires explicit official source evidence; otherwise use insufficient-facts');
   }
   const suspects=event.participants.filter(p=>['suspect','convicted'].includes(p.role));
+  // A non-suspect disclaimer is bookkeeping, not a legal assessment. Keep the
+  // overall explanation, but do not require the model to invent a suspect to
+  // retain an "insufficient facts" row for a witness or other involved person.
+  coverage.participants=coverage.participants.filter(item=>{
+    const person=event.participants.find(p=>p.key===item.participantKey);
+    return !(person&&!['suspect','convicted'].includes(person.role)&&['insufficient-facts','no-suspect'].includes(item.status)&&!event.legal.some(l=>l.participantKey===item.participantKey));
+  });
   const keys=new Set(suspects.map(p=>p.key)),seen=new Set();
   for(const item of coverage.participants){
     if(!keys.has(item.participantKey)||seen.has(item.participantKey))throw new Error('Legal coverage must identify each suspect exactly once, without victims or unknown keys');

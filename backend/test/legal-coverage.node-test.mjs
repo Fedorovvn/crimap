@@ -27,3 +27,14 @@ test('absence of legal consequences cannot be asserted from source silence',()=>
  assert.doesNotThrow(()=>validateLegalCoverage({...report,basis},event,[{id:'1',text:quote,sourceKind:'official'}]));
  assert.throws(()=>validateLegalCoverage({...report,basis},event,[{id:'1',text:quote,sourceKind:'media'}]),/official source/);
 });
+
+test('a non-suspect disclaimer is normalized without inventing an accused person or dropping a penalty',()=>{
+ const event={participants:[{key:'guest',role:'involved'}],legal:[]};
+ const report={status:'insufficient-facts',reason:'Источник не называет конкретных подозреваемых.',participants:[{participantKey:'guest',status:'insufficient-facts',reason:'Другой участник не идентифицирован как подозреваемый.'}]};
+ const result=validateLegalCoverage(report,event);
+ assert.deepEqual(result.participants,[]);assert.equal(result.reason,report.reason);
+ assert.equal(event.participants[0].role,'involved');assert.equal(report.participants.length,1);
+ assert.throws(()=>validateLegalCoverage({...report,participants:[{...report.participants[0],participantKey:'invented'}]},event),/exactly once/);
+ assert.throws(()=>validateLegalCoverage({...report,participants:[{...report.participants[0],status:'mapped'}]},event),/exactly once/);
+ assert.throws(()=>validateLegalCoverage(report,{...event,legal:[{participantKey:'guest'}]}),/exactly once/);
+});

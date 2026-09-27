@@ -3,6 +3,23 @@ import {translationStrings,applyTranslation} from './contract.mjs';
 import {displayStrings} from './site-localization.mjs';
 
 const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(n=>n.replace(',','.')).sort().join('|');
+export function protectTranslationNumbers(source){
+  const tokens=[];
+  // Distinct, nonnumeric markers prevent natural translations such as
+  // "24-hour" -> "round-the-clock" from silently dropping required digits.
+  const masked=source.replace(/\d+(?:[.,]\d+)?/g,value=>{
+    let n=tokens.length,letters='';do{letters=String.fromCharCode(65+n%26)+letters;n=Math.floor(n/26)-1;}while(n>=0);
+    const marker=`⟦NUM_${letters}⟧`;tokens.push({marker,value});return marker;
+  });
+  return {source:masked,restore(text){
+    for(const {marker,value} of tokens){
+      if(text.split(marker).length!==2)throw new Error(`Preserve numeric tokens: copy ${marker} exactly once, never spell it out, omit it or duplicate it`);
+      text=text.replace(marker,value);
+    }
+    if(/⟦NUM_[A-Z]+⟧/.test(text)||numbers(text)!==numbers(source))throw new Error('Correction still changes numeric tokens; preserve all supplied markers and do not introduce extra digits');
+    return text;
+  }};
+}
 // Pro already edited the facts. Repair only the failing text fields, then run
 // the complete evidence/identity/legal validator again before saving anything.
 export async function correctFinalTranslations(raw,{event,russian,translations,preparation},model){
@@ -12,12 +29,12 @@ export async function correctFinalTranslations(raw,{event,russian,translations,p
   const ru=Object.fromEntries(Object.entries(english).map(([key,text])=>[key,final.russian?.[key]??(before[key]===text?oldRussian[key]:undefined)]));
   const repair=async(fields)=>{
     if(!fields.length)return {};
-    const input=Object.fromEntries(fields.map((field,i)=>['s'+i,field]));
+    const protectedFields=fields.map(field=>protectTranslationNumbers(field.source));
+    const input=Object.fromEntries(fields.map((field,i)=>['s'+i,{language:field.language,source:protectedFields[i].source,reason:'Translate faithfully; copy every ⟦NUM_…⟧ marker exactly once. The server restores the original numbers.'}]));
     return model.json('review',{mode:'correct-translation-fields',fields:input},{maxTokens:16000,validate:value=>{
       const {strings}=z.object({strings:z.record(z.string().trim().min(1).max(12000))}).strict().parse(value);
       if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(input).sort()))throw new Error('Return exactly one corrected string for each supplied field id');
-      for(const [key,text] of Object.entries(strings))if(numbers(text)!==numbers(input[key].source))throw new Error(`Correction ${key} still changes numeric tokens: expected [${numbers(input[key].source)}], received [${numbers(text)}]. Keep numeric notation from source exactly, including spaces, punctuation, Roman numerals and time format.`);
-      return strings;
+      return Object.fromEntries(fields.map((_,i)=>['s'+i,protectedFields[i].restore(strings['s'+i])]));
     }});
   };
   const ruKeys=Object.keys(english).filter(k=>!ru[k]?.trim()||numbers(ru[k])!==numbers(english[k]));
