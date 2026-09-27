@@ -51,7 +51,7 @@ test('old persisted receipts migrate without resetting the baseline',async()=>{
 });
 test('automatic enqueue respects manual archive pause while daily discovery continues',()=>{
  const s=new Store(':memory:');try{
- s.db.prepare('INSERT INTO campaigns VALUES(?,?,?,?,?,?)').run('old','2026-07-01','2026-09-26',30,'paused',start.toISOString());
+ s.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES(?,?,?,?,?,?)').run('old','2026-07-01','2026-09-26',30,'paused',start.toISOString());
  s.enqueue('prepare','1',{campaignId:'old'});
  s.enqueue('article','new',{budgetScope:'daily'});
  assert.equal(s.db.prepare("SELECT state FROM campaigns WHERE id='old'").get().state,'paused');
@@ -60,3 +60,4 @@ test('automatic enqueue respects manual archive pause while daily discovery cont
  assert.equal(s.claim().job_key,'new');assert.equal(s.claim(),null);
  }finally{s.close();}
 });
+

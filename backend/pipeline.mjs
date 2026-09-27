@@ -476,6 +476,8 @@ export class Pipeline {
   async runOne({kinds}={}){
     const job=this.store.claim(iso(),kinds);if(!job)return false;
     this.activeJob=job;
+    const startedAt=iso();
+    this.store.log('job-started',job.id,{kind:job.kind,eventId:job.payload.eventId,sourceId:job.payload.sourceId??job.payload.discoveredBy,url:job.payload.url,title:job.payload.title});
     const modelGuards=new Map([...new Set([this.model,this.reviewer].filter(Boolean))].map(model=>[model,model.guard]));
     for(const [model,guard] of modelGuards)model.guard=()=>{guard?.();this.ensureActive();};
     const timer=setInterval(()=>this.store.heartbeat(job),60000);timer.unref();
@@ -522,7 +524,11 @@ export class Pipeline {
       this.store.finish(job,retired?null:new Date(Date.now()+(budgetWait??retryDelay(job.attempts,e.retryAfter))).toISOString(),e.message);
       this.store.log('job-failure',job.id,{kind:job.kind,error:e.message});
       process.stderr.write(JSON.stringify({job:job.id,kind:job.kind,error:e.message})+'\n');
-    }finally{for(const [model,guard] of modelGuards)model.guard=guard;this.activeJob=null;clearInterval(timer);this.campaignId=null;this.budgetScope=undefined;for(const model of [this.model,this.reviewer])if(model)model.campaignId=null;}
+    }finally{
+      const latest=this.store.db.prepare('SELECT state,last_error FROM jobs WHERE id=?').get(job.id);
+      this.store.log('job-finished',job.id,{kind:job.kind,eventId:job.payload.eventId,sourceId:job.payload.sourceId??job.payload.discoveredBy,url:job.payload.url,title:job.payload.title,startedAt,state:latest?.state,error:latest?.last_error??null,outcome:latest?.last_error?'error':['cancelled','paused','waiting-date'].includes(latest?.state)?'stopped':'complete'});
+      for(const [model,guard] of modelGuards)model.guard=guard;this.activeJob=null;clearInterval(timer);this.campaignId=null;this.budgetScope=undefined;for(const model of [this.model,this.reviewer])if(model)model.campaignId=null;
+    }
     return true;
   }
 }

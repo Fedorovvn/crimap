@@ -30,9 +30,13 @@ export async function discoverFeed(store,reader,feed,{now=new Date()}={}){
       // Keep them if published during monitoring; don't import historical items.
       const old=item.publishedAt&&Date.parse(item.publishedAt)<Date.parse(startedAt);
       const decision=cheapDecision(item.title,item.excerpt??'');
-      if(baseline||old||decision.decision==='drop'){filtered++;}
+      if(baseline||old||decision.decision==='drop'){
+        filtered++;
+        store.log('feed-article-filtered',feed.sourceId,{url:item.url,title:item.title,reason:baseline?'Начальный снимок ленты: старая статья':old?'Опубликовано до начала регулярного наблюдения':decision.reason,method:'rules'});
+      }
       else {
         store.enqueue('article',item.url,{...item,discoveredBy:feed.sourceId,discoveredAt:now.toISOString()});queued++;
+        store.log('feed-article-queued',feed.sourceId,{url:item.url,title:item.title,reason:'Новая ссылка передана на проверку содержания'});
       }
     }
     store.db.prepare('INSERT OR REPLACE INTO source_polls(feed_url,source_id,checked_at,item_count,queued_count,filtered_count,started_at) VALUES(?,?,?,?,?,?,?)').run(feed.url,feed.sourceId,now.toISOString(),items.length,queued,filtered,startedAt);

@@ -32,7 +32,7 @@ export class Archive{
   wpURL(from,to,page){const u=new URL('https://kekvillogo.hu/wp-json/wp/v2/posts');for(const [k,v] of Object.entries({after:from,before:to,per_page:50,page,_fields:'link,date_gmt,title,excerpt',orderby:'date',order:'desc'}))u.searchParams.set(k,String(v));return u.href;}
   async scan(payload){
     const {campaignId,sourceId,url,page}=payload,campaign=this.store.db.prepare('SELECT * FROM campaigns WHERE id=?').get(campaignId);
-    if(campaign?.state!=='running')return;
+    if(campaign?.state!=='running'||campaign.discovery_stopped)return;
     if(page>100)throw new Error('Archive page safety limit reached');
     if(this.store.db.prepare('SELECT 1 FROM archive_pages WHERE campaign_id=? AND url=?').get(campaignId,url))return;
     const response=await this.reader.read(url,{json:sourceId==='kekvillogo'});

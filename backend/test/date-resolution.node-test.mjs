@@ -26,7 +26,7 @@ test('date result needs a source quote and supported precision; future dates are
 test('unknown date blocks queued heavy work and priority does not bypass the hold or archive cap',()=>{
   const s=new Store(':memory:');try{seed(s);
     s.db.prepare("INSERT INTO jobs(kind,job_key,payload,due_at) VALUES('review','1:1','{\"eventId\":1}','2026-01-01')").run();
-    s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',5,'budget-exhausted','2026-09-26')").run();
+    s.db.prepare("INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES('archive','a','b',5,'budget-exhausted','2026-09-26')").run();
     s.db.prepare("UPDATE events SET campaign_id='archive'").run();
     setEditorialMark(s,1,'priority','test');
     assert.equal(s.event(1).state,'awaiting-date');
@@ -59,3 +59,4 @@ test('new dated coverage can nominate an undated incident for comparison; date f
   const filters=normalizeFilters({dateStatus:'pending'});assert.equal(filters.dateStatus,'pending');
   assert.deepEqual(filterEvents([{id:1,occurred_at:null},{id:2,occurred_at:day}],filters).map(e=>e.id),[1]);
 });
+

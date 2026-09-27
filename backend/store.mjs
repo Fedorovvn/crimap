@@ -30,6 +30,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS http_cache(url TEXT PRIMARY KEY,etag TEXT,last_modified TEXT,body TEXT NOT NULL,content_type TEXT NOT NULL,fetched_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS search_cache(cache_key TEXT PRIMARY KEY,result TEXT NOT NULL,expires_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,action TEXT NOT NULL,subject TEXT,detail TEXT NOT NULL,created_at TEXT NOT NULL);
+      CREATE INDEX IF NOT EXISTS audit_action_subject ON audit(action,subject,id);
+      CREATE INDEX IF NOT EXISTS audit_time ON audit(created_at);
       CREATE TABLE IF NOT EXISTS quality_reviews(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,model TEXT NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
       CREATE TABLE IF NOT EXISTS field_requests(request_key TEXT PRIMARY KEY,event_id INTEGER NOT NULL,revision INTEGER NOT NULL,model TEXT NOT NULL,payload TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'proposed',created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS campaigns(id TEXT PRIMARY KEY,from_date TEXT NOT NULL,to_date TEXT NOT NULL,budget_usd REAL NOT NULL,state TEXT NOT NULL DEFAULT 'running',created_at TEXT NOT NULL);
@@ -46,6 +48,7 @@ export class Store {
     for(const column of ['merged_into INTEGER','withdrawn_at TEXT'])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
     if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name==='editorial_mark'))this.db.exec("ALTER TABLE events ADD COLUMN editorial_mark TEXT NOT NULL DEFAULT 'normal' CHECK(editorial_mark IN ('normal','uninteresting','priority'))");
     for(const column of ["editorial_reasons TEXT NOT NULL DEFAULT '[]'","editorial_note TEXT NOT NULL DEFAULT ''"])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
+    if(!this.db.prepare('PRAGMA table_info(campaigns)').all().some(c=>c.name==='discovery_stopped'))this.db.exec('ALTER TABLE campaigns ADD COLUMN discovery_stopped INTEGER NOT NULL DEFAULT 0');
     this.db.exec("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE state IN ('queued','running','paused','failed') AND json_extract(payload,'$.eventId') IN (SELECT id FROM events WHERE editorial_mark='uninteresting'); UPDATE events SET next_check_at=NULL WHERE editorial_mark='uninteresting'");
   }
   candidates(event,options){installEventIndex(this.db);return indexedCandidates(this,event,options);}
@@ -56,6 +59,7 @@ export class Store {
     if(event?.editorial_mark==='uninteresting')return false;
     if(event&&!event.canonical.occurredAt&&!['article','resolve-date'].includes(kind))return this.holdForDate(event.id,payload,{refresh:true});
     payload={...payload,...jobBudget(kind,payload,event)};
+    if(['archive','article'].includes(kind)&&payload.campaignId&&!payload.eventId&&this.db.prepare('SELECT discovery_stopped FROM campaigns WHERE id=?').get(payload.campaignId)?.discovery_stopped)return false;
     // An explicit retry of completed archive work resumes that same campaign,
     // never the daily allowance. reserveCost still enforces its original cap.
     if(payload.campaignId)this.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(payload.campaignId);
@@ -73,7 +77,7 @@ export class Store {
   }
   claim(now=new Date().toISOString(),kinds=null){
     if(kinds&&(!kinds.length||kinds.some(k=>typeof k!=='string')))throw new Error('Invalid job kind filter');
-    const kindFilter=kinds?' AND kind IN ('+kinds.map(()=>'?').join(',')+')':'';
+    const kindFilter=(kinds?' AND kind IN ('+kinds.map(()=>'?').join(',')+')':'')+" AND NOT (kind IN ('archive','article') AND json_extract(payload,'$.eventId') IS NULL AND EXISTS(SELECT 1 FROM campaigns c WHERE c.id=json_extract(jobs.payload,'$.campaignId') AND c.discovery_stopped=1))";
     const token=randomUUID(),lease=new Date(Date.parse(now)+15*60_000).toISOString();
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on

@@ -27,6 +27,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
   const request=(path,body,headers={})=>fetch(root+path,{method:body===undefined?'GET':'POST',headers:{cookie,origin,'Content-Type':'application/json','X-CSRF-Token':csrf,...headers},body:body===undefined?undefined:JSON.stringify(body)});
   try{
     assert.equal((await request('events')).status,401);
+    assert.equal((await request('activity')).status,401);
     assert.equal((await request('login',{password:'test-token'})).status,401);
     assert.equal((await request('login',{token:'wrong'})).status,401);
     const login=await request('login',{token:'test-token'});assert.equal(login.status,200);cookie=login.headers.get('set-cookie').split(';')[0];csrf=(await login.json()).csrf;
@@ -34,6 +35,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     assert.equal((await request('events/1/review',{revision:1},{'X-CSRF-Token':''})).status,403);
     assert.equal((await request('events/1/review',{revision:1},{origin:'https://evil.example'})).status,403);
     assert.equal((await request('events')).status,200);
+    const activity=await request('activity');assert.equal(activity.status,200);assert.ok(Array.isArray((await activity.json()).logs));
     assert.equal((await request('budget',{budget:30},{'X-CSRF-Token':''})).status,403);
     assert.equal((await request('budget',{budget:30})).status,200);
     assert.equal((await (await request('events')).json()).budget.limit,30);
@@ -92,7 +94,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
 
     }finally{publicDb.close();}
 
-    s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);
+    s.db.prepare("INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);
     s.enqueue('article','paused',{campaignId:'archive'});s.db.prepare("UPDATE jobs SET state='paused' WHERE job_key='paused'").run();
     assert.equal((await request('campaigns/archive/budget',{budget:10})).status,200);
     assert.equal(s.db.prepare("SELECT budget_usd FROM campaigns WHERE id='archive'").get().budget_usd,10);
@@ -118,3 +120,4 @@ test('login rate limit and secure production cookie',async()=>{
     assert.equal((await post('correct')).status,429);
   }finally{await new Promise(resolve=>server.close(resolve));s.close();}
 });
+

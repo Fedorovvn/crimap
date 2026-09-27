@@ -6,7 +6,7 @@ import {changeBudget,resumeCampaign} from '../admin-actions.mjs';
 test('continue respects the saved cap, resumes only paused archive work and is idempotent',()=>{
   const store=new Store(':memory:'),now=new Date().toISOString();
   try{
-    for(const id of ['archive','other'])store.db.prepare('INSERT INTO campaigns VALUES(?,?,?,?,?,?)').run(id,'a','b',5,'running',now);
+    for(const id of ['archive','other'])store.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES(?,?,?,?,?,?)').run(id,'a','b',5,'running',now);
     store.reserveCost('review','fixture','reserved',5,1,now,'archive');
     for(const [key,campaignId,state] of [['paused','archive','paused'],['running','archive','running'],['done','archive','done'],['failed','archive','failed'],['other','other','paused'],['daily',null,'paused']]){
       store.enqueue('article',key,campaignId?{campaignId}:{});
@@ -33,3 +33,4 @@ test('continue respects the saved cap, resumes only paused archive work and is i
     assert.deepEqual(resumeCampaign(store,'archive','editor'),{resumed:0,state:'complete'});
   }finally{store.close();}
 });
+

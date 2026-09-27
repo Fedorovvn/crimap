@@ -24,7 +24,7 @@ test('Flash receives actual low-detail image inputs; reserves image tokens, reco
 });
 test('vision cannot bypass an exhausted archive allowance',async()=>{
  const s=new Store(':memory:');try{
-  s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',0.00001,'running','2026-09-27')").run();
+  s.db.prepare("INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES('archive','a','b',0.00001,'running','2026-09-27')").run();
   const model=new DeepSeek(s,{key:'fixture',fetcher:async()=>{throw new Error('No paid call expected');}});model.campaignId='archive';
   await assert.rejects(reviewMedia(model,event,[photo('123.jpg')],[]),/Campaign model budget reached/);
  }finally{s.close();}
@@ -47,3 +47,4 @@ test('missing, duplicated or contradictory usefulness decisions are rejected',as
   await assert.rejects(reviewMedia({json:async(_s,_p,{validate})=>validate({images:decision})},event,[photo('1.jpg')],[]));
  }
 });
+

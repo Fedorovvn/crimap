@@ -46,7 +46,7 @@ test('priority starts missing preparation and raises its dependent Pro review ab
 test('priority cannot resume an exhausted archive or change its budget; ignored work stays cancelled on continue',()=>{
   const s=new Store(':memory:');try{
     insert(s);insert(s,2);
-    s.db.prepare("INSERT INTO campaigns VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);
+    s.db.prepare("INSERT INTO campaigns(id,from_date,to_date,budget_usd,state,created_at) VALUES('archive','a','b',5,'budget-exhausted',?)").run(now);
     s.db.prepare("UPDATE events SET campaign_id='archive'").run();
     setEditorialMark(s,1,'priority','editor');assert.equal(job(s,'1').state,'paused');assert.equal(s.claim(),null);
     s.enqueue('review','other',{eventId:2});setEditorialMark(s,2,'uninteresting','editor');
@@ -125,3 +125,4 @@ test('merging an existing duplicate inherits the ignored mark without full enric
     await consolidate(pipeline);assert.equal(s.event(1).editorial_mark,'uninteresting');assert.equal(s.event(1).editorial_note,'Not this incident');assert.equal(job(s,'1:1').state,'cancelled');assert.equal(s.event(2).merged_into,1);
   }finally{s.close();}
 });
+
