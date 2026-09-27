@@ -1,4 +1,4 @@
-import {matchCandidates,compareBrief} from './dedup.mjs';
+import {compareBrief} from './dedup.mjs';
 import {setPublicHidden} from './admin-actions.mjs';
 import {stopEventJobs} from './editorial-workflow.mjs';
 
@@ -10,7 +10,7 @@ export async function consolidate(pipeline,{limit=30,eventIds}={}){
   const rows=()=>store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>store.event(r.id));
   for(const start of rows().filter(r=>!eventIds||eventIds.includes(r.id))){
     let row=store.event(start.id);if(row.merged_into)continue;
-    for(const candidate of matchCandidates(row.canonical,rows().filter(r=>r.id!==row.id))){
+    for(const candidate of store.candidates(row.canonical,{excludeId:row.id})){
       const key=[row.id,candidate.id].sort((a,b)=>a-b).join(':');if(checked.has(key))continue;checked.add(key);
       if(calls++>=limit)return {merged,comparisons:calls-1};
       // Keep an existing public URL, otherwise the earliest editorial identity.

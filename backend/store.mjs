@@ -2,6 +2,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
+import {installEventIndex,indexedCandidates} from './event-index.mjs';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 export function jobBudget(kind,payload,event){
   const campaignId=kind==='recheck'||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
@@ -47,6 +48,7 @@ export class Store {
     for(const column of ["editorial_reasons TEXT NOT NULL DEFAULT '[]'","editorial_note TEXT NOT NULL DEFAULT ''"])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
     this.db.exec("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE state IN ('queued','running','paused','failed') AND json_extract(payload,'$.eventId') IN (SELECT id FROM events WHERE editorial_mark='uninteresting'); UPDATE events SET next_check_at=NULL WHERE editorial_mark='uninteresting'");
   }
+  candidates(event,options){installEventIndex(this.db);return indexedCandidates(this,event,options);}
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const out=fn();this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
   log(action,subject,detail){this.db.prepare('INSERT INTO audit(action,subject,detail,created_at) VALUES(?,?,?,?)').run(action,String(subject??''),JSON.stringify(detail),new Date().toISOString());}
   enqueue(kind,key,payload={},due=new Date().toISOString()){

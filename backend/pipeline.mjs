@@ -145,10 +145,10 @@ export class Pipeline {
     }
     let focusIncidents;const identityTargets=[];
     if(this.triage||this.store.db.prepare("SELECT 1 FROM events WHERE editorial_mark='uninteresting' AND merged_into IS NULL LIMIT 1").get()){
-      const briefs=await identify(this.model,doc),rows=this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>this.store.event(r.id));
+      const briefs=await identify(this.model,doc);
       focusIncidents=[];
       for(const brief of briefs){
-        const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},matchCandidates(brief,rows).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
+        const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},this.store.candidates(brief).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
         if(comparison.decision!=='new'&&this.store.event(comparison.eventId)?.editorial_mark==='uninteresting')this.ignoreUpdate(comparison.eventId,doc,brief,comparison.reason);
         else if(comparison.decision==='repeat')this.store.log('repeat-skipped',comparison.eventId,{documentId:doc.id,contentHash:doc.contentHash,reason:comparison.reason});
         else {focusIncidents.push(brief);if(comparison.decision==='update')identityTargets.push(comparison.eventId);}
@@ -175,7 +175,17 @@ export class Pipeline {
     const linked=published?rows.filter(r=>r.public_id===published.id):[];
     const confirmed=confirmedTarget?rows.find(r=>r.id===confirmedTarget):null;
     if(confirmedTarget&&!confirmed)throw new Error('Flash-matched event changed; retry identity check');
-    const candidates=confirmed?[confirmed]:(linked.length?linked:matchCandidates(incoming,rows));
+    let candidates=confirmed?[confirmed]:(linked.length?linked:this.store.candidates(incoming));
+    let identityMatched=!!confirmed;
+    if(!confirmed&&candidates.length){
+      const comparison=await compareBrief(this.model,incoming,candidates);
+      if(comparison.decision==='repeat'){
+        this.ignoreUpdate(comparison.eventId,doc,incoming,comparison.reason);
+        return comparison.eventId;
+      }
+      candidates=comparison.decision==='update'?candidates.filter(c=>c.id===comparison.eventId):[];
+      identityMatched=comparison.decision==='update';
+    }
     // Same article may cover several incidents. Do not merge by URL alone.
     let target=null,event=incoming,reason=candidates.length>1?'Several possible matching events':null;
     let noChange=false;
@@ -190,7 +200,7 @@ export class Pipeline {
       if(merged.sameEvent){target=candidate;event=merged.event??candidate.canonical;noChange=merged.hasNewInformation===false;break;}
     }
     const now=iso();
-    if(confirmed&&!target)throw new Error('Flash identity and merge disagree; do not create a duplicate event');
+    if(identityMatched&&!target)throw new Error('Flash identity and merge disagree; do not create a duplicate event');
     this.store.transaction(()=>{
       if(target){
         if(this.store.event(target.id)?.editorial_mark==='uninteresting'){this.ignoreUpdate(target.id,doc,incoming,'Совпадение установлено во время остановки обработки');return;}
