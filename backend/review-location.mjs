@@ -75,7 +75,7 @@ export function applyReviewedLocation(store, row, preparation, candidate, reason
     store.db.prepare("UPDATE events SET canonical=?,revision=?,state='draft',review_reason='Pro уточнила место по источнику; готовятся переводы и повторная проверка' WHERE id=?").run(JSON.stringify(event), revision, row.id);
     store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(row.id, revision, JSON.stringify(event), 'pro-location-resolution', now);
     store.db.prepare('INSERT INTO preparation VALUES(?,?,?,?)').run(row.id, revision, JSON.stringify(preparation), now);
-    store.enqueue('review', `${row.id}:${revision}`, {eventId:row.id, revision, campaignId});
+    store.enqueue('review', `${row.id}:${revision}`, {eventId:row.id, revision, campaignId,budgetScope:campaignId?'archive':'daily'});
     store.log('location-resolved', row.id, {revision, candidate, reason});
   });
   return {deferred:true, locationResolved:true, revision};

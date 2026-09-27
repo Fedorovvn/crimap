@@ -6,18 +6,19 @@ import {retainLocationCoordinates} from './map-surfaces.mjs';
 import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
-import { hash } from './store.mjs';
+import { hash,jobBudget } from './store.mjs';
 import { nextCheck, intervalFor, retryDelay } from './scheduler.mjs';
 import {discoverFeed} from './discovery.mjs';
 import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
-import { checkReview,recordRequests } from './review.mjs';
+import { checkReview,recordRequests,reviewSchema } from './review.mjs';
 import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
 
 const iso=()=>new Date().toISOString();
+export const repairSchema=z.object({event:eventSchema}).strict();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export {matchCandidates} from './dedup.mjs';
 export class Pipeline {
@@ -122,7 +123,7 @@ export class Pipeline {
       }
       this.store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(target.id,doc.id,doc.contentHash,JSON.stringify(incoming),now);
       if(this.campaignId)this.store.db.prepare('UPDATE events SET campaign_id=? WHERE id=?').run(this.campaignId,target.id);
-      this.store.enqueue(this.preparation?'gather':'translate',target.id,{eventId:target.id,campaignId:this.campaignId});
+      this.store.enqueue(this.preparation?'gather':'translate',target.id,{eventId:target.id,campaignId:this.campaignId,budgetScope:this.budgetScope});
       const current=this.store.event(target.id);
       if(intervalFor(current)!==null&&!this.store.db.prepare("SELECT id FROM jobs WHERE kind='recheck' AND job_key=?").get(String(target.id)))this.store.enqueue('recheck',target.id,{eventId:target.id},nextCheck(current));
     });
@@ -143,7 +144,7 @@ export class Pipeline {
       for(const query of plan.queries){const found=await this.search.query(query);for(const hit of found.results.slice(0,3))await this.ingest(hit.url);}
       this.store.log('gather-complete',key,{provider:'search',revision:row.revision});
     }
-    this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});
+    this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
   }
   async prepare(id,{refresh=false}={}){
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
@@ -177,28 +178,28 @@ export class Pipeline {
       const {event:ignored,...metadata}=result;
       this.store.db.prepare('INSERT OR REPLACE INTO preparation VALUES(?,?,?,?)').run(id,revision,JSON.stringify(metadata),iso());
       this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,revision);
-      this.store.enqueue(this.reviewer?'review':'translate',this.reviewer?`${id}:${revision}`:id,{eventId:id,revision,campaignId:this.campaignId});
+      this.store.enqueue(this.reviewer?'review':'translate',this.reviewer?`${id}:${revision}`:id,{eventId:id,revision,campaignId:this.campaignId,budgetScope:this.budgetScope});
       this.store.log('prepared',id,{revision,...metadata});
     });
   }
   async translate(id){
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
-    if(this.reviewer&&!this.passed(id,event.revision)){this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});return {deferred:true};}
+    if(this.reviewer&&!this.passed(id,event.revision)){this.store.enqueue('review',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
     const payload=await this.model.json('translate',{strings:translationStrings(event.canonical)},{validate:raw=>{applyTranslation(event.canonical,raw);return raw;}});
     const translated=applyTranslation(event.canonical,payload);
     if(this.store.event(id).revision!==event.revision)throw new Error('Event changed during translation');
     if(!this.reviewer)this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     this.store.db.prepare('INSERT OR REPLACE INTO translations VALUES(?,?,?,?,?,?)').run(id,event.revision,'ru',JSON.stringify(translated),this.model.model,iso());
-    if(this.preparation)this.store.enqueue('localize',id,{eventId:id,revision:event.revision,campaignId:this.campaignId});return translated;
+    if(this.preparation)this.store.enqueue('localize',id,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return translated;
   }
   passed(id,revision){const r=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);return r&&JSON.parse(r.payload).verdict==='pass';}
   async localize(id) {
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
-    if(this.reviewer&&!this.passed(id,row.revision)){this.store.enqueue('review',`${id}:${row.revision}`,{eventId:id,revision:row.revision,campaignId:this.campaignId});return {deferred:true};}
+    if(this.reviewer&&!this.passed(id,row.revision)){this.store.enqueue('review',`${id}:${row.revision}`,{eventId:id,revision:row.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return {deferred:true};}
     const russian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,row.revision);
     if(!russian)throw new Error('Current Russian translation is missing');
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
-    if(!prepared){this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});return;}
+    if(!prepared){this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});return;}
     const texts=displayStrings({...JSON.parse(russian.payload),retainedMedia:JSON.parse(prepared.payload).retainedMedia});
     const lastReview=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? ORDER BY revision DESC LIMIT 1').get(id);
     const feedback=lastReview?JSON.parse(lastReview.payload).issues.filter(i=>i.field.startsWith('siteTranslations')):[];
@@ -213,9 +214,8 @@ export class Pipeline {
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
     if(!this.reviewer)throw new Error('Review model is not configured');
-    const languages=siteTranslations(this.store,id,event.revision);
-    if(this.preparation&&(!event.canonical.occurredAt||event.canonical.location.latitude===undefined)){this.store.log('review-deferred',id,{revision:event.revision,reason:'Not ready: date or prepared coordinates missing'});return {deferred:true};}
-    const translated=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
+    // Missing dates/coordinates are facts for Pro to inspect, not a reason to
+    // silently finish a review job without ever invoking the reviewer.
     const docs=this.eventDocuments(id);
     const russian=null; // Content is checked before translation. Older translations do not gate review.
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
@@ -224,7 +224,7 @@ export class Pipeline {
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
-      return this.reviewer.json('review',{schema:this.schema,event:event.canonical,russian,siteTranslations:null,documents:docs,preparation,locationLookup,verifiedLawCatalog:this.laws},{maxTokens:5000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,translations:languages,locationLookup})});
+      return this.reviewer.json('review',{schema:zodToJsonSchema(reviewSchema),eventSchema:zodToJsonSchema(eventSchema),event:event.canonical,russian,siteTranslations:null,documents:docs,preparation,locationLookup,verifiedLawCatalog:this.laws},{maxTokens:5000,validate:raw=>checkReview(raw,docs,{english:event.canonical,russian,locationLookup})});
     };
     let result=await assess();
     if(result.verdict!=='reject'&&result.locationResolution?.action==='search'){
@@ -237,7 +237,7 @@ export class Pipeline {
     }
     if(result.verdict!=='reject'&&result.locationResolution?.action==='select'){
       const candidate=preparation.locationReview.candidates.find(c=>c.id===result.locationResolution.candidateId);
-      return applyReviewedLocation(this.store,event,preparation,candidate,result.locationResolution.reason,this.campaignId??event.campaign_id);
+      return applyReviewedLocation(this.store,event,preparation,candidate,result.locationResolution.reason,this.budgetScope==='daily'?null:this.campaignId??event.campaign_id);
     }
     this.store.transaction(()=>{
       if(this.store.event(id)?.revision!==event.revision)throw new Error('Event changed during final review');
@@ -246,18 +246,17 @@ export class Pipeline {
       this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=? AND revision=?').run(`Model ${result.verdict}: ${result.summary}`,id,event.revision);
     });
     recordRequests(this.store,result.requests,{eventId:id,revision:event.revision,model:this.reviewer.model});
-    if(this.preparation&&result.verdict==='revise'&&event.auto_repairs<2&&this.store.event(id).revision===event.revision)this.store.enqueue('repair',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId});
-    if(result.verdict==='pass')this.store.enqueue('translate',id,{eventId:id,campaignId:this.campaignId});
+    if(this.preparation&&result.verdict==='revise'&&event.auto_repairs<2&&this.store.event(id).revision===event.revision)this.store.enqueue('repair',`${id}:${event.revision}`,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});
+    if(result.verdict==='pass')this.store.enqueue('translate',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
     return result;
   }
   async repair(id,revision){
     const row=this.store.event(id);if(!row||row.revision!==revision||row.auto_repairs>=2)return;
     const quality=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);
     if(!quality||JSON.parse(quality.payload).verdict!=='revise')return;
-    const ru=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,revision);
     const docs=this.eventDocuments(id);
-    const repaired=await this.model.json('repair',{schema:this.schema,event:row.canonical,russian:ru?JSON.parse(ru.payload):null,review:JSON.parse(quality.payload),documents:docs,verifiedLawCatalog:this.laws},{maxTokens:10000,validate:raw=>{
-      const event=eventSchema.parse(raw.event);retainLocationCoordinates(row.canonical.location,event.location);
+    const repaired=await this.model.json('repair',{schema:zodToJsonSchema(repairSchema),event:row.canonical,russian:null,review:JSON.parse(quality.payload),documents:docs,verifiedLawCatalog:this.laws},{maxTokens:10000,validate:raw=>{
+      const {event}=repairSchema.parse(raw);retainLocationCoordinates(row.canonical.location,event.location);
       return {event:this.validate(event,docs)};
     }});
     this.store.transaction(()=>{
@@ -265,7 +264,7 @@ export class Pipeline {
       const next=revision+1;
       this.store.db.prepare("UPDATE events SET canonical=?,occurred_at=?,revision=?,state='draft',auto_repairs=auto_repairs+1,review_reason='Flash corrected final review issues' WHERE id=?").run(JSON.stringify(repaired.event),repaired.event.occurredAt,next,id);
       this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,next,JSON.stringify(repaired.event),'flash-auto-repair',iso());
-      this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});
+      this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
       this.store.log('auto-repaired',id,{revision:next,model:this.model.model});
     });
   }
@@ -291,7 +290,10 @@ export class Pipeline {
     const job=this.store.claim(iso(),kinds);if(!job)return false;
     const timer=setInterval(()=>this.store.heartbeat(job),60000);timer.unref();
     try{
-      this.campaignId=job.payload.campaignId??null;
+      const budget=jobBudget(job.kind,job.payload,job.payload.eventId?this.store.event(job.payload.eventId):null);
+      this.campaignId=budget.campaignId;this.budgetScope=budget.budgetScope;
+      job.payload={...job.payload,...budget};
+      this.store.db.prepare('UPDATE jobs SET payload=? WHERE id=? AND lease_token=?').run(JSON.stringify(job.payload),job.id,job.lease_token);
       for(const model of [this.model,this.reviewer])if(model)model.campaignId=this.campaignId;
       const current=job.payload.eventId?this.store.event(job.payload.eventId):null;
       if(current&&(current.merged_into||current.state==='excluded')){this.store.finish(job);return true;}
@@ -317,13 +319,13 @@ export class Pipeline {
         this.store.log('campaign-budget-stop',this.campaignId,{error:e.message});return true;
       }
       const event=job.kind==='recheck'?this.store.event(job.payload.eventId):null;
-      if(this.campaignId&&job.attempts>=3){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId});this.archive?.settle();return true;}
+      if(this.campaignId&&job.attempts>=3){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId,budgetScope:this.budgetScope});this.archive?.settle();return true;}
       const retired=event&&intervalFor(event)===null;
       const budgetWait=/Daily (model budget|search limit)/.test(e.message)?Date.parse(new Date(Date.now()+86400000).toISOString().slice(0,10)+'T00:00:30Z')-Date.now():null;
       this.store.finish(job,retired?null:new Date(Date.now()+(budgetWait??retryDelay(job.attempts,e.retryAfter))).toISOString(),e.message);
       this.store.log('job-failure',job.id,{kind:job.kind,error:e.message});
       process.stderr.write(JSON.stringify({job:job.id,kind:job.kind,error:e.message})+'\n');
-    }finally{clearInterval(timer);this.campaignId=null;for(const model of [this.model,this.reviewer])if(model)model.campaignId=null;}
+    }finally{clearInterval(timer);this.campaignId=null;this.budgetScope=undefined;for(const model of [this.model,this.reviewer])if(model)model.campaignId=null;}
     return true;
   }
 }

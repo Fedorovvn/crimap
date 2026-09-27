@@ -1,6 +1,6 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 import { parseArgs } from 'node:util';
-import { Store } from './store.mjs';
+import { Store,jobBudget } from './store.mjs';
 import { Reader } from './network.mjs';
 import { DeepSeek } from './model.mjs';
 import { Search } from './search.mjs';
@@ -13,11 +13,18 @@ import { Preparation } from './prepare.mjs';
 import { Archive } from './archive.mjs';
 import { localizePublished } from './site-localization.mjs';
 import {consolidate} from './consolidate.mjs';
+import {recoverArchive} from './archive-recovery.mjs';
 const {values,positionals}=parseArgs({allowPositionals:true,options:{db:{type:'string'},'public-db':{type:'string'},file:{type:'string'},reviewer:{type:'string'},context:{type:'boolean'},legal:{type:'boolean'},limit:{type:'string'},from:{type:'string'},to:{type:'string'},budget:{type:'string'}}});
 const [command='status',arg]=positionals,path=values.db??process.env.COLLECTOR_DATABASE_PATH??'data/collector.sqlite';
 const store=new Store(path),reader=new Reader(store),model=new DeepSeek(store),archive=new Archive(store,{reader});
 const pipeline=new Pipeline(store,{reader,model,reviewer:new DeepSeek(store,{model:process.env.DEEPSEEK_REVIEW_MODEL??'deepseek-v4-pro'}),search:new Search(store),triage:new Triage(model),preparation:new Preparation(store,{model}),archive});
 let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
+if(['translate','review','complete-details','prepare','recheck'].includes(command)){
+  const budget=jobBudget(command,{eventId:Number(arg)},store.event(Number(arg)));
+  pipeline.campaignId=budget.campaignId;pipeline.budgetScope=budget.budgetScope;
+  for(const m of [model,pipeline.reviewer])m.campaignId=budget.campaignId;
+  if(budget.campaignId)store.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(budget.campaignId);
+}
 try{
   let result;
   if(command==='worker'){pipeline.seed();while(!stopping){const worked=await pipeline.runOne();if(!worked)await new Promise(r=>setTimeout(r,2000));}}
@@ -26,6 +33,7 @@ try{
   else if(command==='ingest'){if(!arg)throw new Error('Supply a registered article URL');result=await pipeline.ingest(arg);}
   else if(command==='recheck')result=await pipeline.recheck(Number(arg));
   else if(command==='deduplicate')result=await consolidate(pipeline,{limit:Number(values.limit??30)});
+  else if(command==='recover-archive')result=recoverArchive(store,arg);
   else if(command==='translate')result=await pipeline.translate(Number(arg));
   else if(command==='review')result=await pipeline.review(Number(arg));
   else if(command==='complete-details')result=await pipeline.prepare(Number(arg),{refresh:true});

@@ -64,7 +64,11 @@ export class Archive{
   settle(){
     for(const c of this.store.db.prepare("SELECT id FROM campaigns WHERE state='running'").all()){
       const pending=this.store.db.prepare("SELECT count(*) n FROM jobs WHERE json_extract(payload,'$.campaignId')=? AND state IN ('queued','running','paused')").get(c.id).n;
-      if(!pending){const failed=this.store.db.prepare("SELECT count(*) n FROM jobs WHERE json_extract(payload,'$.campaignId')=? AND state='failed'").get(c.id).n;this.store.db.prepare('UPDATE campaigns SET state=? WHERE id=?').run(failed?'complete-with-errors':'complete',c.id);}
+      if(!pending){
+        const failed=this.store.db.prepare("SELECT count(*) n FROM jobs WHERE json_extract(payload,'$.campaignId')=? AND state='failed'").get(c.id).n;
+        const unresolved=this.store.db.prepare(`SELECT count(*) n FROM events e LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision WHERE e.campaign_id=? AND e.merged_into IS NULL AND e.state!='excluded' AND coalesce(e.published_revision,0)!=e.revision AND (coalesce(json_extract(q.payload,'$.verdict'),'pending')!='pass' OR e.occurred_at IS NULL OR json_extract(e.canonical,'$.location.latitude') IS NULL OR NOT EXISTS(SELECT 1 FROM translations t WHERE t.event_id=e.id AND t.revision=e.revision AND t.language='ru') OR NOT EXISTS(SELECT 1 FROM site_translations t WHERE t.event_id=e.id AND t.revision=e.revision))`).get(c.id).n;
+        this.store.db.prepare('UPDATE campaigns SET state=? WHERE id=?').run(failed||unresolved?'complete-with-errors':'complete',c.id);
+      }
     }
   }
 }

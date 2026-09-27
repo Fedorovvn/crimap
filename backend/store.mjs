@@ -3,6 +3,10 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
+export function jobBudget(kind,payload,event){
+  const campaignId=kind==='recheck'||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
+  return {campaignId,budgetScope:campaignId?'archive':'daily'};
+}
 export class Store {
   constructor(path){
     this.path=path;
@@ -40,6 +44,11 @@ export class Store {
   transaction(fn){this.db.exec('BEGIN IMMEDIATE');try{const out=fn();this.db.exec('COMMIT');return out;}catch(e){this.db.exec('ROLLBACK');throw e;}}
   log(action,subject,detail){this.db.prepare('INSERT INTO audit(action,subject,detail,created_at) VALUES(?,?,?,?)').run(action,String(subject??''),JSON.stringify(detail),new Date().toISOString());}
   enqueue(kind,key,payload={},due=new Date().toISOString()){
+    const event=payload.eventId?this.event(payload.eventId):null;
+    payload={...payload,...jobBudget(kind,payload,event)};
+    // An explicit retry of completed archive work resumes that same campaign,
+    // never the daily allowance. reserveCost still enforces its original cap.
+    if(payload.campaignId)this.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(payload.campaignId);
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at) VALUES(?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE 'queued' END`).run(kind,String(key),JSON.stringify(payload),due);
   }
   claim(now=new Date().toISOString(),kinds=null){
