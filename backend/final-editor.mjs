@@ -44,10 +44,33 @@ export function sourceExcerpts(documents,event){
   });
 }
 
+// Some model responses send a complete translated event instead of sparse
+// text paths. Accept that equivalent representation only if every structural
+// field agrees with the corrected canonical event; normal validation still runs.
+export function normalizeFinalResponse(raw,event,russian){
+  const value=raw?.final?.russian;
+  if(!value || typeof value!=='object')return raw;
+  const english=raw.final.event??event;
+  const containers=Object.keys(value).filter(k=>english[k]&&typeof english[k]==='object'&&!k.includes('.'));
+  if(!containers.length)return raw;
+  const supplied=structuredClone(value);
+  for(const key of containers){
+    if(typeof supplied[key]==='string'){
+      try{supplied[key]=JSON.parse(supplied[key]);}catch{throw new Error(`Use dot-path translations for ${key}; this is not a serialized object`);}
+    }
+  }
+  const translated=eventSchema.parse({...structuredClone(russian??event),...supplied});
+  const reconstructed=applyTranslation(eventSchema.parse(english),{language:'ru',strings:translationStrings(translated)});
+  if(!isDeepStrictEqual(translated,reconstructed))throw new Error('Full Russian event changes non-text data or array identities. Return only final.russian dot-path text translations matching final.event.');
+  // Only explicitly supplied text becomes an edit. Unchanged fallback text must
+  // never conceal a missing translation of a newly changed English field.
+  return {...raw,final:{...raw.final,russian:translationStrings(supplied)}};
+}
+
 // The editor sends only changed text, but must supply translations for every
 // changed/new English field. Stale translations never silently survive an edit.
 export function assembleFinal(raw,{event,russian,translations,preparation,documents,locationLookup,validateEvent,requireLegalCoverage=false}){
-  const parsed=finalEditorSchema.parse(raw),{final,publicationSummary,legalCoverage,...baseReview}=parsed;
+  const parsed=finalEditorSchema.parse(normalizeFinalResponse(raw,event,russian)),{final,publicationSummary,legalCoverage,...baseReview}=parsed;
   checkReview(baseReview,documents,{english:event,russian,translations,locationLookup});
   const review={...baseReview,...publicationSummary?{publicationSummary}:{},...legalCoverage?{legalCoverage}:{}};
   if(review.verdict!=='pass')return {review};

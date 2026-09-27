@@ -41,7 +41,7 @@ test('Pro corrections are atomically saved as a ready revision without Flash rep
   s.db.prepare('INSERT INTO preparation VALUES(1,1,?,?)').run('{}','2026-09-26');
   s.db.prepare('INSERT INTO translations VALUES(1,1,?,?,?,?)').run('ru',JSON.stringify(russian),'flash','2026-09-26');
   s.db.prepare('INSERT INTO site_translations VALUES(1,1,?,?)').run(JSON.stringify(translations),'2026-09-26');
-  const pipeline=new Pipeline(s,{model:{json:async()=>{throw new Error('Unexpected Flash call');}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{assert.ok(payload.russian);assert.ok(payload.siteTranslations.hu);return validate(result);}}});
+  const pipeline=new Pipeline(s,{model:{json:async()=>{throw new Error('Unexpected Flash call');}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{assert.deepEqual(payload.russian,translationStrings(russian));assert.ok(payload.translationPaths.includes('location.label'));assert.ok(payload.siteTranslations.hu);return validate(result);}}});
   assert.equal((await pipeline.review(1,1)).finalized,true);assert.equal(s.event(1).revision,2);assert.equal(s.event(1).canonical.type,'assault');assert.equal(s.event(1).public_id,null);
   assert.equal(JSON.parse(s.db.prepare('SELECT payload FROM quality_reviews WHERE revision=2').get().payload).verdict,'pass');
   assert.equal(s.db.prepare('SELECT count(*) n FROM site_translations WHERE revision=2').get().n,1);
@@ -63,4 +63,22 @@ test('a draft translation may reach Pro with a numeric error but cannot pass fin
  const draft=applyTranslation(original,{language:'ru',strings:{...translationStrings(original),summary:'Пострадал 31-летний мужчина.'}},{draft:true});
  assert.equal(draft.summary,'Пострадал 31-летний мужчина.');
  assert.throws(()=>assembleFinal({verdict:'pass',summary:'ok',issues:[],requests:[],final:{}},{...context,event:original,russian:draft}),/changed numbers/);
+});
+
+test('equivalent full Russian output is normalized without another paid request, structural edits are rejected',()=>{
+ const full={verdict:'pass',summary:'Проверено',issues:[],requests:[],final:{russian}};
+ const ready=assembleFinal(full,context);assert.deepEqual(ready.russian,russian);
+ const wrong=structuredClone(full);wrong.final.russian.location.latitude=48;
+ assert.throws(()=>assembleFinal(wrong,context),/non-text data/);
+ const wrongDate=structuredClone(full);wrongDate.final.russian.occurredAt='2026-09-19T12:00:00Z';
+ assert.throws(()=>assembleFinal(wrongDate,context),/non-text data/);
+});
+
+test('serialized translation containers are flattened only after structural and numeric validation',()=>{
+ const raw={verdict:'pass',summary:'Проверено',issues:[],requests:[],final:{russian:{location:JSON.stringify(russian.location),signals:'[]',caseReferences:'[]'}}};
+ assert.deepEqual(assembleFinal(raw,context).russian,russian);
+ const bad=structuredClone(raw);bad.final.russian.signals='["death"]';
+ assert.throws(()=>assembleFinal(bad,context),/non-text data/);
+ const changed=structuredClone(raw);changed.final.event={...event,summary:'A new factual sentence.'};
+ assert.throws(()=>assembleFinal(changed,context),/required for changed English field/);
 });

@@ -16,7 +16,7 @@ import { checkReview,recordRequests } from './review.mjs';
 import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
-import { finalEditorSchema, sourceExcerpts, assembleFinal } from './final-editor.mjs';
+import { finalEditorSchema, sourceExcerpts, assembleFinal, normalizeFinalResponse } from './final-editor.mjs';
 import { readPublication, comparisonFor, reviewChanges } from './publication-comparison.mjs';
 import {queueEditorialPreparation} from './editorial-workflow.mjs';
 import {validateResolvedDate} from './date-resolution.mjs';
@@ -344,10 +344,11 @@ export class Pipeline {
       let outputSchema=finalEditorSchema.required({legalCoverage:true});
       if(enabled&&!locationLookup.applied)outputSchema=outputSchema.required({locationResolution:true});
       if(published)outputSchema=outputSchema.required({publicationSummary:true});
-      const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
+      const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
         proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
       return this.reviewer.json('review',payload,{maxTokens:28000,validate:raw=>{
+        raw=normalizeFinalResponse(raw,event.canonical,russian);
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
         assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
         return finalEditorSchema.parse(raw);
