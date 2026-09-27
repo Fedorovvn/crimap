@@ -32,6 +32,7 @@ export function setEditorialMark(store,id,mark,reviewer,{reasons=[],note='',publ
 }
 
 export function changeBudget(store,id,budget,reviewer){
+  if(store.totalBudget())fail(409,'Используйте общий бюджет моделей');
   if(typeof budget!=='number'||!Number.isFinite(budget)||budget<=0||Math.abs(Math.round(budget*100)-budget*100)>1e-8)fail(400,'Укажите положительный лимит в долларах с точностью до цента');
   return store.transaction(()=>{
     const old=store.db.prepare('SELECT * FROM campaigns WHERE id=?').get(id);if(!old)fail(404,'Обход не найден');
@@ -39,6 +40,22 @@ export function changeBudget(store,id,budget,reviewer){
     if(budget<spent)fail(409,`Уже потрачено или зарезервировано $${spent.toFixed(3)}; лимит не может быть меньше`);
     store.db.prepare('UPDATE campaigns SET budget_usd=? WHERE id=?').run(budget,id);
     store.log('budget-changed',id,{before:old.budget_usd,budget,spent,reviewer});return {budget,spent,remaining:budget-spent};
+  });
+}
+export function changeTotalBudget(store,budget,reviewer){
+  if(typeof budget!=='number'||!Number.isFinite(budget)||budget<=0||Math.abs(Math.round(budget*100)-budget*100)>1e-8)fail(400,'Укажите положительный общий лимит с точностью до цента');
+  return store.transaction(()=>{
+    const old=store.totalBudget();
+    const spent=store.db.prepare('SELECT coalesce(sum(coalesce(cost_usd,reserved_usd)),0) n FROM usage').get().n;
+    if(budget<spent)fail(409,`Уже потрачено или зарезервировано $${spent.toFixed(3)}; общий лимит не может быть меньше`);
+    const now=new Date().toISOString();
+    store.db.prepare('INSERT OR REPLACE INTO model_budget VALUES(1,?,?)').run(budget,now);
+    const resumed=store.db.prepare(`UPDATE jobs SET state='queued',due_at=?,last_error=NULL,attempts=0,rerun=0,lease_until=NULL,lease_token=NULL
+      WHERE state IN ('queued','paused') AND last_error IN ('Daily model budget reached','Total model budget reached')
+      AND NOT EXISTS(SELECT 1 FROM campaigns c WHERE c.id=json_extract(jobs.payload,'$.campaignId') AND c.state='paused')
+      AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND (e.editorial_mark='uninteresting' OR e.merged_into IS NOT NULL OR e.state='excluded'))`).run(now).changes;
+    store.log('total-budget-changed','models',{before:old?.limit??null,limit:budget,spent,resumed,reviewer});
+    return {...store.totalBudget(),resumed};
   });
 }
 export function resumeCampaign(store,id,reviewer){

@@ -25,6 +25,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,language TEXT NOT NULL,payload TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision,language));
       CREATE TABLE IF NOT EXISTS model_cache(cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS usage(id INTEGER PRIMARY KEY,request_key TEXT NOT NULL,stage TEXT NOT NULL,model TEXT NOT NULL,state TEXT NOT NULL,input_tokens INTEGER NOT NULL DEFAULT 0,output_tokens INTEGER NOT NULL DEFAULT 0,reserved_usd REAL NOT NULL,cost_usd REAL,created_at TEXT NOT NULL,error TEXT);
+      CREATE TABLE IF NOT EXISTS model_budget(id INTEGER PRIMARY KEY CHECK(id=1),limit_usd REAL NOT NULL CHECK(limit_usd>0),updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS http_cache(url TEXT PRIMARY KEY,etag TEXT,last_modified TEXT,body TEXT NOT NULL,content_type TEXT NOT NULL,fetched_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS search_cache(cache_key TEXT PRIMARY KEY,result TEXT NOT NULL,expires_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,action TEXT NOT NULL,subject TEXT,detail TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -94,7 +95,10 @@ export class Store {
   event(id){const e=this.db.prepare('SELECT * FROM events WHERE id=?').get(id);return e?{...e,canonical:JSON.parse(e.canonical),occurredAt:e.occurred_at,firstSeenAt:e.first_seen_at}:null;}
   reserveCost(stage,model,requestKey,amount,budget,now=new Date().toISOString(),campaignId=null){
     return this.transaction(()=>{
-      if(campaignId){
+      const total=this.totalBudget();
+      if(total){
+        if(total.spent+amount>total.limit)throw new Error('Total model budget reached');
+      }else if(campaignId){
         const campaign=this.db.prepare('SELECT * FROM campaigns WHERE id=?').get(campaignId);
         const used=this.db.prepare('SELECT coalesce(sum(coalesce(cost_usd,reserved_usd)),0) n FROM usage WHERE campaign_id=?').get(campaignId).n;
         if(!campaign||campaign.state!=='running'||used+amount>campaign.budget_usd)throw new Error('Campaign model budget reached');
@@ -104,6 +108,11 @@ export class Store {
       }
       return Number(this.db.prepare("INSERT INTO usage(request_key,stage,model,state,reserved_usd,created_at,campaign_id) VALUES(?,?,?,'reserved',?,?,?)").run(requestKey,stage,model,amount,now,campaignId).lastInsertRowid);
     });
+  }
+  totalBudget(){
+    const row=this.db.prepare('SELECT limit_usd FROM model_budget WHERE id=1').get();if(!row)return null;
+    const spent=this.db.prepare('SELECT coalesce(sum(coalesce(cost_usd,reserved_usd)),0) n FROM usage').get().n;
+    return {limit:row.limit_usd,spent,remaining:Math.max(0,row.limit_usd-spent)};
   }
   usageDone(id,input,output,cost){this.db.prepare("UPDATE usage SET state='complete',input_tokens=?,output_tokens=?,cost_usd=? WHERE id=?").run(input,output,cost,id);}
   usageFailed(id,message){this.db.prepare("UPDATE usage SET state='failed',error=? WHERE id=?").run(message,id);}

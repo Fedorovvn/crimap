@@ -76,3 +76,18 @@ test('Pro change index does not duplicate long translations or omit the changed 
  assert.ok(JSON.stringify(compact).length<200);
  assert.equal(changes[1].after,text);
 });
+
+test('updating publication replaces participants, including an explicitly empty list',()=>{
+ const f=fixture();try{
+  const person=key=>({key,role:'suspect',label:key,status:'detained',profile:{kind:'person'},sourceUrl:'https://www.police.hu/test',sourceLabel:'Police',asOf:'2026-09-20T00:00:00Z'});
+  for(const [revision,keys] of [[2,['one','two']],[3,['new-person']],[4,[]]]){
+   const baseline=readPublication(f.path,'test');
+   const event={...f.event,participants:keys.map(person)};
+   f.s.db.prepare('UPDATE events SET revision=?,canonical=? WHERE id=1').run(revision,JSON.stringify(event));f.drafts(revision,event);
+   f.s.db.prepare('INSERT INTO quality_reviews VALUES(1,?,?,?,?)').run(revision,'test',JSON.stringify({verdict:'pass',publicationBaseline:baseline.fingerprint}),'2026-09-27');
+   publish(f.s,1,f.path,{reviewer:'Test'});
+   assert.deepEqual(readPublication(f.path,'test').snapshot.participants.map(p=>p.key),keys);
+   const db=new DatabaseSync(f.path);try{assert.deepEqual(db.prepare('SELECT participant_key FROM incident_participants').all().map(p=>p.participant_key),keys);}finally{db.close();}
+  }
+ }finally{f.close();}
+});

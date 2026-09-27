@@ -6,7 +6,7 @@ import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 import { catalog } from './sources.mjs';
-import {changeBudget,resumeCampaign,setEditorialMark,withdraw} from './admin-actions.mjs';
+import {changeTotalBudget,changeBudget,resumeCampaign,setEditorialMark,withdraw} from './admin-actions.mjs';
 import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 
@@ -76,7 +76,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
             const comparisonReady=!baseline||row.publicationBaseline===baseline.fingerprint;
             return {...row,searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
           });
-          return send(200,{events,requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
+          return send(200,{events,budget:store.totalBudget(),requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
           campaigns:store.db.prepare(`SELECT c.*,coalesce((SELECT sum(coalesce(cost_usd,reserved_usd)) FROM usage WHERE campaign_id=c.id),0) spent,
             (SELECT count(*) FROM events WHERE campaign_id=c.id) events,
             (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='done') done,
@@ -91,6 +91,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
           usage:store.db.prepare('SELECT count(*) calls,coalesce(sum(coalesce(cost_usd,reserved_usd)),0) usd FROM usage WHERE created_at>=?').get(new Date().toISOString().slice(0,10)),
         });
       }
+      if(path==='/admin/api/budget'&&req.method==='POST')return send(200,changeTotalBudget(store,body.budget,reviewer));
       const campaign=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/budget$/);
       if(campaign&&req.method==='POST')return send(200,changeBudget(store,decodeURIComponent(campaign[1]),body.budget,reviewer));
       const resume=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/resume$/);

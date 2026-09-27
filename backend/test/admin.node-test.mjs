@@ -34,6 +34,10 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     assert.equal((await request('events/1/review',{revision:1},{'X-CSRF-Token':''})).status,403);
     assert.equal((await request('events/1/review',{revision:1},{origin:'https://evil.example'})).status,403);
     assert.equal((await request('events')).status,200);
+    assert.equal((await request('budget',{budget:30},{'X-CSRF-Token':''})).status,403);
+    assert.equal((await request('budget',{budget:30})).status,200);
+    assert.equal((await (await request('events')).json()).budget.limit,30);
+    s.db.prepare('DELETE FROM model_budget').run(); // Remaining assertions cover legacy campaign migration.
     let detail=await(await request('events/1')).json();assert.equal(detail.documents[0].text,quote);assert.equal(detail.blockers.length,3);
     assert.equal((await request('events/1/publish',{revision:1,approvalToken:detail.approvalToken,confirm:true})).status,422);
     const modified=structuredClone(canonical);modified.location.latitude=47.5;modified.location.longitude=19.06;

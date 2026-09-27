@@ -39,13 +39,16 @@ export function getDb() {
   return drizzle(getRawDb(), { schema });
 }
 
-/** Adds the two verified starter records once, after the schema migration exists. */
+/** Seed an empty database only. Existing publications own all of their child rows. */
 export async function ensureStarterIncidents() {
   const rawDb = getRawDb();
   const existing = await rawDb
-    .prepare("SELECT id FROM incidents WHERE slug = ? LIMIT 1")
-    .bind("soroksari-fatal-crash")
+    .prepare("SELECT id FROM incidents LIMIT 1")
     .first();
+
+  // Never restore starter participants/legal/context after an editor replaced
+  // them, including intentional empty lists or a removed starter incident.
+  if (existing) return;
 
   if (!existing) {
     await rawDb.batch([

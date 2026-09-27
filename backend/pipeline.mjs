@@ -471,6 +471,10 @@ export class Pipeline {
     }catch(e){
       if(e.code==='DATE_PENDING'){this.store.log('date-hold',job.payload.eventId,{kind:job.kind});return true;}
       if(e.code==='EDITORIAL_STOP'||(job.payload.eventId&&this.store.event(job.payload.eventId)?.editorial_mark==='uninteresting')){this.store.log('editorial-work-stopped',job.payload.eventId,{kind:job.kind});this.archive?.settle();return true;}
+      if(e.message==='Total model budget reached'){
+        this.store.db.prepare("UPDATE jobs SET state='paused',last_error=?,lease_token=NULL,lease_until=NULL,rerun=0 WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);
+        this.store.log('total-budget-stop',job.id,{kind:job.kind});return true;
+      }
       if(/Campaign model budget reached/.test(e.message)&&this.campaignId){
         this.store.transaction(()=>{this.store.db.prepare("UPDATE campaigns SET state='budget-exhausted' WHERE id=?").run(this.campaignId);this.store.db.prepare("UPDATE jobs SET state='paused',lease_token=NULL,lease_until=NULL,last_error=? WHERE json_extract(payload,'$.campaignId')=? AND state IN ('running','queued')").run(e.message,this.campaignId);});
         this.store.log('campaign-budget-stop',this.campaignId,{error:e.message});return true;
