@@ -79,7 +79,12 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     s.enqueue('article','paused',{campaignId:'archive'});s.db.prepare("UPDATE jobs SET state='paused' WHERE job_key='paused'").run();
     assert.equal((await request('campaigns/archive/budget',{budget:10})).status,200);
     assert.equal(s.db.prepare("SELECT budget_usd FROM campaigns WHERE id='archive'").get().budget_usd,10);
+    assert.equal(s.db.prepare("SELECT state FROM jobs WHERE job_key='paused'").get().state,'paused');
+    assert.equal((await(await request('events')).json()).campaigns[0].paused,1);
+    assert.equal((await request('campaigns/archive/resume',{}, {'X-CSRF-Token':''})).status,403);
+    const resumed=await request('campaigns/archive/resume',{});assert.equal(resumed.status,200);assert.equal((await resumed.json()).resumed,1);
     assert.equal(s.db.prepare("SELECT state FROM jobs WHERE job_key='paused'").get().state,'queued');
+    assert.equal((await(await request('campaigns/archive/resume',{})).json()).resumed,0);
     assert.equal((await request('campaigns/archive/budget',{budget:-1})).status,400);
     s.reserveCost('review','fixture','budget-check',4,.5,now,'archive');
     assert.equal((await request('campaigns/archive/budget',{budget:3})).status,409);

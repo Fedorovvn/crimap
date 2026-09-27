@@ -6,7 +6,7 @@ import { Store, hash } from './store.mjs';
 import { publish } from './publish.mjs';
 import { eventDetail, reviseEvent, fail } from './editorial.mjs';
 import { catalog } from './sources.mjs';
-import {changeBudget,withdraw} from './admin-actions.mjs';
+import {changeBudget,resumeCampaign,withdraw} from './admin-actions.mjs';
 import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 
@@ -81,6 +81,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
             (SELECT count(*) FROM events WHERE campaign_id=c.id) events,
             (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='done') done,
             (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state IN ('queued','running')) pending,
+            (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='paused') paused,
             (SELECT count(*) FROM jobs WHERE json_extract(payload,'$.campaignId')=c.id AND state='failed') failed
             FROM campaigns c ORDER BY created_at DESC`).all(),
           archivePages:store.db.prepare('SELECT campaign_id,source_id,count(*) pages,min(earliest) earliest,max(latest) latest,sum(found) found,sum(filtered) filtered FROM archive_pages GROUP BY campaign_id,source_id').all(),
@@ -92,6 +93,8 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       }
       const campaign=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/budget$/);
       if(campaign&&req.method==='POST')return send(200,changeBudget(store,decodeURIComponent(campaign[1]),body.budget,reviewer));
+      const resume=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/resume$/);
+      if(resume&&req.method==='POST')return send(200,resumeCampaign(store,decodeURIComponent(resume[1]),reviewer));
       const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw))?$/);
       if(!match)fail(404,'Не найдено');
       const id=Number(match[1]),action=match[2];

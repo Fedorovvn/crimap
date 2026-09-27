@@ -8,11 +8,21 @@ export function changeBudget(store,id,budget,reviewer){
     const spent=store.db.prepare('SELECT coalesce(sum(coalesce(cost_usd,reserved_usd)),0) n FROM usage WHERE campaign_id=?').get(id).n;
     if(budget<spent)fail(409,`Уже потрачено или зарезервировано $${spent.toFixed(3)}; лимит не может быть меньше`);
     store.db.prepare('UPDATE campaigns SET budget_usd=? WHERE id=?').run(budget,id);
-    if(budget>spent&&old.state==='budget-exhausted'){
-      store.db.prepare("UPDATE campaigns SET state='running' WHERE id=?").run(id);
-      store.db.prepare("UPDATE jobs SET state='queued',last_error=NULL,due_at=? WHERE state='paused' AND json_extract(payload,'$.campaignId')=?").run(new Date().toISOString(),id);
-    }
     store.log('budget-changed',id,{before:old.budget_usd,budget,spent,reviewer});return {budget,spent,remaining:budget-spent};
+  });
+}
+export function resumeCampaign(store,id,reviewer){
+  return store.transaction(()=>{
+    const campaign=store.db.prepare('SELECT * FROM campaigns WHERE id=?').get(id);
+    if(!campaign)fail(404,'Обход не найден');
+    const pending=store.db.prepare("SELECT count(*) n FROM jobs WHERE json_extract(payload,'$.campaignId')=? AND state IN ('paused','queued','running')").get(id).n;
+    if(!pending)return {resumed:0,state:campaign.state};
+    const spent=store.db.prepare('SELECT coalesce(sum(coalesce(cost_usd,reserved_usd)),0) n FROM usage WHERE campaign_id=?').get(id).n;
+    if(spent>=campaign.budget_usd)fail(409,'Бюджет исчерпан. Увеличьте и сохраните лимит перед продолжением');
+    const resumed=store.db.prepare("UPDATE jobs SET state='queued',attempts=0,last_error=NULL,lease_token=NULL,lease_until=NULL,due_at=? WHERE state='paused' AND json_extract(payload,'$.campaignId')=?").run(new Date().toISOString(),id).changes;
+    store.db.prepare("UPDATE campaigns SET state='running' WHERE id=?").run(id);
+    if(resumed||campaign.state!=='running')store.log('campaign-resumed',id,{resumed,budget:campaign.budget_usd,spent,reviewer});
+    return {resumed,state:'running'};
   });
 }
 export function setPublicHidden(path,slug,hidden){
