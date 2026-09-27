@@ -275,6 +275,27 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const activeMarkerSlug = desktop || mobileDetailOpen ? (selected?.slug ?? "") : preselectedSlug;
 
   useEffect(() => {
+    const feed = feedRef.current, list = listRef.current;
+    const last = cardRefs.current.get(visibleIncidents.at(-1)?.slug ?? "");
+    if (!feed || !list || !last || mobileDetailOpen) return;
+    // End the mobile scroll with the last card directly below the map. Measure
+    // its real height because titles, translations and the viewport can change.
+    const measure = () => {
+      const bottom = parseFloat(getComputedStyle(feed).paddingBottom) || 0;
+      const space = Math.max(0, feed.clientHeight - last.getBoundingClientRect().height - bottom);
+      list.style.setProperty("--mobile-list-end-space", `${space}px`);
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(feed); observer.observe(last);
+    return () => observer.disconnect();
+  }, [visibleIncidents, mobileDetailOpen]);
+
+  useEffect(() => {
     const query = window.matchMedia("(min-width: 768px)");
     const update = () => { setDesktop(query.matches); setHoveredSlug(""); };
     update(); query.addEventListener("change", update);
