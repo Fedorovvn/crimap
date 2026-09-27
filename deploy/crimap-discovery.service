@@ -13,4 +13,3 @@ ExecStart=/srv/crimap/runtime/node/bin/node backend/cli.mjs discover
 TimeoutStartSec=240
 NoNewPrivileges=true
 PrivateTmp=true
-

@@ -153,7 +153,7 @@ export class Pipeline {
     const prior=previous?JSON.parse(previous.payload).detailCompletion:null;
     let completion=prior,preparedRow=row;
     const needsDetails=this.model&&documents.length&&(row.canonical.participants.length||['assault','fight','robbery'].includes(row.canonical.type)||row.canonical.signals.some(s=>['death','injury'].includes(s)));
-    if(needsDetails&&prior?.fingerprint!==detailFingerprint(row.canonical,documents,this.laws)){
+    if(needsDetails&&(refresh||prior?.fingerprint!==detailFingerprint(row.canonical,documents,this.laws))){
       const details=await completeDetails(this.model,row.canonical,documents,this.laws,(e,d)=>this.validate(e,d));
       preparedRow={...row,canonical:details.event};
       completion={fingerprint:details.fingerprint,coverage:details.coverage,model:this.model.model,checkedAt:iso()};

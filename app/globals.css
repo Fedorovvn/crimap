@@ -576,7 +576,7 @@ body {
 
 @media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
   .signal-shell[data-mobile-detail="true"] .map-frame {
-    flex-basis: 25%;
+    flex-basis: 33.333%;
   }
 
   .signal-shell[data-mobile-detail="true"] .map-controls,
@@ -672,6 +672,9 @@ body {
 }
 
 @media (max-width: 767px) and (orientation: portrait) {
+  .signal-shell[data-mobile-detail="true"] .mobile-incidents-workspace > .map-frame {
+    flex-basis: 33dvh;
+  }
   .mobile-map-summary {
     top: 1rem;
     bottom: 1rem;
@@ -684,6 +687,8 @@ body {
     right: 0;
     font-size: 1.25rem;
     line-height: 1.1;
+    text-wrap: balance;
+    overflow-wrap: anywhere;
   }
 
   .mobile-map-summary-address {
@@ -840,6 +845,20 @@ body {
   .mobile-incidents-workspace { --desktop-map-height:clamp(420px,70dvh,780px);grid-template-rows:var(--desktop-map-height) auto; }
   .mobile-incidents-workspace > .map-frame { height:var(--desktop-map-height);min-height:0; }
   .mobile-incident-list { height:var(--desktop-map-height);min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable; }
+}
+
+@media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
+  .signal-map .leaflet-tooltip {
+    width: max-content;
+    max-width: min(260px, calc(100vw - 64px));
+    white-space: normal;
+    overflow-wrap: anywhere;
+    text-wrap: balance;
+    text-align: center;
+    line-height: 1.4;
+    border-radius: 14px;
+    padding: 9px 12px;
+  }
 }
 @media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {
   .section-switch--desktop { display: none; }

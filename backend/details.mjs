@@ -11,6 +11,13 @@ export const detailsSchema=z.object({
   requests:z.array(fieldRequestSchema).max(10).default([]),
 }).strict();
 const detailPath=path=>/^(participants|context|legal)(\.|$)/.test(path);
+export function validateDetailLanguage(result){
+  const prose=[...result.participants.map(p=>p.note??''),...result.context.map(c=>c.text),...result.legal.map(l=>l.offense)];
+  for(const text of prose){
+    const words=text.toLowerCase().split(/[^\p{L}]+/u).filter(w=>['az','egy','és','hogy','éves','férfi','férfit','sérült','sértett','rendőrök','szerint','ahol','majd','miatt','volt','előállították','elfogták'].includes(w));
+    if(words.length>=3&&new Set(words).size>=2)throw new Error('Write participant notes, context and offense prose in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian.');
+  }
+}
 export function detailFingerprint(event,documents,laws){return hash({version:1,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
 export function validateLegalLinks(event){
   for(const law of event.legal){const p=event.participants.find(p=>p.key===law.participantKey);if(!p||!['suspect','convicted'].includes(p.role))throw new Error('Legal assessment must reference its supported suspect/convicted participantKey; never attach a charge to a victim or all suspects indiscriminately');
@@ -20,6 +27,7 @@ export function validateLegalLinks(event){
 export async function completeDetails(model,event,documents,laws,validate){
   const raw=await model.json('details',{schema:zodToJsonSchema(detailsSchema),event,documents,verifiedLawCatalog:laws},{maxTokens:10000,validate:raw=>{
     const result=detailsSchema.parse(raw);
+    validateDetailLanguage(result);
     if(result.evidence.some(e=>!detailPath(e.field)))throw new Error('Detail completion evidence may only reference participants, context or legal');
     const combined={...structuredClone(event),participants:result.participants,context:result.context,legal:result.legal,evidence:[...event.evidence.filter(e=>!detailPath(e.field)),...result.evidence]};
     validateLegalLinks(combined);
