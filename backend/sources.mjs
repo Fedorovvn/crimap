@@ -10,7 +10,7 @@ export function sourceFor(url){
 }
 export const LIVE_SOURCE_IDS=['police-brfk','police-national','okf-events','prosecution','kekvillogo','bpiautosok','mavinform','telex','index'];
 export function feeds(ids=LIVE_SOURCE_IDS){
-  return catalog.filter(s=>ids.includes(s.id)).flatMap(s=>(s.feeds??[]).map(f=>({url:f.url,sourceId:s.id,intervalSeconds:s.id==='prosecution'?1800:s.group==='official'?300:600})));
+  return catalog.filter(s=>ids.includes(s.id)).flatMap(s=>(s.feeds??[]).map(f=>({url:f.url,sourceId:s.id,intervalSeconds:3600})));
 }
 export function parseFeed(body,base){
   if(/<!DOCTYPE/i.test(body))throw new Error('Feed DTD is not accepted');

@@ -1,5 +1,5 @@
 [Unit]
-Description=Check Crime Map source feeds every minute (per-source cadence in queue)
+Description=Dispatch due Crime Map hourly feed checks (no requests before due time)
 
 [Timer]
 OnBootSec=30s

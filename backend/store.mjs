@@ -56,7 +56,8 @@ export class Store {
     // An explicit retry of completed archive work resumes that same campaign,
     // never the daily allowance. reserveCost still enforces its original cap.
     if(payload.campaignId)this.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(payload.campaignId);
-    const state=payload.campaignId&&this.db.prepare('SELECT state FROM campaigns WHERE id=?').get(payload.campaignId)?.state==='budget-exhausted'?'paused':'queued';
+    const campaignState=payload.campaignId&&this.db.prepare('SELECT state FROM campaigns WHERE id=?').get(payload.campaignId)?.state;
+    const state=['paused','budget-exhausted'].includes(campaignState)?'paused':'queued';
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at,state) VALUES(?,?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE excluded.state END`).run(kind,String(key),JSON.stringify(payload),due,state);
   }
   holdForDate(id,payload={}, {refresh=false}={}){
@@ -74,7 +75,7 @@ export class Store {
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on
     // half-finished drafts. Due times still govern retries and rate limits.
-    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='uninteresting') ORDER BY CASE WHEN kind!='recheck' AND EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='priority') THEN 0 ELSE 1 END,CASE WHEN json_extract(payload,'$.revisitIgnoredEvent') IS NOT NULL THEN 0 ELSE 1 END,CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'gather' THEN 2 WHEN 'repair' THEN 3 WHEN 'prepare' THEN 4 WHEN 'translate' THEN 5 WHEN 'localize' THEN 6 WHEN 'review' THEN 7 ELSE 8 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
+    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} AND NOT EXISTS(SELECT 1 FROM campaigns c WHERE c.id=json_extract(jobs.payload,'$.campaignId') AND c.state='paused') AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='uninteresting') ORDER BY CASE WHEN kind!='recheck' AND EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='priority') THEN 0 ELSE 1 END,CASE WHEN json_extract(payload,'$.revisitIgnoredEvent') IS NOT NULL THEN 0 ELSE 1 END,CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'gather' THEN 2 WHEN 'repair' THEN 3 WHEN 'prepare' THEN 4 WHEN 'translate' THEN 5 WHEN 'localize' THEN 6 WHEN 'review' THEN 7 ELSE 8 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
     return row?{...row,payload:JSON.parse(row.payload)}:null;
   }
   heartbeat(job){return this.db.prepare("UPDATE jobs SET lease_until=? WHERE id=? AND lease_token=? AND state='running'").run(new Date(Date.now()+15*60_000).toISOString(),job.id,job.lease_token).changes===1;}

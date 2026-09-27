@@ -6,18 +6,21 @@ import {completeDetails,validateLegalLinks,detailFingerprint,validateDetailLangu
 import {eventSchema,validateEvidence} from '../contract.mjs';
 const feed={url:'https://www.police.hu/hu/rss/feed',sourceId:'police-national'};
 const now=new Date('2026-09-27T12:00:00Z');
+const started=new Date('2026-09-27T09:00:00Z');
 test('detail prose uses English while Hungarian proper names and evidence remain allowed',()=>{
  const response={participants:[{note:'Police detained the man near Wesselényi utca.'}],context:[],legal:[],evidence:[{quote:'A férfit elfogták és előállították.'}]};
  validateDetailLanguage(response);
  assert.throws(()=>validateDetailLanguage({...response,participants:[{note:'A férfit elfogták és előállították.'}]}),/ENGLISH/);
 });
 const xml=(count,extra='')=>'<rss><channel>'+Array.from({length:count},(_,i)=>`<item><title>Budapesti késelés ${i}${extra}</title><link>https://www.police.hu/article-${i}</link><pubDate>Sun, 27 Sep 2026 10:00:00 GMT</pubDate><description>Budapest: egy férfit megszúrtak.</description></item>`).join('')+'</channel></rss>';
-test('free discovery reads beyond the first three, persists receipts and detects changed entries',async()=>{
- const s=new Store(':memory:');try{let body=xml(12);const reader={read:async()=>({body,url:feed.url})};
+test('free discovery reads beyond the first three, persists receipts and ignores changed metadata',async()=>{
+ const s=new Store(':memory:');try{let body=xml(0);const reader={read:async()=>({body,url:feed.url})};
+ await discoverFeed(s,reader,feed,{now:started});body=xml(12);
  assert.equal((await discoverFeed(s,reader,feed,{now})).queued,12);
  s.db.prepare("UPDATE jobs SET state='done'").run();
  assert.equal((await discoverFeed(s,reader,feed,{now})).queued,0);
- body=xml(12,' update');assert.equal((await discoverFeed(s,reader,feed,{now})).queued,12);
+ body=xml(12,' update');assert.equal((await discoverFeed(s,reader,feed,{now})).queued,0);
+ body=xml(13);assert.equal((await discoverFeed(s,reader,feed,{now})).queued,1);
  assert.equal(s.db.prepare('SELECT count(*) n FROM usage').get().n,0);
  }finally{s.close();}
 });
