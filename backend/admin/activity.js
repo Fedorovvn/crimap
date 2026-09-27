@@ -1,13 +1,15 @@
+import {renderUsage} from './usage-ui.mjs';
 const $=s=>document.querySelector(s),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Budapest',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Ещё не было';
 const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Ошибка','waiting-date':'Ожидает даты',stale:'Прервано'};
 const external=(url,label)=>/^https?:\/\//.test(url??'')?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)} ↗</a>`:escape(label);
 const title=r=>r.eventId?`<a href="/admin/?event=${r.eventId}">${escape(r.title??`Событие №${r.eventId}`)}</a>`:external(r.url,r.title??r.sourceName??'Без отдельного события');
 let busy=false,nextBefore=null,older=false,view='queue',logs=[],sourceOptions='';
-function tab(name){view=name;for(const v of ['queue','journal','sources']){$('#panel-'+v).hidden=v!==name;$('#tab-'+v).setAttribute('aria-selected',String(v===name));}}
-for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>tab(b.dataset.view));
-document.querySelector('.activity-tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const vs=['queue','journal','sources'],i=vs.indexOf(view),n=e.key==='Home'?0:e.key==='End'?2:(i+(e.key==='ArrowRight'?1:2))%3;tab(vs[n]);$('#tab-'+vs[n]).focus();});
+function tab(name){view=name;$('#activity-stats').hidden=name==='usage';$('#activity-source').disabled=name==='usage';for(const v of ['queue','journal','sources','usage']){$('#panel-'+v).hidden=v!==name;$('#tab-'+v).setAttribute('aria-selected',String(v===name));}}
+for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>{tab(b.dataset.view);history.replaceState(null,'','#'+view);});
+document.querySelector('.activity-tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const vs=['queue','journal','sources','usage'],i=vs.indexOf(view),n=e.key==='Home'?0:e.key==='End'?3:(i+(e.key==='ArrowRight'?1:3))%4;tab(vs[n]);$('#tab-'+vs[n]).focus();});
 function render(data,append){
+ renderUsage(data.usage);
  $('#activity-updated').textContent='Обновлено '+date(data.generatedAt);
  const c=data.counts,b=data.budget;
  $('#activity-health').innerHTML=`<div class="activity-health-row"><span class="pill ${c.running?'good':''}">${c.running?`В работе: ${c.running}`:'Нет активных задач'}</span><span>Готовы к запуску: <strong>${c.ready??0}</strong></span><span>На паузе: <strong>${c.paused??0}</strong></span><span>Ожидают даты: <strong>${c['waiting-date']??0}</strong></span><span>Ошибки: <strong>${(c.failed??0)+(c.stale??0)}</strong></span><span>Ожидают повтора: <strong>${c.retry??0}</strong></span></div><p class="fact">Последний успешный обход: ${escape(date(data.lastPollAt))}. Источники проверяются каждый час.${data.archiveDiscoveryStopped?' Архивный сбор остановлен.':''} Время — Будапешт.</p>${b?`<p class="fact">Общий бюджет: $${b.limit.toFixed(2)} · Учтено $${b.spent.toFixed(3)} · Осталось <strong>$${b.remaining.toFixed(3)}</strong>. <a href="/admin/#budget">Изменить лимит</a></p>`:''}`;
@@ -37,5 +39,7 @@ async function load(append=false){
 $('#activity-refresh').addEventListener('click',()=>load());$('#activity-more').addEventListener('click',()=>load(true));
 for(const id of ['period','source','category','state'])$('#activity-'+id).addEventListener('change',()=>load());
 setInterval(()=>{if(!document.hidden&&$('#activity-auto').checked&&!older)load();},15000);
+if(['queue','journal','sources','usage'].includes(location.hash.slice(1)))tab(location.hash.slice(1));
 load();
+
 

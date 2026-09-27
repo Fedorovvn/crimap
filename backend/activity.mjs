@@ -1,4 +1,5 @@
 import {catalog,sourceFor} from './sources.mjs';
+import {usageDashboard} from './usage-dashboard.mjs';
 
 export const jobLabels={feed:'Обход источника',article:'Разбор статьи',archive:'Обход архива',gather:'Поиск дополнительных источников',prepare:'Подготовка карточки',review:'Финальная проверка Pro',repair:'Исправление карточки',translate:'Перевод Flash',localize:'Перевод EN/HU','resolve-date':'Уточнение даты',recheck:'Проверка обновлений'};
 const actions={
@@ -81,5 +82,5 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
  for(const r of summary){const d=parse(r.detail);if(r.action==='feed-polled'){stats.newArticles+=d.queued??0;stats.filtered+=d.filtered??0;}if(r.action==='events-merged')stats.merged++;if(r.action==='repeat-skipped')stats.repeats++;if(r.action==='pro-final-editor')stats.reviewed++;if(r.action==='published')stats.published++;if(r.action==='job-finished'&&d.outcome==='complete')stats.completed++;}
  stats.filtered+=db.prepare("SELECT count(*) n FROM triage_log t JOIN documents d ON d.id=t.document_id WHERE t.keep=0 AND t.created_at>=? AND (?='all' OR d.source_id=?)").get(since,source,source).n;
  const filteredQueue=queue.filter(j=>(queueState==='all'||j.state===queueState)&&(source==='all'||j.sourceId===source||j.sourceIds.includes(source)));
- return {generatedAt:stamp,since,budget:store.totalBudget(),counts,stats,queue:filteredQueue.slice(0,100),queueTotal:filteredQueue.length,logs,nextBefore:examined&&(logs.length===60||raw.length===1500)?examined:null,sources,lastPollAt:polls.map(p=>p.checked_at).sort().at(-1)??null,historyStartedAt:db.prepare("SELECT min(created_at) at FROM audit WHERE action='job-started'").get().at,archiveDiscoveryStopped:db.prepare('SELECT count(*) n FROM campaigns WHERE discovery_stopped=1').get().n>0};
+ return {generatedAt:stamp,since,budget:store.totalBudget(),usage:usageDashboard(store,since),counts,stats,queue:filteredQueue.slice(0,100),queueTotal:filteredQueue.length,logs,nextBefore:examined&&(logs.length===60||raw.length===1500)?examined:null,sources,lastPollAt:polls.map(p=>p.checked_at).sort().at(-1)??null,historyStartedAt:db.prepare("SELECT min(created_at) at FROM audit WHERE action='job-started'").get().at,archiveDiscoveryStopped:db.prepare('SELECT count(*) n FROM campaigns WHERE discovery_stopped=1').get().n>0};
 }

@@ -30,7 +30,7 @@ export class DeepSeek {
     const content=JSON.stringify(payload);if(content.length>160000)throw new Error('Model input exceeds limit');
     const cacheKey=hash({stage,prompt,content,model:this.model,...(images.length?{images,detail:'low'}:{})});
     const cached=this.store.db.prepare('SELECT payload FROM model_cache WHERE cache_key=?').get(cacheKey);
-    if(cached){try{return validate(JSON.parse(cached.payload));}catch{this.store.db.prepare('DELETE FROM model_cache WHERE cache_key=?').run(cacheKey);}}
+    if(cached){try{const result=validate(JSON.parse(cached.payload));this.store.log('model-cache-hit',stage,{model:this.model});return result;}catch{this.store.db.prepare('DELETE FROM model_cache WHERE cache_key=?').run(cacheKey);}}
     // Conservative peak tariff; cache discounts can only reduce this estimate.
     const prices=this.model==='deepseek-flash'?{input:.30,output:1.20}:this.model==='deepseek-v4-pro'?{input:1.32,output:3.96}:null;
     if(!prices)throw new Error('Model has no configured spending tariff');
@@ -51,7 +51,7 @@ export class DeepSeek {
       if(data.choices?.[0]?.finish_reason!=='stop')throw new Error(`Model response incomplete (${data.choices?.[0]?.finish_reason??'missing finish reason'}; output tokens: ${usage?.completion_tokens??'unknown'})`);
       let result,raw;
       try{raw=parseJsonResponse(data.choices[0].message.content);result=validate(raw);}
-      catch(e){this.store.log('model-validation-failure',cacheKey,{stage,error:e.message,response:data.choices[0].message.content.slice(0,30000)});if(attempt===1){e.validationFailure=true;throw e;}feedback='\nYour previous response failed server validation. Generate a fresh corrected JSON response. Validation error: '+e.message.slice(0,3000);continue;}
+      catch(e){this.store.usageFailed(id,e.message);this.store.log('model-validation-failure',cacheKey,{stage,error:e.message,response:data.choices[0].message.content.slice(0,30000)});if(attempt===1){e.validationFailure=true;throw e;}feedback='\nYour previous response failed server validation. Generate a fresh corrected JSON response. Validation error: '+e.message.slice(0,3000);continue;}
       // Validators may unwrap an object into an array or another internal shape.
       // Cache the API-shaped JSON so cache hits can run the same validator.
       this.store.db.prepare('INSERT OR REPLACE INTO model_cache VALUES(?,?,?)').run(cacheKey,JSON.stringify(raw),new Date().toISOString());

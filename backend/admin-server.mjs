@@ -53,7 +53,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       }
       // The shell contains no private data. Every API except login requires a valid session.
       const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/interest-reasons.mjs':['interest-reasons.mjs','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
-      Object.assign(assets,{'/admin/activity/':['activity.html','text/html; charset=utf-8'],'/admin/activity.js':['activity.js','text/javascript; charset=utf-8']});
+      Object.assign(assets,{'/admin/activity/':['activity.html','text/html; charset=utf-8'],'/admin/activity.js':['activity.js','text/javascript; charset=utf-8'],'/admin/usage-ui.mjs':['usage-ui.mjs','text/javascript; charset=utf-8']});
       if (assets[path] && req.method==='GET') return send(200,readFileSync(new URL('./admin/'+assets[path][0],import.meta.url)),assets[path][1]);
       const token=req.headers.cookie?.match(/(?:^|;\s*)crimap_editor=([a-f0-9]{64})(?:;|$)/)?.[1];
       const session=token&&store.db.prepare('SELECT * FROM admin_sessions WHERE token_hash=? AND expires_at>?').get(hash(token),Date.now());
