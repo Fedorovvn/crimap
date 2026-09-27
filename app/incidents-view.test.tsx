@@ -104,8 +104,8 @@ const incidents: IncidentView[] = [
   },
 ];
 
-beforeEach(() => { vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); });
-afterEach(() => { vi.restoreAllMocks(); });
+beforeEach(() => { vi.stubGlobal("matchMedia", (query: string) => ({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})); vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); });
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 afterEach(() => {
   cleanup();
@@ -142,6 +142,7 @@ describe("IncidentsView", () => {
   it("renders the map, both incident cards and an official source", () => {
     render(<IncidentsView incidents={incidents} />);
 
+    expect(screen.getByRole("button", {name:"Всё время"}).getAttribute("aria-pressed")).toBe("true");
     const map = screen.getByRole("region", { name: "Карта инцидентов Будапешта" });
     expect(map).toBeTruthy();
     expect(map.contains(screen.getByRole("button", { name: "Месяц" }))).toBe(true);

@@ -13,7 +13,7 @@ const translations=Object.fromEntries(['en','hu'].map(l=>[l,Object.fromEntries(d
 const context={event,russian,translations,documents:[doc],validateEvent:e=>validateEvidence(eventSchema.parse(e),[doc])};
 const changed={...event,title:'Man stabbed on a tram',summary:'A man was stabbed on a Budapest tram. Police are investigating.',type:'assault',status:'investigating'};
 const final={event:changed,russian:{title:'Нападение с ножом в трамвае',summary:'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.'},siteTranslations:{en:{'Нападение с ножом в трамвае':changed.title,'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':changed.summary},hu:{'Нападение с ножом в трамвае':'Késelés egy villamoson','В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':'Egy férfit megszúrtak egy budapesti villamoson. A rendőrség nyomoz.'}}};
-const result={verdict:'pass',summary:'Исправлены категория, статус и переводы',issues:[],requests:[],final};
+const result={legalCoverage:{status:'no-suspect',reason:'В источнике нет описания подозреваемого для правовой оценки.',participants:[]},verdict:'pass',summary:'Исправлены категория, статус и переводы',issues:[],requests:[],final};
 test('questioning alone cannot support detained status, while an explicit apprehension quote can',()=>{
  const person={participants:[{status:'detained'}],evidence:[{field:'participants.0.status',quote:'M. Milánt is gyanúsítottként hallgatták ki.'}]};
  assert.throws(()=>assertSupportedDetention(person),/NOT detention/);
@@ -28,6 +28,8 @@ test('final editor applies factual and multilingual corrections together and rej
  assert.throws(()=>assembleFinal({...result,final:undefined},context),/must include final/);
  const bad=structuredClone(result);bad.final.event.evidence[0].quote='Invented source';assert.throws(()=>assembleFinal(bad,context),/Unverifiable/);
  const badMap=structuredClone(result);badMap.final.event.location.latitude=47.6;assert.throws(()=>assembleFinal(badMap,context),/locationResolution/);
+ const badMedia=structuredClone(result),image='https://www.police.hu/unreviewed.jpg';badMedia.final.event.media=[{imageUrl:image,sourceUrl:doc.url,outlet:'Police',credit:'Police',caption:'Photo',isSensitive:true,rights:'unknown'}];
+ assert.throws(()=>assembleFinal(badMedia,{...context,preparation:{mediaReview:[]},validateEvent:e=>e}),/Flash-approved/);
  const badNumber=structuredClone(result);badNumber.final.russian.summary+=' 30';assert.throws(()=>assembleFinal(badNumber,context),/changed numbers/);
 });
 

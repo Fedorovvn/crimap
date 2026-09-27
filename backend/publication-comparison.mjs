@@ -78,3 +78,16 @@ export function comparisonFor(published,event,documents,preparation,languages){
   const changes=publicationChanges(published.snapshot,draftPublication(event,documents,preparation,languages));
   return {baseline:published.fingerprint,revision:published.revision,pending:false,changes,counts:Object.fromEntries(['added','changed','removed'].map(k=>[k,changes.filter(c=>c.kind===k).length]))};
 }
+
+// Full old/new snapshots are already in the Pro input. UI labels and values in
+// the per-field diff repeat them (translation keys can themselves be paragraphs).
+export function reviewChanges(changes){
+  const languages=new Map(),result=[];
+  for(const change of changes){
+    if(change.path.startsWith('translations.')){
+      const path=change.path.split('.').slice(0,2).join('.');
+      languages.set(path,(languages.get(path)??0)+1);
+    }else result.push({path:change.path,kind:change.kind});
+  }
+  return [...result,...[...languages].map(([path,count])=>({path,kind:'changed',changedFields:count}))];
+}

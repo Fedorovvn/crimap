@@ -56,9 +56,9 @@ function KeepMapSized() {
   return null;
 }
 
-function incidentIcon(active: boolean, isNight: boolean) {
+function incidentIcon(active: boolean, isNight: boolean, hovered: boolean) {
   const mode = isNight ? "is-night" : "is-day";
-  const state = active ? "is-active" : "";
+  const state = active ? "is-active" : hovered ? "is-hovered" : "";
 
   return L.divIcon({
     className: `signal-marker-icon ${mode} ${state}`,
@@ -71,6 +71,8 @@ function incidentIcon(active: boolean, isNight: boolean) {
 export function IncidentMap({
   incidents,
   selectedSlug,
+  hoveredSlug = "",
+  onHover,
   focusedSlug,
   onSelect,
   theme,
@@ -78,6 +80,8 @@ export function IncidentMap({
 }: {
   incidents: MapIncident[];
   selectedSlug: string;
+  hoveredSlug?: string;
+  onHover?: (slug: string | null) => void;
   focusedSlug: string;
   onSelect: (slug: string) => void;
   theme: "day" | "night";
@@ -111,8 +115,9 @@ export function IncidentMap({
           <Marker
             key={incident.slug}
             position={[incident.latitude, incident.longitude]}
-            icon={incidentIcon(active, isNight)}
-            eventHandlers={{ click: () => onSelect(incident.slug) }}
+            icon={incidentIcon(active, isNight, incident.slug === hoveredSlug)}
+            zIndexOffset={active ? 600 : incident.slug === hoveredSlug ? 500 : 0}
+            eventHandlers={{ click: () => onSelect(incident.slug), mouseover: () => onHover?.(incident.slug), mouseout: () => onHover?.(null) }}
           >
             <Tooltip direction="top" offset={[0, -18]} opacity={1}>
               {incident.title}

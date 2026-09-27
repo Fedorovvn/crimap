@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { normalizeSignal as norm, positiveSignals } from './triage-signals.mjs';
+import {scopeDecision} from './editorial-scope.mjs';
 const routine=/forgalomkorlatoz|menetrend|potlobusz|vaganyzar|utlezaras|parkolasi tilalom|sebessegellenorzes|rendeszeti ertekezlet|baleset.megeloz|toborzo|traffic restriction|timetable/;
 const traffic=/baleset|karambol|utkoz|koccan|gazol|crash|collision|traffic accident/;
 // Only explicit all-clear statements. "Property damage" or a lightly injured
@@ -7,6 +8,7 @@ const traffic=/baleset|karambol|utkoz|koccan|gazol|crash|collision|traffic accid
 const minor=/senki (?:nem|sem) serult meg|szemelyi serules (?:nem tortent|nelkul)|kizarolag anyagi kar|csak anyagi kar|csak konnyu serul|kizarolag konnyu serul|no one was injured|there were no injuries|only minor injuries/;
 export function cheapDecision(title,text='',{complete=false}={}) {
   const t=norm(title+'\n'+text),head=norm(title);
+  const scope=scopeDecision(title,text);if(scope)return scope;
   const missing=/eltunt|eltunes|eltunese|nyoma veszett|ismeretlen helyre tavoz|missing (?:person|girl|boy|woman|man|child)|пропал|пропавш/;
   const crime=/emberrab|elrabol|gyilk|emberoles|megol|holttest|kesel|megszur|assault|murder|kidnap/;
   if(missing.test(head)&&!crime.test(t))return {decision:'drop',reason:'Розыск пропавших людей временно вне тематики',signals:[]};

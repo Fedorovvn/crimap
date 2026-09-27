@@ -1,4 +1,11 @@
 export const interestReasons={
+  animals:'Происшествие с животными',
+  'industrial-disaster':'Промышленная / химическая авария',
+  drugs:'Наркотики',
+  'police-routine':'Рейд / полицейская рутина',
+  'economic-case':'Экономическое дело',
+  'extreme-activity':'Экстремальное занятие',
+  'property-only':'Имущество без угрозы людям',
   'minor-consequences':'Незначительные последствия',
   'no-serious-injuries':'Нет тяжёлых пострадавших',
   'routine-transport':'Обычная транспортная новость',

@@ -133,8 +133,35 @@
                           "stop",
                           "landmark",
                           "street",
-                          "address"
+                          "address",
+                          "intersection"
                         ]
+                      },
+                      "streets": {
+                        "type": "array",
+                        "items": {
+                          "type": "string",
+                          "minLength": 3,
+                          "maxLength": 100
+                        },
+                        "minItems": 2,
+                        "maxItems": 2
+                      },
+                      "surface": {
+                        "type": "string",
+                        "enum": [
+                          "road",
+                          "tram",
+                          "rail",
+                          "waterfront",
+                          "building",
+                          "area"
+                        ]
+                      },
+                      "mapQuery": {
+                        "type": "string",
+                        "minLength": 3,
+                        "maxLength": 160
                       },
                       "documentId": {
                         "type": "string"

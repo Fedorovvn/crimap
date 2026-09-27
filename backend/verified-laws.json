@@ -100,9 +100,10 @@
         "unit": "years"
       }
     ],
-    "condition": "Reported completed basic intentional offense. Not an attempt, negligent offense or an aggravated/life-threatening injury. Adult general statutory range only; the court determines the applicable law and sentence.",
-    "checkedAt": "2026-09-27T02:15:00+02:00",
-    "reviewRequired": true
+    "condition": "Basic completed intentional bodily harm with healing beyond eight days; exclude aggravated forms, negligence, attempt, danger to life and death. This is a conditional general adult statutory range, not a prediction; the court determines qualification and sentence.",
+    "checkedAt": "2026-09-27T16:00:00+02:00",
+    "reviewRequired": true,
+    "factBasedMapping": "A conditional comparison is permitted without a reported legal label ONLY if exact source quotes explicitly describe intentional injury of this victim by this adult suspect AND healing beyond eight days. Hospitalization, a knife, blood or the everyday word serious alone are insufficient. Exclude reported death, danger to life, permanent disability, particularly cruel conduct, vulnerable victim, drug-related aggravation and other aggravations. Use qualification=possible and statuteMatch=editorial; retain the basic-offense condition and state that qualification is provisional."
   },
   {
     "id": "bodily-harm-life-threatening",

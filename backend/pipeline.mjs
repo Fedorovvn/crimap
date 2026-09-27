@@ -17,7 +17,7 @@ import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
 import { finalEditorSchema, sourceExcerpts, assembleFinal } from './final-editor.mjs';
-import { readPublication, comparisonFor } from './publication-comparison.mjs';
+import { readPublication, comparisonFor, reviewChanges } from './publication-comparison.mjs';
 import {queueEditorialPreparation} from './editorial-workflow.mjs';
 import {validateResolvedDate} from './date-resolution.mjs';
 
@@ -60,7 +60,11 @@ export class Pipeline {
     if(huWords.length>=3)throw new Error('Canonical title, summary, labels, notes and update text MUST be written in ENGLISH, not copied in Hungarian. Only evidence quotes and proper names stay Hungarian.');
     if(normalized(event.location.city)!=='budapest')throw new Error('Outside Budapest scope');
     if(event.occurredAt&&Date.parse(event.occurredAt)>Date.now())throw new Error('Occurrence is in the future');
-    for(const law of event.legal)if(!this.laws.some(l=>isDeepStrictEqual(l.statutes,law.statutes)&&isDeepStrictEqual(l.penalties,law.penalties)))throw new Error('Unverified legal mapping: copy statutes and penalties exactly from verifiedLawCatalog, or return legal=[]');
+    for(const law of event.legal){
+      const match=this.laws.find(l=>isDeepStrictEqual(l.statutes,law.statutes)&&isDeepStrictEqual(l.penalties,law.penalties));
+      if(!match)throw new Error('Unverified legal mapping: copy statutes and penalties exactly from verifiedLawCatalog, or explain missing coverage');
+      if(law.qualification==='possible'&&(!match.factBasedMapping||law.statuteMatch!=='editorial'))throw new Error('Possible qualification requires an explicitly permitted factBasedMapping and editorial statute match');
+    }
     validateLegalLinks(event);
     for(const image of event.media){if(!documents.some(d=>d.url===image.sourceUrl&&d.imageUrls.includes(image.imageUrl)))throw new Error('Image not present in source');image.rights='unknown';}
     return event;
@@ -337,15 +341,15 @@ export class Pipeline {
     const assess=async()=>{
       this.ensureActive(id);
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
-      let outputSchema=finalEditorSchema;
+      let outputSchema=finalEditorSchema.required({legalCoverage:true});
       if(enabled&&!locationLookup.applied)outputSchema=outputSchema.required({locationResolution:true});
       if(published)outputSchema=outputSchema.required({publicationSummary:true});
       const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
-        proposedPublicationChanges:comparisonFor(published,russian,docs,preparation,translations)?.changes??[]};
+        proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
       return this.reviewer.json('review',payload,{maxTokens:14000,validate:raw=>{
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
-        assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,validateEvent:e=>this.validate(e,docs)});
+        assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
         return finalEditorSchema.parse(raw);
       }});
     };
@@ -364,7 +368,7 @@ export class Pipeline {
       const candidate=preparation.locationReview.candidates.find(c=>c.id===result.locationResolution.candidateId);
       return applyReviewedLocation(this.store,event,preparation,candidate,result.locationResolution.reason,this.budgetScope==='daily'?null:this.campaignId??event.campaign_id);
     }
-    const final=assembleFinal(result,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup:{enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true},validateEvent:e=>this.validate(e,docs)});
+    const final=assembleFinal(result,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup:{enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true},requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
     const nextRevision=event.revision+(final.event&&!isDeepStrictEqual(final.event,event.canonical)?1:0);
     if((readPublication(this.publicPath,event.slug)?.fingerprint??null)!==(published?.fingerprint??null))throw new Error('Published version changed during Pro editing; retry against the new publication');
     if(published)final.review.publicationBaseline=published.fingerprint;

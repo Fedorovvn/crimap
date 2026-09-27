@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import {legalCoverageSchema,validateLegalCoverage} from './legal-coverage.mjs';
 import { eventSchema, translationStrings, applyTranslation, normalizeQuote } from './contract.mjs';
 import { reviewSchema, checkReview } from './review.mjs';
 import { displayStrings, validateSiteTranslation } from './site-localization.mjs';
@@ -15,7 +16,7 @@ export function assertSupportedDetention(event){
     if(quotes.some(q=>questioning.test(q))&&!quotes.some(q=>detention.test(q)))throw new Error(`participants.${index}.status: questioning as a suspect is NOT detention. Use unknown unless an exact source quote for this same person explicitly establishes arrest/detention; do not infer detained from gyanúsítottként hallgatták ki.`);
   });
 }
-export const finalEditorSchema=reviewSchema.extend({publicationSummary:z.string().trim().min(1).max(2000).optional(),final:z.object({
+export const finalEditorSchema=reviewSchema.extend({legalCoverage:legalCoverageSchema.optional(),publicationSummary:z.string().trim().min(1).max(2000).optional(),final:z.object({
   event:eventSchema.optional(), russian:edits.default({}),
   siteTranslations:z.object({en:edits.default({}),hu:edits.default({})}).strict().default({en:{},hu:{}}),
 }).strict().optional()}).strict();
@@ -45,13 +46,18 @@ export function sourceExcerpts(documents,event){
 
 // The editor sends only changed text, but must supply translations for every
 // changed/new English field. Stale translations never silently survive an edit.
-export function assembleFinal(raw,{event,russian,translations,preparation,documents,locationLookup,validateEvent}){
-  const parsed=finalEditorSchema.parse(raw),{final,publicationSummary,...baseReview}=parsed;
+export function assembleFinal(raw,{event,russian,translations,preparation,documents,locationLookup,validateEvent,requireLegalCoverage=false}){
+  const parsed=finalEditorSchema.parse(raw),{final,publicationSummary,legalCoverage,...baseReview}=parsed;
   checkReview(baseReview,documents,{english:event,russian,translations,locationLookup});
-  const review={...baseReview,...publicationSummary?{publicationSummary}:{}};
+  const review={...baseReview,...publicationSummary?{publicationSummary}:{},...legalCoverage?{legalCoverage}:{}};
   if(review.verdict!=='pass')return {review};
   if(!final)throw new Error('A passed review must include final; use final:{} when all supplied drafts are correct');
   const corrected=validateEvent(structuredClone(final.event??event));
+  if(preparation?.mediaReview){
+    const approved=new Set(preparation.mediaReview.filter(r=>r.keep).map(r=>r.imageUrl));
+    if(corrected.media.some(m=>!approved.has(m.imageUrl)))throw new Error('Final media must retain Flash-approved image URLs only; Pro cannot restore rejected or unreviewed photographs');
+  }
+  if(requireLegalCoverage || legalCoverage)review.legalCoverage=validateLegalCoverage(legalCoverage,corrected,documents);
   assertSupportedDetention(corrected);
   if(!isDeepStrictEqual(corrected.location,event.location))throw new Error('Use locationResolution for map changes; final.event.location must retain the supplied verified location');
   const oldEnglish=translationStrings(event),oldRussian=translationStrings(russian),english=translationStrings(corrected),ru={};

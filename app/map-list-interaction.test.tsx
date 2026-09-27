@@ -1,0 +1,32 @@
+import {render,screen,cleanup} from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import {vi,it,expect,afterEach,beforeEach} from 'vitest';
+import {IncidentsView,type IncidentView} from './incidents-view';
+vi.mock('next/dynamic',()=>({default:()=>function MapStub(p:any){return <div data-testid="map" data-selected={p.selectedSlug} data-hovered={p.hoveredSlug} data-focused={p.focusedSlug}>{p.incidents.map((i:any)=><button key={i.slug} aria-label={'Map '+i.slug} onMouseEnter={()=>p.onHover(i.slug)} onMouseLeave={()=>p.onHover(null)} onClick={()=>p.onSelect(i.slug)}>{i.title}</button>)}</div>}}));
+const event=(slug:string,date:string):IncidentView=>({id:slug==='first'?1:2,slug,title:slug,occurredAt:date,updatedAt:date,eventType:'assault',category:'Нападение',status:'В расследовании',verification:'Официальный источник',district:'VII',locationLabel:'Akácfa utca',locationPrecision:'Улица',latitude:47.5,longitude:19.06,summary:'Details '+slug,sources:[],updates:[],media:[]});
+const incidents=[event('first','2026-09-25T00:00:00Z'),event('old','2026-07-01T00:00:00Z')];
+beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-27T00:00:00Z'));vi.stubGlobal('matchMedia',(q:string)=>({matches:!q.includes('reduced-motion'),addEventListener:vi.fn(),removeEventListener:vi.fn()}));});
+afterEach(()=>{cleanup();vi.restoreAllMocks();vi.unstubAllGlobals();window.localStorage.clear();});
+it('hover links cards and markers without selecting another article, and map hover scrolls only its list',async()=>{
+ const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
+ const map=screen.getByTestId('map'),card=screen.getByRole('button',{name:/Нападение.*old/}),list=screen.getByRole('complementary',{name:'Лента происшествий'});
+ const scroll=vi.fn();list.scrollTo=scroll;
+ Object.defineProperty(list,'clientHeight',{value:500});
+ vi.spyOn(list,'getBoundingClientRect').mockReturnValue({top:100,height:500} as DOMRect);
+ vi.spyOn(card,'getBoundingClientRect').mockReturnValue({top:400,height:100} as DOMRect);
+ await user.hover(card);expect(map.dataset.hovered).toBe('old');expect(map.dataset.selected).toBe('first');
+ await user.unhover(card);expect(map.dataset.hovered).toBe('');
+ await user.hover(screen.getByRole('button',{name:'Map old'}));
+ expect(card.dataset.hovered).toBe('true');expect(card.dataset.selected).toBe('false');
+ expect(scroll).toHaveBeenCalledWith({top:100,behavior:'smooth'});expect(map.dataset.selected).toBe('first');
+ expect(screen.getByText('Details first')).toBeTruthy();
+ await user.unhover(screen.getByRole('button',{name:'Map old'}));expect(card.dataset.hovered).toBe('false');
+});
+it('all time is default and a period change clears single-marker camera focus',async()=>{
+ const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
+ expect(screen.getByRole('button',{name:'Всё время'}).getAttribute('aria-pressed')).toBe('true');
+ expect(screen.getByRole('button',{name:'Map old'})).toBeTruthy();
+ await user.click(screen.getByRole('button',{name:/Нападение.*first/}));expect(screen.getByTestId('map').dataset.focused).toBe('first');
+ await user.click(screen.getByRole('button',{name:'7 дней'}));expect(screen.getByTestId('map').dataset.focused).toBe('');
+ expect(screen.queryByRole('button',{name:'Map old'})).toBeNull();
+});

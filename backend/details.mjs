@@ -18,7 +18,7 @@ export function validateDetailLanguage(result){
     if(words.length>=3&&new Set(words).size>=2)throw new Error('Write participant notes, context and offense prose in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian.');
   }
 }
-export function detailFingerprint(event,documents,laws){return hash({version:1,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
+export function detailFingerprint(event,documents,laws){return hash({version:2,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
 export function validateLegalLinks(event){
   for(const law of event.legal){const p=event.participants.find(p=>p.key===law.participantKey);if(!p||!['suspect','convicted'].includes(p.role))throw new Error('Legal assessment must reference its supported suspect/convicted participantKey; never attach a charge to a victim or all suspects indiscriminately');
     if(p.profile.kind==='person'&&(p.profile.age!==undefined?p.profile.age<18:p.profile.ageGroup==='child'))throw new Error('Adult catalog sanctions cannot be assigned to a minor; request a verified juvenile-law mapping');

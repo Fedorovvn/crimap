@@ -207,7 +207,8 @@ body {
   box-shadow: none;
 }
 
-.incident-list-card:hover {
+.incident-list-card:hover,
+.incident-list-card[data-hovered="true"] {
   background: var(--card-hover);
 }
 
@@ -793,8 +794,18 @@ body {
 }
 
 .signal-marker-icon.is-active .signal-marker-core {
-  background: #df6a60;
-  box-shadow: 0 2px 10px rgb(223 106 96 / 0.56);
+  background: #882c42;
+  box-shadow: 0 0 0 1px #e29aa7, 0 2px 10px rgb(136 44 66 / 0.65);
+}
+
+.signal-marker-icon.is-hovered .signal-marker-core {
+  background: #ef514d;
+  box-shadow: 0 0 0 1px #ffc3b9, 0 0 15px rgb(239 81 77 / 0.65);
+}
+.signal-marker-icon.is-hovered .signal-marker-halo {
+  opacity: .3;
+  background: #ef514d;
+  filter: blur(5px);
 }
 
 .signal-marker-halo {
