@@ -5,6 +5,16 @@ import { displayStrings, validateSiteTranslation } from './site-localization.mjs
 import { isDeepStrictEqual } from 'node:util';
 
 const edits=z.record(z.string().trim().min(1).max(12000));
+export function assertSupportedDetention(event){
+  const normalize=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase();
+  event.participants.forEach((person,index)=>{
+    if(person.status!=='detained')return;
+    const quotes=event.evidence.filter(e=>e.field===`participants.${index}.status`).map(e=>normalize(e.quote));
+    const questioning=/gyanusitottkent|kihallgat|hallgattak ki|questioned|interrogat|допро[сш]/u;
+    const detention=/elfog|orizet|eloallit|letartoztat|bilincs|fogtak el|fogott el|bevittek|bekiser|arrest|detain|apprehend|custod|задерж|арест/u;
+    if(quotes.some(q=>questioning.test(q))&&!quotes.some(q=>detention.test(q)))throw new Error(`participants.${index}.status: questioning as a suspect is NOT detention. Use unknown unless an exact source quote for this same person explicitly establishes arrest/detention; do not infer detained from gyanúsítottként hallgatták ki.`);
+  });
+}
 export const finalEditorSchema=reviewSchema.extend({publicationSummary:z.string().trim().min(1).max(2000).optional(),final:z.object({
   event:eventSchema.optional(), russian:edits.default({}),
   siteTranslations:z.object({en:edits.default({}),hu:edits.default({})}).strict().default({en:{},hu:{}}),
@@ -42,6 +52,7 @@ export function assembleFinal(raw,{event,russian,translations,preparation,docume
   if(review.verdict!=='pass')return {review};
   if(!final)throw new Error('A passed review must include final; use final:{} when all supplied drafts are correct');
   const corrected=validateEvent(structuredClone(final.event??event));
+  assertSupportedDetention(corrected);
   if(!isDeepStrictEqual(corrected.location,event.location))throw new Error('Use locationResolution for map changes; final.event.location must retain the supplied verified location');
   const oldEnglish=translationStrings(event),oldRussian=translationStrings(russian),english=translationStrings(corrected),ru={};
   for(const key of Object.keys(final.russian))if(!(key in english))throw new Error(`Unknown final Russian field: ${key}`);

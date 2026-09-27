@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Store } from '../store.mjs';
 import { Pipeline } from '../pipeline.mjs';
-import { assembleFinal,sourceExcerpts } from '../final-editor.mjs';
+import { assembleFinal,sourceExcerpts,assertSupportedDetention } from '../final-editor.mjs';
 import { applyTranslation,translationStrings,validateEvidence,eventSchema } from '../contract.mjs';
 import { displayStrings } from '../site-localization.mjs';
 const quote='A man was stabbed on a Budapest tram. Service was interrupted. The police are investigating.';
@@ -14,6 +14,12 @@ const context={event,russian,translations,documents:[doc],validateEvent:e=>valid
 const changed={...event,title:'Man stabbed on a tram',summary:'A man was stabbed on a Budapest tram. Police are investigating.',type:'assault',status:'investigating'};
 const final={event:changed,russian:{title:'Нападение с ножом в трамвае',summary:'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.'},siteTranslations:{en:{'Нападение с ножом в трамвае':changed.title,'В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':changed.summary},hu:{'Нападение с ножом в трамвае':'Késelés egy villamoson','В трамвае Будапешта ранили мужчину. Полиция расследует нападение.':'Egy férfit megszúrtak egy budapesti villamoson. A rendőrség nyomoz.'}}};
 const result={verdict:'pass',summary:'Исправлены категория, статус и переводы',issues:[],requests:[],final};
+test('questioning alone cannot support detained status, while an explicit apprehension quote can',()=>{
+ const person={participants:[{status:'detained'}],evidence:[{field:'participants.0.status',quote:'M. Milánt is gyanúsítottként hallgatták ki.'}]};
+ assert.throws(()=>assertSupportedDetention(person),/NOT detention/);
+ person.participants[0].status='unknown';assert.doesNotThrow(()=>assertSupportedDetention(person));
+ person.participants[0].status='detained';person.evidence.push({field:'participants.0.status',quote:'A férfit elfogták és előállították.'});assert.doesNotThrow(()=>assertSupportedDetention(person));
+});
 
 test('final editor applies factual and multilingual corrections together and rejects stale translations',()=>{
  const ready=assembleFinal(result,context);assert.equal(ready.event.type,'assault');assert.equal(ready.russian.status,'investigating');assert.equal(ready.review.finalized,true);assert.equal(ready.translations.en[ready.russian.title],changed.title);
