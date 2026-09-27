@@ -84,5 +84,12 @@ test('automatic preparation adds coordinates before final Pro review, preserves 
   const pro={model:'deepseek-v4-pro',json:async(stage,payload,opts)=>{assert.equal(stage,'review');assert.equal(payload.event.location.latitude,47.5015);assert.equal(payload.preparation.geocoding.provider,'photon');assert.equal(payload.russian,null);assert.equal(seen.includes('translate'),false);return opts.validate({verdict:'pass',summary:'ok',issues:[],requests:[]});}};
   const prep=new Preparation(s,{geocoder:{locate:async()=>({latitude:47.5015,longitude:19.0638,precision:'street',provider:'photon'})},checkUrl:async()=>{}});
   const p=new Pipeline(s,{reader:{read:async()=>({url,body:`<article>${text}</article>`})},model:flash,reviewer:pro,preparation:prep});
-  try{await p.ingest(url);await p.prepare(1);assert.equal(s.event(1).revision,2);await p.review(1,2);await p.translate(1);await p.localize(1);assert.deepEqual(seen,['extract','details','translate','site-translate','site-translate']);assert.equal(s.db.prepare('SELECT count(*) n FROM quality_reviews WHERE revision=2').get().n,1);}finally{s.close();}
+  try{await p.ingest(url);await p.prepare(1);assert.equal(s.event(1).revision,2);await p.review(1,2);await p.translate(1);await p.localize(1);assert.deepEqual(seen,['extract','details','translate','site-translate','site-translate']);assert.equal(s.db.prepare('SELECT count(*) n FROM quality_reviews WHERE revision=2').get().n,1);
+    const repaired={...s.event(1).canonical,title:'Corrected robbery title'};
+    s.db.prepare('UPDATE events SET canonical=?,revision=3 WHERE id=1').run(JSON.stringify(repaired));
+    s.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(1,3,?,?,?)').run(JSON.stringify(repaired),'flash-auto-repair',new Date().toISOString());
+    await p.prepare(1);
+    assert.equal(s.event(1).canonical.title,'Corrected robbery title');
+    assert.equal(seen.filter(x=>x==='details').length,1,'Do not repeat extraction after Pro-guided repair');
+  }finally{s.close();}
 });

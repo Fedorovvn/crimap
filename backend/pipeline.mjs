@@ -152,14 +152,19 @@ export class Pipeline {
     const previous=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? ORDER BY revision DESC LIMIT 1').get(id);
     const prior=previous?JSON.parse(previous.payload).detailCompletion:null;
     let completion=prior,preparedRow=row;
+    const revisionReason=this.store.db.prepare('SELECT reason FROM event_revisions WHERE event_id=? AND revision=?').get(id,row.revision)?.reason;
+    // Repair already reads the original documents and Pro feedback. A fresh
+    // extraction here could undo those corrections and wastes another model call.
+    const repaired=revisionReason==='flash-auto-repair';
     const needsDetails=this.model&&documents.length&&(row.canonical.participants.length||['assault','fight','robbery'].includes(row.canonical.type)||row.canonical.signals.some(s=>['death','injury'].includes(s)));
-    if(needsDetails&&(refresh||prior?.fingerprint!==detailFingerprint(row.canonical,documents,this.laws))){
+    if(needsDetails&&!repaired&&(refresh||prior?.fingerprint!==detailFingerprint(row.canonical,documents,this.laws))){
       const details=await completeDetails(this.model,row.canonical,documents,this.laws,(e,d)=>this.validate(e,d));
       preparedRow={...row,canonical:details.event};
       completion={fingerprint:details.fingerprint,coverage:details.coverage,model:this.model.model,checkedAt:iso()};
       checkReview({verdict:'pass',summary:'Detail requests',issues:[],requests:details.requests},documents);
       if(details.requests.length)recordRequests(this.store,details.requests,{eventId:id,revision:row.revision,model:this.model.model});
     }
+    if(repaired)completion={fingerprint:detailFingerprint(row.canonical,documents,this.laws),model:this.model?.model,checkedAt:iso(),repairedAfterReview:true};
     const result=await this.preparation.enrich(preparedRow,documents);
     if(completion)result.detailCompletion=completion;
     const event=eventSchema.parse(result.event),changed=!isDeepStrictEqual(event,row.canonical),revision=row.revision+(changed?1:0);
