@@ -14,9 +14,10 @@ const schema=z.object({images:z.array(z.object({index:z.number().int().min(0),ke
 
 export async function reviewMedia(model,event,candidates,documents){
   const kept=[],decisions=[];
-  for(let offset=0;offset<candidates.length;offset+=3){
-    const batch=candidates.slice(offset,offset+3);
-    const result=await model.json('media-review',{
+  async function check(batch){
+    let result;
+    try{
+    result=await model.json('media-review',{
       incident:{title:event.title,summary:event.summary,location:event.location.label},
       candidates:batch.map((m,index)=>{const d=documents.find(d=>d.url===m.sourceUrl);return {index,imageUrl:m.imageUrl,sourceUrl:m.sourceUrl,caption:m.caption,credit:m.credit,sourceTitle:d?.title,sourceText:d?.text.slice(0,2500),sourceHash:d?.contentHash};}),
     },{images:batch.map(m=>m.imageUrl),maxTokens:650,validate:raw=>{
@@ -24,7 +25,18 @@ export async function reviewMedia(model,event,candidates,documents){
       if(r.images.length!==batch.length||new Set(r.images.map(x=>x.index)).size!==batch.length||r.images.some(x=>x.index>=batch.length||x.keep&&rejected.has(x.category)))throw new Error('Every image needs one valid usefulness decision');
       return r.images;
     }});
+    }catch(error){
+      if(!/DeepSeek HTTP 400:.*Failed to download image/i.test(error.message))throw error;
+      const unavailable=batch.filter(m=>error.message.includes(m.imageUrl));
+      if(!unavailable.length&&batch.length>1){for(const m of batch)await check([m]);return;}
+      const rejected=unavailable.length?unavailable:batch;
+      for(const m of rejected)decisions.push({imageUrl:m.imageUrl,keep:false,category:'unclear',reason:'Фотография недоступна для проверки; карточка продолжает обработку без неё.',sensitive:false});
+      const remaining=batch.filter(m=>!rejected.includes(m));
+      if(remaining.length)await check(remaining);
+      return;
+    }
     for(const r of result){const m=batch[r.index];decisions.push({imageUrl:m.imageUrl,...r});if(r.keep)kept.push({...m,isSensitive:m.isSensitive||r.sensitive});}
   }
+  for(let offset=0;offset<candidates.length;offset+=3)await check(candidates.slice(offset,offset+3));
   return {kept,decisions};
 }

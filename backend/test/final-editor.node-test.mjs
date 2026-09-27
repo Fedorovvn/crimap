@@ -60,6 +60,29 @@ test('source excerpts preserve cited paragraphs, dates, attribution and nearby c
  assert.ok(excerpt.excerpted);assert.ok(excerpt.text.length<text.length);assert.ok(excerpt.text.includes('The suspect was detained.'));assert.ok(excerpt.text.includes('paragraph 84'));assert.equal(excerpt.publishedAt,source.publishedAt);assert.equal(excerpt.url,doc.url);
 });
 
+test('final reviewer repairs its numeric and dictionary errors before saving the publication-ready draft',async()=>{
+ const s=new Store(':memory:');try{
+  const saved=s.saveDocument({...doc,sourceId:'police'});
+  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('tram','2026-09-26',JSON.stringify(event));
+  s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(1,saved.id,saved.contentHash,JSON.stringify(event),'2026-09-26');
+  s.db.prepare('INSERT INTO preparation VALUES(1,1,?,?)').run('{}','2026-09-26');
+  s.db.prepare('INSERT INTO translations VALUES(1,1,?,?,?,?)').run('ru',JSON.stringify(russian),'flash','2026-09-26');
+  s.db.prepare('INSERT INTO site_translations VALUES(1,1,?,?)').run(JSON.stringify(translations),'2026-09-26');
+  let corrections=0;
+  const reviewer={model:'pro',json:async(_stage,payload,{validate})=>{
+   if(payload.mode==='correct-translation-fields'){
+    corrections++;return validate({strings:Object.fromEntries(Object.keys(payload.fields).map(key=>[key,final.russian.summary]))});
+   }
+   const raw=structuredClone(result);raw.final.russian.summary+=' 30';raw.final.russian['legal.0.source.label']='unused';
+   return validate(raw);
+  }};
+  const pipeline=new Pipeline(s,{model:{json:async()=>{throw new Error('No extra Flash calls');}},reviewer});
+  assert.equal((await pipeline.review(1,1)).finalized,true);assert.equal(corrections,1);
+  assert.equal(JSON.parse(s.db.prepare("SELECT payload FROM translations WHERE event_id=1 AND revision=2").get().payload).summary,final.russian.summary);
+  assert.equal(s.event(1).public_id,null);assert.equal(s.db.prepare("SELECT count(*) n FROM audit WHERE action='review-auto-corrected'").get().n,1);
+ }finally{s.close();}
+});
+
 test('a draft translation may reach Pro with a numeric error but cannot pass final assembly unchanged',()=>{
  const original={...event,summary:'A 30-year-old man was injured.'};
  const draft=applyTranslation(original,{language:'ru',strings:{...translationStrings(original),summary:'Пострадал 31-летний мужчина.'}},{draft:true});

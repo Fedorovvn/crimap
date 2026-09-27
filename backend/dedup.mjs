@@ -29,7 +29,7 @@ export function matchCandidates(event,rows){
     return delta<3*3600000&&title.filter(w=>oldTitle.includes(w)).length>=3;
   }).sort((a,b)=>Number(!!b.public_id)-Number(!!a.public_id)||Math.abs(Date.parse(event.occurredAt)-Date.parse(a.canonical.occurredAt))-Math.abs(Date.parse(event.occurredAt)-Date.parse(b.canonical.occurredAt))||a.id-b.id);
 }
-const identity=z.object({title:z.string(),summary:z.string(),type:z.enum(TYPES),occurredAt:z.string().datetime({offset:true}).nullable(),location:z.object({city:z.string(),label:z.string(),district:z.string().optional(),precision:z.enum(['exact','street','landmark','district','city','unknown'])}).strict(),caseReferences:z.array(z.string()),facts:z.array(z.object({fact:z.string(),quote:z.string()}).strict()).max(20)}).strict();
+const identity=z.object({title:z.string(),summary:z.string(),type:z.enum(TYPES),occurredAt:z.string().datetime({offset:true}).nullable(),location:z.object({city:z.string(),label:z.string(),district:z.string().nullish().transform(value=>value??undefined),precision:z.enum(['exact','street','landmark','district','city','unknown'])}).strict(),caseReferences:z.array(z.string()),facts:z.array(z.object({fact:z.string(),quote:z.string()}).strict()).max(20)}).strict();
 export function comparisonCard(e){
   return {title:e.title,summary:e.summary,type:e.type,status:e.status,occurredAt:e.occurredAt,timePrecision:e.timePrecision,location:e.location,caseReferences:e.caseReferences,signals:e.signals,facts:e.facts,
     participants:e.participants?.map(p=>({key:p.key,role:p.role,status:p.status,profile:p.profile,note:p.note})),

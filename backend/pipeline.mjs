@@ -21,6 +21,7 @@ import { finalEditorSchema, sourceExcerpts, assembleFinal, normalizeFinalRespons
 import { readPublication, comparisonFor, reviewChanges } from './publication-comparison.mjs';
 import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
 import {validateResolvedDate} from './date-resolution.mjs';
+import {correctFinalTranslations} from './final-corrections.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -417,10 +418,19 @@ export class Pipeline {
       const payload={schema:zodToJsonSchema(outputSchema),previousValidationError:previous?.revision===event.revision?previous.error:null,event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
         proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
-      return this.reviewer.json('review',payload,{maxTokens:28000,validate:raw=>{
-        raw=normalizeFinalResponse(raw,event.canonical,russian);
+      return this.reviewer.json('review',payload,{maxTokens:28000,validate:async response=>{
+        let raw=normalizeFinalResponse(response,event.canonical,russian);
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
-        assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
+        const context={event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)};
+        try{assembleFinal(raw,context);}catch(error){
+          const missingDisplay=error.name==='ZodError'&&error.issues?.every(i=>i.path[0]==='strings');
+          if(!missingDisplay&&!/Translation changed numbers|Site translation changed numbers|Unknown final (Russian|en|hu)|Final Russian translation required|Site translation paths/i.test(error.message))throw error;
+          raw=await correctFinalTranslations(raw,context,this.reviewer);
+          this.ensureActive(id);
+          assembleFinal(raw,context);
+          Object.assign(response,raw);
+          this.store.log('review-auto-corrected',id,{revision:event.revision,reason:'Pro corrected translation fields before final validation'});
+        }
         return finalEditorSchema.parse(raw);
       }}).catch(error=>{if(error.validationFailure)this.store.log('review-validation-retry',id,{revision:event.revision,error:error.message.slice(0,6000)});throw error;});
     };

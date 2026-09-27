@@ -48,3 +48,15 @@ test('missing, duplicated or contradictory usefulness decisions are rejected',as
  }
 });
 
+test('an inaccessible photo is optional; other photos and the event continue',async()=>{
+ const photos=[photo('unavailable.jpg'),photo('scene.jpg')],calls=[];
+ const model={json:async(_stage,_payload,{images,validate})=>{
+  calls.push(images);
+  if(images.includes(photos[0].imageUrl))throw new Error('DeepSeek HTTP 400: Failed to download image from '+photos[0].imageUrl);
+  return validate({images:[{index:0,keep:true,category:'scene',reason:'Useful scene',sensitive:false}]});
+ }};
+ const result=await reviewMedia(model,event,photos,[]);
+ assert.deepEqual(result.kept.map(p=>p.imageUrl),[photos[1].imageUrl]);assert.equal(result.decisions[0].keep,false);assert.equal(calls.length,2);
+ const empty=await reviewMedia(model,event,[photos[0]],[]);assert.equal(empty.kept.length,0);
+ await assert.rejects(reviewMedia({json:async()=>{throw new Error('Total model budget reached');}},event,photos,[]),/budget/);
+});

@@ -12,8 +12,9 @@ const actions={
  'recheck':['sources','Обновления проверены'], 'archive-stopped':['sources','Архивный сбор остановлен'],
  'event-filtered':['filtered','Событие отсеяно до Pro'], 'review-deferred':['events','Сначала подготовка, затем Pro'],
  'editorial-retry':['events','Пересборка поставлена в очередь'],
+ 'review-auto-corrected':['events','Pro исправила ошибки итогового текста'],
 };
-const eventActions=new Set(['repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred','editorial-retry']);
+const eventActions=new Set(['repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred','editorial-retry','review-auto-corrected']);
 export function readableError(text){
  if(!text)return null;
  if(/budget reached/i.test(text))return 'Недостаточно общего бюджета для следующего запроса. Увеличьте лимит и нажмите «Сохранить и продолжить».';
