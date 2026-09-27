@@ -1,11 +1,11 @@
-import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, applyTranslation, translationStrings, validateEvidence } from './contract.mjs';
 import { hash } from './store.mjs';
 import { siteTranslations } from './site-localization.mjs';
+import { readPublication, comparisonFor } from './publication-comparison.mjs';
 
 export function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 export function documentsFor(store, id) {
-  return store.db.prepare(`SELECT DISTINCT d.id,d.url,d.source_kind,v.title,v.text,v.language,v.image_urls,v.fetched_at
+  return store.db.prepare(`SELECT DISTINCT d.id,d.url,d.source_kind,d.published_at,d.first_seen_at,v.title,v.text,v.language,v.image_urls,v.fetched_at
     FROM observations o JOIN documents d ON d.id=o.document_id
     JOIN document_versions v ON v.document_id=o.document_id AND v.content_hash=o.content_hash
     WHERE o.event_id=? ORDER BY v.fetched_at DESC`).all(id).map(d => ({
@@ -13,19 +13,7 @@ export function documentsFor(store, id) {
     }));
 }
 export function currentPublic(path, slug) {
-  if (!path) return null;
-  const db = new DatabaseSync(path, { readOnly:true });
-  try {
-    const event = db.prepare('SELECT * FROM incidents WHERE slug=?').get(slug);
-    if (!event) return null;
-    const metadata=db.prepare('SELECT details FROM incident_metadata WHERE incident_id=?').get(event.id);
-    if(metadata&&JSON.parse(metadata.details).hidden)return null;
-    const counts = {};
-    for (const kind of ['sources','updates','media','participants','context','legal']) {
-      counts[kind] = db.prepare(`SELECT count(*) n FROM incident_${kind} WHERE incident_id=?`).get(event.id).n;
-    }
-    return { ...event, counts };
-  } finally { db.close(); }
+  return readPublication(path,slug);
 }
 export function eventDetail(store, id, publicPath) {
   const row = store.event(id); if (!row) fail(404, 'Событие не найдено');
@@ -37,6 +25,8 @@ export function eventDetail(store, id, publicPath) {
   const prepared=store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision);
   const preparation=prepared?JSON.parse(prepared.payload):null;
   const languages=siteTranslations(store,id,row.revision);
+  const published=currentPublic(publicPath,row.slug),comparison=comparisonFor(published,russian,documents,preparation,languages);
+  if(comparison)comparison.reviewed=quality?.payload.publicationBaseline===published.fingerprint;
   const blockers = [];
   if(row.merged_into)blockers.push(`Объединено с событием №${row.merged_into}`);
   if(row.state==='excluded')blockers.push('Событие исключено из текущей тематики');
@@ -46,9 +36,10 @@ export function eventDetail(store, id, publicPath) {
   if (row.canonical.location.latitude === undefined) blockers.push('Нужно указать проверенные координаты');
   if (!documents.length) blockers.push('Нет сохранённых источников');
   if(preparation&&!languages)blockers.push('Готовятся английская и венгерская версии');
-  return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,
-    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload,languages}),
-    published:currentPublic(publicPath,row.slug),
+  if(published&&row.published_revision!==row.revision&&!comparison.reviewed)blockers.push('Pro ещё не сравнила обновление с текущей публикацией');
+  return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,comparison,
+    approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload,languages,publication:published?.fingerprint??null}),
+    published,
     jobs:store.db.prepare("SELECT kind,state,last_error,due_at FROM jobs WHERE state!='done' AND json_extract(payload,'$.eventId')=?").all(id),
   };
 }

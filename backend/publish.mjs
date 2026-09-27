@@ -4,8 +4,8 @@ import { eventSchema } from './contract.mjs';
 import { isPublishableContext } from '../app/context-model.ts';
 import { isPublishableLegal } from '../app/legal-model.ts';
 import { siteTranslations, displayStrings } from './site-localization.mjs';
-export const typeLabels={'traffic-accident':'ДТП',assault:'Нападение',fight:'Драка',robbery:'Ограбление',accident:'Несчастный случай',fire:'Пожар',rescue:'Спасательная операция','missing-person':'Пропавший человек','transport-disruption':'Транспорт',weather:'Непогода',other:'Происшествие'};
-const statuses={reported:'Сообщается о происшествии',investigating:'В расследовании','suspects-detained':'Подозреваемые задержаны',wanted:'Подозреваемый разыскивается',resolved:'Ситуация разрешена',closed:'Дело закрыто',unknown:'Статус уточняется'};
+import { typeLabels,statusLabels as statuses,precisionLabels,verificationLabel,readPublication } from './publication-comparison.mjs';
+export { typeLabels } from './publication-comparison.mjs';
 export function migratePublic(path){
   const db=new DatabaseSync(path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS collector_migrations(name TEXT PRIMARY KEY)');
   try{for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort()){
@@ -33,10 +33,12 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
   if(event.location.latitude===undefined)throw new Error('Add verified map coordinates before publishing');
   const documents=store.db.prepare('SELECT DISTINCT d.* FROM observations o JOIN documents d ON d.id=o.document_id WHERE o.event_id=?').all(eventId);
   if(!documents.length)throw new Error('No source documents');
-  const verification=documents.every(d=>d.source_kind==='official')?'Официальный источник':documents.some(d=>d.source_kind==='official')?'Официальные данные и сообщения СМИ':'По сообщениям СМИ';
+  const verification=verificationLabel(documents);
   const db=new DatabaseSync(path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
   try{
-    db.prepare(`INSERT INTO incidents(slug,title,category,status,verification,district,location_label,location_precision,latitude,longitude,occurred_at,summary,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET title=excluded.title,category=excluded.category,status=excluded.status,verification=excluded.verification,district=excluded.district,location_label=excluded.location_label,location_precision=excluded.location_precision,latitude=excluded.latitude,longitude=excluded.longitude,occurred_at=excluded.occurred_at,summary=excluded.summary,updated_at=excluded.updated_at`).run(row.slug,event.title,typeLabels[event.type],statuses[event.status],verification,event.location.district??'Будапешт',event.location.label,{exact:'Точное место',street:'Улица; точное место не раскрыто',landmark:'Приблизительно: у указанного ориентира',district:'Приблизительно: район',city:'Приблизительно: город',unknown:'Место уточняется'}[event.location.precision],event.location.latitude,event.location.longitude,event.occurredAt,event.summary,new Date().toISOString());
+    const baseline=readPublication(db,row.slug);
+    if(baseline&&row.published_revision!==row.revision&&JSON.parse(review.payload).publicationBaseline!==baseline.fingerprint)throw new Error('Published event changed or has not been compared by Pro; review the update again');
+    db.prepare(`INSERT INTO incidents(slug,title,category,status,verification,district,location_label,location_precision,latitude,longitude,occurred_at,summary,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET title=excluded.title,category=excluded.category,status=excluded.status,verification=excluded.verification,district=excluded.district,location_label=excluded.location_label,location_precision=excluded.location_precision,latitude=excluded.latitude,longitude=excluded.longitude,occurred_at=excluded.occurred_at,summary=excluded.summary,updated_at=excluded.updated_at`).run(row.slug,event.title,typeLabels[event.type],statuses[event.status],verification,event.location.district??'Будапешт',event.location.label,precisionLabels[event.location.precision],event.location.latitude,event.location.longitude,event.occurredAt,event.summary,new Date().toISOString());
     const id=Number(db.prepare('SELECT id FROM incidents WHERE slug=?').get(row.slug).id);
     for(const table of ['incident_sources','incident_updates','incident_media','incident_participants','incident_context','incident_legal'])db.prepare(`DELETE FROM ${table} WHERE incident_id=?`).run(id);
     for(const d of documents)db.prepare('INSERT INTO incident_sources(incident_id,source_type,outlet,source_url,published_at,note) VALUES(?,?,?,?,?,?)').run(id,d.source_kind==='official'?'Официально':'Неофициально',new URL(d.url).hostname,d.url,d.published_at??d.first_seen_at,d.published_at?'':'Дата первой загрузки; время публикации не указано');

@@ -5,7 +5,7 @@ import { displayStrings, validateSiteTranslation } from './site-localization.mjs
 import { isDeepStrictEqual } from 'node:util';
 
 const edits=z.record(z.string().trim().min(1).max(12000));
-export const finalEditorSchema=reviewSchema.extend({final:z.object({
+export const finalEditorSchema=reviewSchema.extend({publicationSummary:z.string().trim().min(1).max(2000).optional(),final:z.object({
   event:eventSchema.optional(), russian:edits.default({}),
   siteTranslations:z.object({en:edits.default({}),hu:edits.default({})}).strict().default({en:{},hu:{}}),
 }).strict().optional()}).strict();
@@ -36,8 +36,9 @@ export function sourceExcerpts(documents,event){
 // The editor sends only changed text, but must supply translations for every
 // changed/new English field. Stale translations never silently survive an edit.
 export function assembleFinal(raw,{event,russian,translations,preparation,documents,locationLookup,validateEvent}){
-  const parsed=finalEditorSchema.parse(raw),{final,...review}=parsed;
-  checkReview(review,documents,{english:event,russian,translations,locationLookup});
+  const parsed=finalEditorSchema.parse(raw),{final,publicationSummary,...baseReview}=parsed;
+  checkReview(baseReview,documents,{english:event,russian,translations,locationLookup});
+  const review={...baseReview,...publicationSummary?{publicationSummary}:{}};
   if(review.verdict!=='pass')return {review};
   if(!final)throw new Error('A passed review must include final; use final:{} when all supplied drafts are correct');
   const corrected=validateEvent(structuredClone(final.event??event));

@@ -17,6 +17,7 @@ import { cheapDecision } from './triage.mjs';
 import { displayStrings, translateSiteTexts, siteTranslations } from './site-localization.mjs';
 import { resolveLocationSearch, saveLocationPreparation, applyReviewedLocation } from './review-location.mjs';
 import { finalEditorSchema, sourceExcerpts, assembleFinal } from './final-editor.mjs';
+import { readPublication, comparisonFor } from './publication-comparison.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -47,7 +48,7 @@ export class Pipeline {
   }
   eventDocuments(id){
     const rows=this.store.db.prepare('SELECT DISTINCT d.*,v.text,v.title,v.language,v.image_urls,v.content_hash FROM observations o JOIN documents d ON d.id=o.document_id JOIN document_versions v ON v.document_id=o.document_id AND v.content_hash=o.content_hash WHERE o.event_id=?').all(id);
-    return rows.map(r=>({id:String(r.id),url:r.url,sourceId:r.source_id,sourceKind:r.source_kind,text:r.text,title:r.title,language:r.language,imageUrls:JSON.parse(r.image_urls),publishedAt:r.published_at,contentHash:r.content_hash}));
+    return rows.map(r=>({id:String(r.id),url:r.url,sourceId:r.source_id,sourceKind:r.source_kind,text:r.text,title:r.title,language:r.language,imageUrls:JSON.parse(r.image_urls),publishedAt:r.published_at,first_seen_at:r.first_seen_at,contentHash:r.content_hash}));
   }
   validate(event,documents){
     event=validateEvidence(eventSchema.parse(event),documents);
@@ -225,6 +226,7 @@ export class Pipeline {
     const docs=this.eventDocuments(id);
     const prepared=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? AND revision=?').get(id,event.revision);
     const preparation=prepared?JSON.parse(prepared.payload):null;
+    const published=readPublication(this.publicPath,event.slug);
     // Persist inexpensive translation drafts separately, so a retry of Pro does
     // not pay for or regenerate them. None of these drafts is a publication.
     const existingRussian=this.store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision);
@@ -238,8 +240,11 @@ export class Pipeline {
     if(preparation?.locationReview?.pending)await resolveLocationSearch(this.store,event,preparation,this.preparation.geocoder);
     const assess=async()=>{
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
-      const payload={schema:zodToJsonSchema(finalEditorSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws};
+      const payload={schema:zodToJsonSchema(finalEditorSchema),event:event.canonical,russian,siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
+        currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
+        proposedPublicationChanges:comparisonFor(published,russian,docs,preparation,translations)?.changes??[]};
       return this.reviewer.json('review',payload,{maxTokens:14000,validate:raw=>{
+        if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
         assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,validateEvent:e=>this.validate(e,docs)});
         return finalEditorSchema.parse(raw);
       }});
@@ -259,6 +264,8 @@ export class Pipeline {
     }
     const final=assembleFinal(result,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup:{enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true},validateEvent:e=>this.validate(e,docs)});
     const nextRevision=event.revision+(final.event&&!isDeepStrictEqual(final.event,event.canonical)?1:0);
+    if((readPublication(this.publicPath,event.slug)?.fingerprint??null)!==(published?.fingerprint??null))throw new Error('Published version changed during Pro editing; retry against the new publication');
+    if(published)final.review.publicationBaseline=published.fingerprint;
     this.store.transaction(()=>{
       if(this.store.event(id)?.revision!==event.revision)throw new Error('Event changed during final review');
       if(final.event){
