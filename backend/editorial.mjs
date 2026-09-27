@@ -38,10 +38,11 @@ export function eventDetail(store, id, publicPath) {
   if(preparation&&!languages)blockers.push('Готовятся английская и венгерская версии');
   if(published&&row.published_revision!==row.revision&&!comparison.reviewed)blockers.push('Pro ещё не сравнила обновление с текущей публикацией');
   return { ...row, russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,comparison,
+    dateCheck:store.db.prepare('SELECT reason,checked_at FROM date_checks WHERE event_id=?').get(id)??null,
     ignoredUpdates:store.db.prepare('SELECT d.url,v.title,i.reason,i.created_at FROM ignored_updates i JOIN documents d ON d.id=i.document_id JOIN document_versions v ON v.document_id=d.id AND v.content_hash=i.content_hash WHERE i.event_id=? ORDER BY i.created_at DESC LIMIT 30').all(id),
     approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload,languages,publication:published?.fingerprint??null}),
     published,
-    jobs:store.db.prepare("SELECT kind,state,last_error,due_at FROM jobs WHERE state NOT IN ('done','cancelled') AND json_extract(payload,'$.eventId')=?").all(id),
+    jobs:store.db.prepare("SELECT kind,state,last_error,due_at FROM jobs WHERE state NOT IN ('done','cancelled','waiting-date') AND json_extract(payload,'$.eventId')=?").all(id),
   };
 }
 export function reviseEvent(store, id, {revision,canonical,strings}, reviewer) {

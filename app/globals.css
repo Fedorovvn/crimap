@@ -852,9 +852,9 @@ body {
 .section-switch button:focus-visible { outline: 2px solid var(--accent-text); outline-offset: 2px; }
 .section-switch--map { display: none; }
 @media (min-width:1280px) {
-  .mobile-incidents-workspace { --desktop-map-height:clamp(420px,70dvh,780px);grid-template-rows:var(--desktop-map-height) auto; }
+  .mobile-incidents-workspace { --desktop-map-height:min(70dvh,calc(94dvh - 180px),780px);grid-template-rows:var(--desktop-map-height) auto; }
   .mobile-incidents-workspace > .map-frame { height:var(--desktop-map-height);min-height:0; }
-  .mobile-incident-list { height:var(--desktop-map-height);min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable; }
+  .mobile-incident-list { padding-inline-end:12px; height:var(--desktop-map-height);min-height:0;overflow-y:auto;overscroll-behavior:contain;scrollbar-gutter:stable; }
 }
 
 @media (max-width: 767px), (max-height: 500px) and (orientation: landscape) {

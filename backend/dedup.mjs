@@ -9,10 +9,11 @@ export function matchCandidates(event,rows){
     const old=row.canonical;
     if(event.caseReferences?.some(r=>old.caseReferences?.includes(r)))return true;
     const delta=Math.abs(Date.parse(event.occurredAt)-Date.parse(old.occurredAt));
-    if(!Number.isFinite(delta)||delta>36*3600000)return false;
+    if(Number.isFinite(delta)&&delta>36*3600000)return false;
     const a=districtNumber(event.location.district),b=districtNumber(old.location.district);
     if(a&&b&&a!==b)return false;
     const words=placeWords(event.location.label),other=placeWords(old.location.label);
+    if(!Number.isFinite(delta))return words.some(w=>other.includes(w))&&placeWords(event.title).filter(w=>placeWords(old.title).includes(w)).length>=3;
     if(words.some(w=>other.includes(w)))return true;
     const precise=x=>['exact','landmark'].includes(x.location.precision);
     if(precise(event)&&precise(old)&&Number.isFinite(event.location.latitude)&&Number.isFinite(old.location.latitude))return Math.hypot(event.location.latitude-old.location.latitude,(event.location.longitude-old.location.longitude)*.68)<.003;

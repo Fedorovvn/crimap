@@ -4,7 +4,7 @@ import {Store} from '../store.mjs';
 import {Pipeline} from '../pipeline.mjs';
 import {recoverArchive} from '../archive-recovery.mjs';
 const campaign=s=>s.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,created_at) VALUES(?,?,?,?,?)').run('archive','2026-07-01','2026-09-26',15,'2026-09-26');
-const event={title:'Robbery in Budapest',summary:'Police reported a robbery in Budapest.',type:'robbery',status:'investigating',occurredAt:null,timePrecision:'unknown',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location'].map(field=>({field,documentId:'1',quote:'Police reported a robbery in Budapest.'}))};
+const event={title:'Robbery in Budapest',summary:'Police reported a robbery in Budapest.',type:'robbery',status:'investigating',occurredAt:'2026-09-20T12:00:00Z',timePrecision:'day',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote:'Police reported a robbery in Budapest.'}))};
 function seed(s,id=1){s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,campaign_id) VALUES(?,?,?,?,?)').run(id,'test-'+id,'2026-09-26',JSON.stringify(event),'archive');}
 test('legacy retries inherit archive allowance despite exhausted daily budget; explicit new work stays daily',async()=>{
  const s=new Store(':memory:');try{campaign(s);seed(s);s.reserveCost('test','flash','daily',.5,.5);
@@ -31,12 +31,13 @@ test('recovery restores orphaned review once and does not wake daily jobs or rep
   assert.deepEqual(recoverArchive(s,'archive'),{alreadyRecovered:true});
  }finally{s.close();}
 });
-test('review runs on an unknown date; legacy repair jobs also use the final Pro editor',async()=>{
+test('unknown occurrence date defers review and legacy repair without calling either model',async()=>{
  const s=new Store(':memory:');try{campaign(s);seed(s);
-  const doc=s.saveDocument({url:'https://www.police.hu/test',sourceId:'police',sourceKind:'official',title:event.title,text:event.summary,imageUrls:[]});
-  s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(1,doc.id,doc.contentHash,JSON.stringify(event),'2026-09-26');
-  let reviewed=0;
-  const p=new Pipeline(s,{preparation:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{reviewed++;assert.ok(payload.schema.properties.verdict);assert.equal(payload.event.occurredAt,null);return validate({verdict:'revise',summary:'Check date in source',issues:[],requests:[]});}},model:{model:'flash',json:async(stage,payload,{validate})=>{assert.notEqual(stage,'repair');return validate({language:payload.language??'ru',strings:payload.strings});}}});
-  await p.review(1);assert.ok(reviewed);await p.repair(1,1);assert.equal(reviewed,2);assert.equal(s.event(1).revision,1);
+  s.db.prepare('UPDATE events SET canonical=? WHERE id=1').run(JSON.stringify({...event,occurredAt:null,timePrecision:'unknown'}));
+  const fail={json:async()=>{throw new Error('No models should be called');}};
+  const p=new Pipeline(s,{preparation:{},reviewer:fail,model:fail});
+  assert.equal((await p.review(1)).awaitingDate,true);assert.equal((await p.repair(1,1)).awaitingDate,true);
+  assert.equal(s.event(1).state,'awaiting-date');assert.equal(s.event(1).revision,1);
+  assert.equal(s.db.prepare('SELECT kind FROM jobs').get().kind,'resolve-date');
  }finally{s.close();}
 });

@@ -1,7 +1,8 @@
 export const FILTER_KEY='crimap-editor-filters-v1';
-export const defaults={search:'',sort:'occurred-desc',publication:'all',review:'all',section:'all',type:'all',homicide:'all',impact:'all',mark:'hide-uninteresting',from:'',to:''};
+export const defaults={search:'',sort:'occurred-desc',publication:'all',review:'all',section:'all',type:'all',homicide:'all',impact:'all',mark:'hide-uninteresting',dateStatus:'all',from:'',to:''};
 const choices={sort:['occurred-desc','occurred-asc','received-desc','received-asc'],publication:['all','unpublished','published','live','withdrawn','new','updates'],review:['all','ready','pass','pending','failed','revise','reject'],section:['all','incidents','missing'],type:['all','traffic-accident','assault','fight','robbery','accident','fire','rescue','missing-person','transport-disruption','weather','other'],homicide:['all','only','exclude'],impact:['all','hide-minor','significant','fatal','injured','minor','unknown']};
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
+choices.dateStatus=['all','known','pending'];
 choices.mark=['hide-uninteresting','priority','uninteresting','all'];
 choices.sort.push('priority-desc');
 export function normalizeFilters(value){const result={...defaults};if(!value||typeof value!=='object')return result;for(const [key,options] of Object.entries(choices))if(options.includes(value[key]))result[key]=value[key];if(typeof value.search==='string')result.search=value.search.slice(0,250);for(const key of ['from','to'])if(typeof value[key]==='string'&&validDate(value[key]))result[key]=value[key];if(result.publication==='live')result.publication='published';return result;}
@@ -16,6 +17,7 @@ export function filterEvents(events,input){
     const current=e.published_revision===e.revision,live=!!e.public_id&&!e.withdrawn_at,flags=e.facets??{},day=localDay(e.occurred_at);
     const mark=e.editorial_mark??'normal';
     if(f.mark==='hide-uninteresting'&&mark==='uninteresting'||['priority','uninteresting'].includes(f.mark)&&mark!==f.mark)return false;
+    if(f.dateStatus==='known'&&!day||f.dateStatus==='pending'&&day)return false;
     if(query&&!`${e.title} ${e.searchText??''}`.toLocaleLowerCase().includes(query))return false;
     if(f.section!=='all'&&(e.eventType==='missing-person')!==(f.section==='missing'))return false;
     if(f.type!=='all'&&e.eventType!==f.type)return false;

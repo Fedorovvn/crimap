@@ -95,7 +95,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(campaign&&req.method==='POST')return send(200,changeBudget(store,decodeURIComponent(campaign[1]),body.budget,reviewer));
       const resume=path.match(/^\/admin\/api\/campaigns\/([^/]+)\/resume$/);
       if(resume&&req.method==='POST')return send(200,resumeCampaign(store,decodeURIComponent(resume[1]),reviewer));
-      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw|mark))?$/);
+      const match=path.match(/^\/admin\/api\/events\/(\d+)(?:\/(save|review|translate|recheck|publish|withdraw|mark|resolve-date))?$/);
       if(!match)fail(404,'Не найдено');
       const id=Number(match[1]),action=match[2];
       if(!action&&req.method==='GET')return send(200,eventDetail(store,id,publicPath));
@@ -103,7 +103,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(action==='mark')return send(200,setEditorialMark(store,id,body.mark,reviewer,{reasons:body.reasons,note:body.note,publicPath}));
       if(action==='save')return send(200,reviseEvent(store,id,body,reviewer));
       const event=eventDetail(store,id,publicPath);
-      if(['review','translate','recheck'].includes(action)&&event.editorial_mark==='uninteresting')fail(409,'Сначала верните событие из неинтересных');
+      if(['review','translate','recheck','resolve-date'].includes(action)&&event.editorial_mark==='uninteresting')fail(409,'Сначала верните событие из неинтересных');
       if(body.revision!==event.revision)fail(409,'Есть новая версия события. Обновите страницу.');
       if(action==='withdraw'){if(body.confirm!==true)fail(400,'Подтвердите снятие с публикации');return send(200,withdraw(store,id,publicPath,{revision:body.revision,reviewer}));}
       if(action==='publish'){
@@ -116,6 +116,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         });
         return send(200,{publicId});
       }
+      if(action==='resolve-date'&&event.canonical.occurredAt)fail(409,'Дата уже установлена');
       if(action==='translate'&&event.russian)fail(409,'Перевод уже есть. Для повторного перевода сохраните новую версию через редактор.');
       store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id});
       store.log('editorial-queue',id,{action,reviewer,revision:event.revision});

@@ -7,7 +7,7 @@ import { applyTranslation,translationStrings,validateEvidence,eventSchema } from
 import { displayStrings } from '../site-localization.mjs';
 const quote='A man was stabbed on a Budapest tram. Service was interrupted. The police are investigating.';
 const doc={id:'1',url:'https://www.police.hu/test',title:'Stabbing on a tram',text:quote,sourceKind:'official',imageUrls:[]};
-const event={title:'Tram service interrupted',summary:'Service was interrupted after a stabbing.',type:'transport-disruption',status:'resolved',occurredAt:null,timePrecision:'unknown',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location'].map(field=>({field,documentId:'1',quote}))};
+const event={title:'Tram service interrupted',summary:'Service was interrupted after a stabbing.',type:'transport-disruption',status:'resolved',occurredAt:'2026-09-20T12:00:00Z',timePrecision:'day',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote}))};
 const russian=applyTranslation(event,{language:'ru',strings:{...translationStrings(event),title:'Прервано движение трамваев',summary:'Движение прервано после нападения.', 'location.label':'Будапешт'}});
 const translations=Object.fromEntries(['en','hu'].map(l=>[l,Object.fromEntries(displayStrings(russian).map(t=>[t,t]))]));
 const context={event,russian,translations,documents:[doc],validateEvent:e=>validateEvidence(eventSchema.parse(e),[doc])};

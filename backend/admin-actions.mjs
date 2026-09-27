@@ -27,7 +27,7 @@ export function setEditorialMark(store,id,mark,reviewer,{reasons=[],note='',publ
       }
       store.log('editorial-mark-changed',id,{before:event.editorial_mark,mark,reasons,note,reviewer,stopped,queued});
     }
-    return {id,editorial_mark:mark,stopped,queued};
+    return {id,editorial_mark:mark,stopped,queued,awaitingDate:!event.canonical.occurredAt};
   });
 }
 

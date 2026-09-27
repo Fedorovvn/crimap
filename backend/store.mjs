@@ -20,6 +20,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS events(id INTEGER PRIMARY KEY,slug TEXT NOT NULL UNIQUE,first_seen_at TEXT NOT NULL,occurred_at TEXT,canonical TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'draft',review_reason TEXT,next_check_at TEXT,last_checked_at TEXT,revision INTEGER NOT NULL DEFAULT 1,published_revision INTEGER,public_id INTEGER);
       CREATE TABLE IF NOT EXISTS observations(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL REFERENCES events(id),document_id INTEGER NOT NULL REFERENCES documents(id),content_hash TEXT NOT NULL,extracted TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,document_id,content_hash));
       CREATE TABLE IF NOT EXISTS ignored_updates(event_id INTEGER NOT NULL REFERENCES events(id),document_id INTEGER NOT NULL REFERENCES documents(id),content_hash TEXT NOT NULL,brief TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,document_id,content_hash));
+      CREATE TABLE IF NOT EXISTS date_checks(event_id INTEGER PRIMARY KEY REFERENCES events(id),revision INTEGER NOT NULL,source_hash TEXT NOT NULL,reason TEXT NOT NULL,checked_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS event_revisions(id INTEGER PRIMARY KEY,event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(event_id,revision));
       CREATE TABLE IF NOT EXISTS translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,language TEXT NOT NULL,payload TEXT NOT NULL,model TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision,language));
       CREATE TABLE IF NOT EXISTS model_cache(cache_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
@@ -50,12 +51,21 @@ export class Store {
   enqueue(kind,key,payload={},due=new Date().toISOString()){
     const event=payload.eventId?this.event(payload.eventId):null;
     if(event?.editorial_mark==='uninteresting')return false;
+    if(event&&!event.canonical.occurredAt&&!['article','resolve-date'].includes(kind))return this.holdForDate(event.id,payload,{refresh:true});
     payload={...payload,...jobBudget(kind,payload,event)};
     // An explicit retry of completed archive work resumes that same campaign,
     // never the daily allowance. reserveCost still enforces its original cap.
     if(payload.campaignId)this.db.prepare("UPDATE campaigns SET state='running' WHERE id=? AND state IN ('complete','complete-with-errors')").run(payload.campaignId);
     const state=payload.campaignId&&this.db.prepare('SELECT state FROM campaigns WHERE id=?').get(payload.campaignId)?.state==='budget-exhausted'?'paused':'queued';
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at,state) VALUES(?,?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE excluded.state END`).run(kind,String(key),JSON.stringify(payload),due,state);
+  }
+  holdForDate(id,payload={}, {refresh=false}={}){
+    const event=this.event(id);if(!event||event.canonical.occurredAt||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
+    this.db.prepare("UPDATE events SET state='awaiting-date',next_check_at=NULL WHERE id=?").run(id);
+    this.db.prepare("UPDATE jobs SET state='waiting-date',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','resolve-date') AND state IN ('queued','running','paused','failed')").run(id);
+    const job=this.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date' AND job_key=?").get(String(id));
+    if(!job||!['queued','running','paused'].includes(job.state)||(refresh&&job.state!=='running'))this.enqueue('resolve-date',id,{...payload,eventId:id});
+    return true;
   }
   claim(now=new Date().toISOString(),kinds=null){
     if(kinds&&(!kinds.length||kinds.some(k=>typeof k!=='string')))throw new Error('Invalid job kind filter');

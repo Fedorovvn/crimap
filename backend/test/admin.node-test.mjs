@@ -39,7 +39,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     const modified=structuredClone(canonical);modified.location.latitude=47.5;modified.location.longitude=19.06;
     s.enqueue('translate',1,{eventId:1});
     assert.equal((await request('events/1/save',{revision:1,canonical:modified,strings:translationStrings(canonical)})).status,200);
-    assert.equal(s.event(1).revision,2);assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='translate'").get().state,'done');
+    assert.equal(s.event(1).revision,2);assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date'").get().state,'queued');
     assert.equal((await request('events/1/save',{revision:1,canonical:modified})).status,409);
     assert.equal((await request('events/1/save',{revision:2,canonical:{...modified,type:'made-up'}})).status,422);assert.equal(s.event(1).revision,2);
     modified.occurredAt='2026-09-20T12:00:00Z';modified.timePrecision='day';modified.evidence.push({field:'occurredAt',documentId:'1',quote});
