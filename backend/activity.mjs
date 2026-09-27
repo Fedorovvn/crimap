@@ -45,6 +45,7 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
    return rank(a.state)-rank(b.state)||(a.state==='ready'?(Number(b.priority)-Number(a.priority)||(order[a.kind]??8)-(order[b.kind]??8)):0)||a.dueAt.localeCompare(b.dueAt)||a.id-b.id;
  });
  const counts={};for(const j of queue)counts[j.state]=(counts[j.state]??0)+1;
+ counts.retry=queue.filter(j=>j.reason&&['ready','scheduled'].includes(j.state)).length;
  const knownActions=Object.keys(actions),marks=knownActions.map(()=>'?').join(',');
  const raw=db.prepare(`SELECT * FROM audit WHERE id<? AND created_at>=? AND action IN (${marks}) ORDER BY id DESC LIMIT 1500`).all(Number.isFinite(before)?before:Number.MAX_SAFE_INTEGER,since,...knownActions);
  const logs=[];let examined=null;

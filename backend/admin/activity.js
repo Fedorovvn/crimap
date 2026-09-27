@@ -10,7 +10,7 @@ document.querySelector('.activity-tabs').addEventListener('keydown',e=>{if(!['Ar
 function render(data,append){
  $('#activity-updated').textContent='Обновлено '+date(data.generatedAt);
  const c=data.counts,b=data.budget;
- $('#activity-health').innerHTML=`<div class="activity-health-row"><span class="pill ${c.running?'good':''}">${c.running?`В работе: ${c.running}`:'Нет активных задач'}</span><span>Готовы к запуску: <strong>${c.ready??0}</strong></span><span>На паузе: <strong>${c.paused??0}</strong></span><span>Ожидают даты: <strong>${c['waiting-date']??0}</strong></span><span>Ошибки: <strong>${(c.failed??0)+(c.stale??0)}</strong></span></div><p class="fact">Последний успешный обход: ${escape(date(data.lastPollAt))}. Источники проверяются каждый час.${data.archiveDiscoveryStopped?' Архивный сбор остановлен.':''} Время — Будапешт.</p>${b?`<p class="fact">Общий бюджет: $${b.limit.toFixed(2)} · Учтено $${b.spent.toFixed(3)} · Осталось <strong>$${b.remaining.toFixed(3)}</strong>. <a href="/admin/#budget">Изменить лимит</a></p>`:''}`;
+ $('#activity-health').innerHTML=`<div class="activity-health-row"><span class="pill ${c.running?'good':''}">${c.running?`В работе: ${c.running}`:'Нет активных задач'}</span><span>Готовы к запуску: <strong>${c.ready??0}</strong></span><span>На паузе: <strong>${c.paused??0}</strong></span><span>Ожидают даты: <strong>${c['waiting-date']??0}</strong></span><span>Ошибки: <strong>${(c.failed??0)+(c.stale??0)}</strong></span><span>Ожидают повтора: <strong>${c.retry??0}</strong></span></div><p class="fact">Последний успешный обход: ${escape(date(data.lastPollAt))}. Источники проверяются каждый час.${data.archiveDiscoveryStopped?' Архивный сбор остановлен.':''} Время — Будапешт.</p>${b?`<p class="fact">Общий бюджет: $${b.limit.toFixed(2)} · Учтено $${b.spent.toFixed(3)} · Осталось <strong>$${b.remaining.toFixed(3)}</strong>. <a href="/admin/#budget">Изменить лимит</a></p>`:''}`;
  const labels={newArticles:'Новых статей',filtered:'Отсеяно',merged:'Объединений',repeats:'Повторов пропущено',reviewed:'Проверок Pro',published:'Публикаций'};
  $('#activity-stats').innerHTML=Object.entries(labels).map(([key,label])=>`<article><strong>${data.stats[key]}</strong><span>${label}</span></article>`).join('');
  const selected=$('#activity-source').value;
@@ -38,3 +38,4 @@ $('#activity-refresh').addEventListener('click',()=>load());$('#activity-more').
 for(const id of ['period','source','category','state'])$('#activity-'+id).addEventListener('change',()=>load());
 setInterval(()=>{if(!document.hidden&&$('#activity-auto').checked&&!older)load();},15000);
 load();
+

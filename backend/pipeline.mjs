@@ -147,6 +147,7 @@ export class Pipeline {
     let focusIncidents;const identityTargets=[];
     if(this.triage||this.store.db.prepare("SELECT 1 FROM events WHERE editorial_mark='uninteresting' AND merged_into IS NULL LIMIT 1").get()){
       const briefs=await identify(this.model,doc);
+      if(!briefs.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,filtered:true,irrelevantReason:'В статье не найдено отдельного подходящего происшествия'});return {documentId:doc.id,events:0,filtered:true};}
       focusIncidents=[];
       for(const brief of briefs){
         const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},this.store.candidates(brief).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
@@ -380,7 +381,9 @@ export class Pipeline {
       let outputSchema=finalEditorSchema.required({legalCoverage:true});
       if(enabled&&!locationLookup.applied)outputSchema=outputSchema.required({locationResolution:true});
       if(published)outputSchema=outputSchema.required({publicationSummary:true});
-      const payload={schema:zodToJsonSchema(outputSchema),event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
+      const priorError=this.store.db.prepare("SELECT detail FROM audit WHERE action='review-validation-retry' AND subject=? ORDER BY id DESC LIMIT 1").get(String(id));
+      const previous=priorError?JSON.parse(priorError.detail):null;
+      const payload={schema:zodToJsonSchema(outputSchema),previousValidationError:previous?.revision===event.revision?previous.error:null,event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
         proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
       return this.reviewer.json('review',payload,{maxTokens:28000,validate:raw=>{
@@ -388,7 +391,7 @@ export class Pipeline {
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
         assembleFinal(raw,{event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)});
         return finalEditorSchema.parse(raw);
-      }});
+      }}).catch(error=>{if(error.validationFailure)this.store.log('review-validation-retry',id,{revision:event.revision,error:error.message.slice(0,6000)});throw error;});
     };
     let result=await assess();
     this.ensureActive(id);

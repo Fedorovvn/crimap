@@ -41,7 +41,9 @@ test('Pro corrections are atomically saved as a ready revision without Flash rep
   s.db.prepare('INSERT INTO preparation VALUES(1,1,?,?)').run('{}','2026-09-26');
   s.db.prepare('INSERT INTO translations VALUES(1,1,?,?,?,?)').run('ru',JSON.stringify(russian),'flash','2026-09-26');
   s.db.prepare('INSERT INTO site_translations VALUES(1,1,?,?)').run(JSON.stringify(translations),'2026-09-26');
-  const pipeline=new Pipeline(s,{model:{json:async()=>{throw new Error('Unexpected Flash call');}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{assert.deepEqual(payload.russian,translationStrings(russian));assert.ok(payload.translationPaths.includes('location.label'));assert.ok(payload.siteTranslations.hu);return validate(result);}}});
+  let attempt=0;
+  const pipeline=new Pipeline(s,{model:{json:async()=>{throw new Error('Unexpected Flash call');}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{assert.deepEqual(payload.russian,translationStrings(russian));assert.ok(payload.translationPaths.includes('location.label'));assert.ok(payload.siteTranslations.hu);if(attempt++===0){const error=new Error('Correct the unsupported legal claim');error.validationFailure=true;throw error;}assert.equal(payload.previousValidationError,'Correct the unsupported legal claim');return validate(result);}}});
+  await assert.rejects(pipeline.review(1,1),/unsupported legal claim/);assert.equal(s.event(1).revision,1);assert.equal(s.db.prepare('SELECT count(*) n FROM quality_reviews').get().n,0);
   assert.equal((await pipeline.review(1,1)).finalized,true);assert.equal(s.event(1).revision,2);assert.equal(s.event(1).canonical.type,'assault');assert.equal(s.event(1).public_id,null);
   assert.equal(JSON.parse(s.db.prepare('SELECT payload FROM quality_reviews WHERE revision=2').get().payload).verdict,'pass');
   assert.equal(s.db.prepare('SELECT count(*) n FROM site_translations WHERE revision=2').get().n,1);
