@@ -79,5 +79,298 @@
     "condition": "Only if the court establishes all elements of this offense.",
     "checkedAt": "2026-09-26T12:00:00+02:00",
     "reviewRequired": true
+  },
+  {
+    "id": "serious-bodily-harm",
+    "offense": "Serious bodily harm",
+    "hungarianQualification": "súlyos testi sértés",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 164 (3)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "Reported completed basic intentional offense. Not an attempt, negligent offense or an aggravated/life-threatening injury. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "bodily-harm-life-threatening",
+    "offense": "Bodily harm causing danger to life",
+    "hungarianQualification": "életveszélyt okozó testi sértés",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 164 (8)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 2,
+        "max": 8,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only an explicitly reported qualification of life-threatening bodily harm, not hospitalization or serious injury alone. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "bodily-harm-fatal",
+    "offense": "Bodily harm causing death",
+    "hungarianQualification": "halált okozó testi sértés",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 164 (8)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 2,
+        "max": 8,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only the explicitly reported qualification of bodily harm causing death; do not infer homicide. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "disorder-basic",
+    "offense": "Disorderly conduct",
+    "hungarianQualification": "garázdaság",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 339 (1)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 2,
+        "unit": "years"
+      }
+    ],
+    "condition": "Basic violent disorderly conduct; exclude armed, equipped-with-weapon, group and other reported aggravated forms. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "disorder-equipped",
+    "offense": "Disorderly conduct while carrying a weapon",
+    "hungarianQualification": "felfegyverkezve elkövetett garázdaság",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 339 (2) d)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "The source must explicitly report felfegyverkezve as part of the qualification. Do not confuse it with fegyveresen. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "disorder-armed",
+    "offense": "Armed disorderly conduct",
+    "hungarianQualification": "fegyveresen elkövetett garázdaság",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 339 (2) c)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only explicitly reported fegyveresen, not merely a knife or alarm pistol described in the narrative. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "disorder-group",
+    "offense": "Group disorderly conduct",
+    "hungarianQualification": "csoportosan elkövetett garázdaság",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 339 (2) a)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only an explicitly reported group qualification. Two people fighting is not enough to infer it. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "robbery-basic",
+    "offense": "Robbery",
+    "hungarianQualification": "rablás",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 365 (1)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 2,
+        "max": 8,
+        "unit": "years"
+      }
+    ],
+    "condition": "Reported basic completed robbery; exclude armed, equipped-with-weapon, group, vulnerable victim and other aggravated forms. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "robbery-equipped",
+    "offense": "Robbery while carrying a weapon",
+    "hungarianQualification": "felfegyverkezve elkövetett rablás",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 365 (3) b)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 5,
+        "max": 10,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only explicitly reported felfegyverkezve robbery; exclude circumstances requiring section 365(4). Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "robbery-armed",
+    "offense": "Armed robbery",
+    "hungarianQualification": "fegyveresen elkövetett rablás",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 365 (3) a)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "min": 5,
+        "max": 10,
+        "unit": "years"
+      }
+    ],
+    "condition": "Only explicitly reported fegyveresen robbery; exclude circumstances requiring section 365(4). Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "driving-while-banned",
+    "offense": "Driving while disqualified",
+    "hungarianQualification": "járművezetés az eltiltás hatálya alatt",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 239/B (1)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 1,
+        "unit": "years"
+      }
+    ],
+    "condition": "Basic offense only. Disqualification must be reported; never infer it from no driving licence. If criminal-proceeding disqualification is reported use the aggravated mapping instead. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
+  },
+  {
+    "id": "driving-while-criminally-banned",
+    "offense": "Driving during disqualification imposed in criminal proceedings",
+    "hungarianQualification": "büntetőeljárásban kiszabott járművezetéstől eltiltás",
+    "statutes": [
+      {
+        "code": "criminal",
+        "act": "2012. évi C. törvény",
+        "url": "https://njt.jog.gov.hu/jogszabaly/2012-100-00-00",
+        "versionDate": "2026-08-26",
+        "section": "§ 239/B (2)"
+      }
+    ],
+    "penalties": [
+      {
+        "kind": "imprisonment",
+        "max": 3,
+        "unit": "years"
+      }
+    ],
+    "condition": "Requires explicit disqualification imposed in criminal proceedings, not just unspecified driving disqualification. Adult general statutory range only; the court determines the applicable law and sentence.",
+    "checkedAt": "2026-09-27T02:15:00+02:00",
+    "reviewRequired": true
   }
 ]

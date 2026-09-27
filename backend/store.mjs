@@ -42,12 +42,14 @@ export class Store {
   enqueue(kind,key,payload={},due=new Date().toISOString()){
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at) VALUES(?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE 'queued' END`).run(kind,String(key),JSON.stringify(payload),due);
   }
-  claim(now=new Date().toISOString()){
+  claim(now=new Date().toISOString(),kinds=null){
+    if(kinds&&(!kinds.length||kinds.some(k=>typeof k!=='string')))throw new Error('Invalid job kind filter');
+    const kindFilter=kinds?' AND kind IN ('+kinds.map(()=>'?').join(',')+')':'';
     const token=randomUUID(),lease=new Date(Date.parse(now)+15*60_000).toISOString();
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on
     // half-finished drafts. Due times still govern retries and rate limits.
-    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE (state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?) ORDER BY CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'repair' THEN 2 WHEN 'prepare' THEN 3 WHEN 'translate' THEN 4 WHEN 'localize' THEN 5 WHEN 'review' THEN 6 ELSE 7 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now);
+    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} ORDER BY CASE kind WHEN 'archive' THEN 0 WHEN 'feed' THEN 1 WHEN 'repair' THEN 2 WHEN 'prepare' THEN 3 WHEN 'translate' THEN 4 WHEN 'localize' THEN 5 WHEN 'review' THEN 6 ELSE 7 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
     return row?{...row,payload:JSON.parse(row.payload)}:null;
   }
   heartbeat(job){return this.db.prepare("UPDATE jobs SET lease_until=? WHERE id=? AND lease_token=? AND state='running'").run(new Date(Date.now()+15*60_000).toISOString(),job.id,job.lease_token).changes===1;}

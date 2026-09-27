@@ -104,7 +104,7 @@ export function IncidentParticipants({ participants, context = [], legal = [], m
                 {participant.wantedNotice.sourceUrl && <a href={participant.wantedNotice.sourceUrl} target="_blank" rel="noreferrer">{t('Открыть источник ориентировки ')}<ArrowUpRightIcon size={12} aria-hidden="true" /></a>}
               </details>}
               <ContextClaims claims={context.filter((claim) => claim.subject.kind === "participant" && claim.subject.participantKey === participant.key)} />
-              {(participant.role === "suspect" || participant.role === "convicted") && <IncidentLegal embedded assessments={legal.filter((entry) => entry.participantKey === participant.key)} />}
+              {(participant.role === "suspect" || participant.role === "convicted") && <IncidentLegal embedded assessments={legal.filter((entry) => entry.participantKey === (participant.sourceParticipantKey ?? participant.key))} />}
               {participant.profile.kind === "group" && participant.profile.leader && <div className="participant-leader">
                 <Avatar profile={participant.profile.leader.person} small />
                 <div><p className="participant-leader-label">{t('Предполагаемый лидер')}</p><p className="participant-name">{participant.profile.leader.person.name || t("Имя не указано")}</p>

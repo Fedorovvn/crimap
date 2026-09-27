@@ -1,13 +1,15 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
 import {matchCandidates,identify,compareBrief} from './dedup.mjs';
+import {completeDetails,detailFingerprint,validateLegalLinks} from './details.mjs';
 import {retainLocationCoordinates} from './map-surfaces.mjs';
 import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
 import { hash } from './store.mjs';
 import { nextCheck, intervalFor, retryDelay } from './scheduler.mjs';
-import { feeds, sourceFor, parseFeed, parseArticle } from './sources.mjs';
+import {discoverFeed} from './discovery.mjs';
+import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
 import { checkReview,recordRequests } from './review.mjs';
@@ -19,7 +21,7 @@ const iso=()=>new Date().toISOString();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
 export {matchCandidates} from './dedup.mjs';
 export class Pipeline {
-  constructor(store,{reader,model,reviewer,search,triage,preparation,archive,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??'police-brfk,okf-events,kekvillogo').split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??5)}={}){
+  constructor(store,{reader,model,reviewer,search,triage,preparation,archive,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??LIVE_SOURCE_IDS.join(',')).split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??200)}={}){
     this.store=store;this.reader=reader;this.model=model;this.reviewer=reviewer;this.search=search;this.sourceIds=sourceIds;this.maxItems=maxItems;
     this.laws=JSON.parse(readFileSync(new URL('./verified-laws.json',import.meta.url),'utf8'));
     this.publicPath=publicPath;
@@ -52,6 +54,7 @@ export class Pipeline {
     if(normalized(event.location.city)!=='budapest')throw new Error('Outside Budapest scope');
     if(event.occurredAt&&Date.parse(event.occurredAt)>Date.now())throw new Error('Occurrence is in the future');
     for(const law of event.legal)if(!this.laws.some(l=>isDeepStrictEqual(l.statutes,law.statutes)&&isDeepStrictEqual(l.penalties,law.penalties)))throw new Error('Unverified legal mapping: copy statutes and penalties exactly from verifiedLawCatalog, or return legal=[]');
+    validateLegalLinks(event);
     for(const image of event.media){if(!documents.some(d=>d.url===image.sourceUrl&&d.imageUrls.includes(image.imageUrl)))throw new Error('Image not present in source');image.rights='unknown';}
     return event;
   }
@@ -142,10 +145,23 @@ export class Pipeline {
     }
     this.store.enqueue('prepare',id,{eventId:id,campaignId:this.campaignId});
   }
-  async prepare(id){
+  async prepare(id,{refresh=false}={}){
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
-    if(this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision))return;
-    const result=await this.preparation.enrich(row,this.eventDocuments(id));
+    if(!refresh&&this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(id,row.revision))return;
+    const documents=this.eventDocuments(id);
+    const previous=this.store.db.prepare('SELECT payload FROM preparation WHERE event_id=? ORDER BY revision DESC LIMIT 1').get(id);
+    const prior=previous?JSON.parse(previous.payload).detailCompletion:null;
+    let completion=prior,preparedRow=row;
+    const needsDetails=this.model&&documents.length&&(row.canonical.participants.length||['assault','fight','robbery'].includes(row.canonical.type)||row.canonical.signals.some(s=>['death','injury'].includes(s)));
+    if(needsDetails&&prior?.fingerprint!==detailFingerprint(row.canonical,documents,this.laws)){
+      const details=await completeDetails(this.model,row.canonical,documents,this.laws,(e,d)=>this.validate(e,d));
+      preparedRow={...row,canonical:details.event};
+      completion={fingerprint:details.fingerprint,coverage:details.coverage,model:this.model.model,checkedAt:iso()};
+      checkReview({verdict:'pass',summary:'Detail requests',issues:[],requests:details.requests},documents);
+      if(details.requests.length)recordRequests(this.store,details.requests,{eventId:id,revision:row.revision,model:this.model.model});
+    }
+    const result=await this.preparation.enrich(preparedRow,documents);
+    if(completion)result.detailCompletion=completion;
     const event=eventSchema.parse(result.event),changed=!isDeepStrictEqual(event,row.canonical),revision=row.revision+(changed?1:0);
     this.store.transaction(()=>{
       if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during preparation; retry required');
@@ -266,8 +282,8 @@ export class Pipeline {
     event=this.store.event(id);const next=nextCheck(event);
     this.store.db.prepare('UPDATE events SET last_checked_at=?,next_check_at=? WHERE id=?').run(iso(),next,id);return next;
   }
-  async runOne(){
-    const job=this.store.claim();if(!job)return false;
+  async runOne({kinds}={}){
+    const job=this.store.claim(iso(),kinds);if(!job)return false;
     const timer=setInterval(()=>this.store.heartbeat(job),60000);timer.unref();
     try{
       this.campaignId=job.payload.campaignId??null;
@@ -276,8 +292,7 @@ export class Pipeline {
       if(current&&(current.merged_into||current.state==='excluded')){this.store.finish(job);return true;}
       let next=null;
       if(job.kind==='feed'){
-        const page=await this.reader.read(job.payload.url),items=parseFeed(page.body,page.url).slice(0,this.maxItems);
-        for(const item of items){const filter=cheapDecision(item.title);if(this.triage&&filter.decision==='drop'){this.store.log('headline-filtered',item.url,{reason:filter.reason});continue;}const existing=this.store.db.prepare("SELECT state FROM jobs WHERE kind='article' AND job_key=?").get(item.url);if(!existing||existing.state==='done')this.store.enqueue('article',item.url,item);}
+        await discoverFeed(this.store,this.reader,job.payload);
         next=new Date(Date.now()+job.payload.intervalSeconds*1000).toISOString();
       }else if(job.kind==='article')await this.ingest(job.payload.url,job.payload.publishedAt);
       else if(job.kind==='gather')await this.gather(job.payload.eventId);

@@ -21,12 +21,14 @@ let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT
 try{
   let result;
   if(command==='worker'){pipeline.seed();while(!stopping){const worked=await pipeline.runOne();if(!worked)await new Promise(r=>setTimeout(r,2000));}}
+  else if(command==='discover'){for(const feed of (await import('./sources.mjs')).feeds(pipeline.sourceIds))if(!store.db.prepare("SELECT 1 FROM jobs WHERE kind='feed' AND job_key=?").get(feed.url))store.enqueue('feed',feed.url,feed);for(let i=0;i<200&&!stopping;i++)if(!await pipeline.runOne({kinds:['feed']}))break;result={discovered:true};}
   else if(command==='run'){pipeline.seed();for(let i=0;i<Number(values.limit??10);i++)if(!await pipeline.runOne())break;result={processed:true};}
   else if(command==='ingest'){if(!arg)throw new Error('Supply a registered article URL');result=await pipeline.ingest(arg);}
   else if(command==='recheck')result=await pipeline.recheck(Number(arg));
   else if(command==='deduplicate')result=await consolidate(pipeline,{limit:Number(values.limit??30)});
   else if(command==='translate')result=await pipeline.translate(Number(arg));
   else if(command==='review')result=await pipeline.review(Number(arg));
+  else if(command==='complete-details')result=await pipeline.prepare(Number(arg),{refresh:true});
   else if(command==='prepare')result=await pipeline.prepare(Number(arg));
   else if(command==='localize-public')result=await localizePublished(store,model,values['public-db']??process.env.DATABASE_PATH);
   else if(command==='backfill')result=archive.start({id:arg,from:values.from,to:values.to,budget:Number(values.budget)});

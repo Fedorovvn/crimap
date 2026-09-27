@@ -8,8 +8,9 @@ export function sourceFor(url){
   const source=catalog.find(s=>[s.url,...(s.feeds??[]).map(f=>f.url)].some(u=>owner(new URL(u).hostname)===owner(host)));
   return source?{...source,kind:source.group==='official'?'official':source.group==='media'?'media':'community',independenceGroup:owner(host)}:null;
 }
-export function feeds(ids=['police-brfk','okf-events','kekvillogo']){
-  return catalog.filter(s=>ids.includes(s.id)).flatMap(s=>(s.feeds??[]).map(f=>({url:f.url,sourceId:s.id,intervalSeconds:s.group==='official'?300:600})));
+export const LIVE_SOURCE_IDS=['police-brfk','police-national','okf-events','prosecution','kekvillogo','bpiautosok','mavinform','telex','index'];
+export function feeds(ids=LIVE_SOURCE_IDS){
+  return catalog.filter(s=>ids.includes(s.id)).flatMap(s=>(s.feeds??[]).map(f=>({url:f.url,sourceId:s.id,intervalSeconds:s.id==='prosecution'?1800:s.group==='official'?300:600})));
 }
 export function parseFeed(body,base){
   if(/<!DOCTYPE/i.test(body))throw new Error('Feed DTD is not accepted');
@@ -19,7 +20,8 @@ export function parseFeed(body,base){
     const raw=link?.getAttribute('href')??link?.textContent;
     if(!raw)return null;const url=canonicalUrl(new URL(raw.trim(),base).href);
     const date=item.querySelector('pubDate,published,updated')?.textContent?.trim();
-    return {url,title:item.querySelector('title')?.textContent?.trim()??'',publishedAt:date&&Number.isFinite(Date.parse(date))?new Date(date).toISOString():null};
+    const excerpt=JSDOM.fragment(item.querySelector('description,summary')?.textContent??'').textContent.trim().slice(0,4000);
+    return {url,title:item.querySelector('title')?.textContent?.trim()??'',excerpt,publishedAt:date&&Number.isFinite(Date.parse(date))?new Date(date).toISOString():null};
   }).filter(x=>x&&sourceFor(x.url));}finally{dom.window.close();}
 }
 export function parseArticle(page){

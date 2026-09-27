@@ -1,0 +1,16 @@
+[Unit]
+Description=Crime Map free source discovery
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=oneshot
+User=crimap
+Group=crimap
+WorkingDirectory=/srv/crimap/app
+EnvironmentFile=/etc/crimap/collector.env
+ExecStart=/srv/crimap/runtime/node/bin/node backend/cli.mjs discover
+TimeoutStartSec=240
+NoNewPrivileges=true
+PrivateTmp=true
+

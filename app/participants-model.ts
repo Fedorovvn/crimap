@@ -33,22 +33,24 @@ export type Participant = {
 export const GROUP_DISPLAY_MINIMUM = 5;
 
 /** Expand known small groups without inventing individual identities or ages. */
-export function participantsForDisplay(participants: Participant[], locale: Locale = "ru"): Participant[] {
+export type DisplayParticipant = Participant & { sourceParticipantKey?: string };
+export function participantsForDisplay(participants: Participant[], locale: Locale = "ru"): DisplayParticipant[] {
   const labels = { suspect: "Подозреваемый", victim: "Потерпевший", convicted: "Осуждённый", involved: "Участник" };
   const femaleLabels = { suspect: "Подозреваемая", victim: "Потерпевшая", convicted: "Осуждённая", involved: "Участница" };
   return participants.flatMap((participant) => {
     const group = participant.profile;
     if (group.kind !== "group" || group.count == null || !Number.isInteger(group.count) || group.count < 1 || group.count >= GROUP_DISPLAY_MINIMUM) return [participant];
-    return Array.from({ length: group.count }, (_, index): Participant => {
+    return Array.from({ length: group.count }, (_, index): DisplayParticipant => {
       const leader = index === 0 ? group.leader : undefined;
       const profile: PersonProfile = leader?.person ?? { kind: "person", gender: group.gender };
       return {
         ...participant,
         key: `${participant.key}-person-${index + 1}`,
+        sourceParticipantKey: participant.key,
         label: `${translate((profile.gender === "female" ? femaleLabels : labels)[participant.role],locale)} ${index + 1}`,
         profile,
         status: leader?.status ?? participant.status,
-        note: translate(leader ? "Предполагаемый лидер." : "Индивидуальные сведения не опубликованы.",locale),
+        note: participant.note || translate(leader ? "Предполагаемый лидер." : "Индивидуальные сведения не опубликованы.",locale),
         sourceUrl: leader?.sourceUrl ?? participant.sourceUrl,
         sourceLabel: leader ? translate("Источник сведений о лидере",locale) : participant.sourceLabel,
       };

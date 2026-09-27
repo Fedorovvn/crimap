@@ -3,10 +3,18 @@ import { cleanup, render, screen } from "@testing-library/react";
 import { IncidentParticipants } from "./incident-participants";
 import { ageLabel, avatarFor, countryFlag, participantsForDisplay, participantStatusLabel, type Participant } from "./participants-model";
 import { starterParticipants } from "../db/starter-participants";
+import { starterLegal } from "../db/starter-legal";
 
 afterEach(cleanup);
 
 describe("Participant information", () => {
+  it("retains the shared note and legal assessment when a small suspect group is expanded", () => {
+    const base = starterParticipants["akacfa-homicide"][0];
+    const group: Participant = { ...base, key: "suspects", note: "Оба задержаны по данным полиции.", profile: { kind: "group", count: 2 } };
+    render(<IncidentParticipants participants={[group]} legal={[{ ...starterLegal["akacfa-homicide"][0], participantKey: group.key }]} />);
+    expect(screen.getAllByText(group.note!)).toHaveLength(2);
+    expect(screen.getAllByRole("link", { name: "§ 160 (1)" })).toHaveLength(2);
+  });
   it("chooses a silhouette from known age and gender and preserves unknowns", () => {
     expect(avatarFor({ kind: "person", age: 62, gender: "male" })).toBe("elderly-male");
     expect(avatarFor({ kind: "person", age: 8, gender: "female" })).toBe("girl");
