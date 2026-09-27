@@ -1,4 +1,5 @@
 import {readPublication} from './publication-comparison.mjs';
+import {currentUpdateAssessment} from './update-comparison.mjs';
 
 export function queueEditorialPreparation(store,id,publicPath=process.env.DATABASE_PATH){
   const event=store.event(id);
@@ -12,6 +13,7 @@ export function queueEditorialPreparation(store,id,publicPath=process.env.DATABA
   }
   const quality=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,event.revision);
   const publication=event.public_id&&event.published_revision!==event.revision?readPublication(publicPath,event.slug):null;
+  if(currentUpdateAssessment(store,event,publication)?.skip)return false;
   const ready=quality&&JSON.parse(quality.payload).verdict==='pass'&&(!publication||JSON.parse(quality.payload).publicationBaseline===publication.fingerprint)&&event.canonical.occurredAt&&Number.isFinite(event.canonical.location.latitude)&&
     store.db.prepare("SELECT 1 FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(id,event.revision)&&
     store.db.prepare('SELECT 1 FROM site_translations WHERE event_id=? AND revision=?').get(id,event.revision);

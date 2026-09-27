@@ -3,6 +3,7 @@ import { hash } from './store.mjs';
 import { siteTranslations } from './site-localization.mjs';
 import { readPublication, comparisonFor } from './publication-comparison.mjs';
 import {eventProcessing} from './activity.mjs';
+import {currentUpdateAssessment} from './update-comparison.mjs';
 
 export function fail(status, message) { throw Object.assign(new Error(message), { status }); }
 export function documentsFor(store, id) {
@@ -27,6 +28,7 @@ export function eventDetail(store, id, publicPath) {
   const preparation=prepared?JSON.parse(prepared.payload):null;
   const languages=siteTranslations(store,id,row.revision);
   const published=currentPublic(publicPath,row.slug),comparison=comparisonFor(published,russian,documents,preparation,languages);
+  const updateAssessment=currentUpdateAssessment(store,row,published);
   if(comparison)comparison.reviewed=quality?.payload.publicationBaseline===published.fingerprint;
   const blockers = [];
   if(row.merged_into)blockers.push(`Объединено с событием №${row.merged_into}`);
@@ -38,7 +40,7 @@ export function eventDetail(store, id, publicPath) {
   if (!documents.length) blockers.push('Нет сохранённых источников');
   if(preparation&&!languages)blockers.push('Готовятся английская и венгерская версии');
   if(published&&row.published_revision!==row.revision&&!comparison.reviewed)blockers.push('Pro ещё не сравнила обновление с текущей публикацией');
-  return { ...row, processing:eventProcessing(store,row), russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,comparison,
+  return { ...row, updateAssessment, processing:eventProcessing(store,row), russian, strings:russian ? translationStrings(russian) : null, quality, documents, blockers, preparation,comparison,
     dateCheck:store.db.prepare('SELECT reason,checked_at FROM date_checks WHERE event_id=?').get(id)??null,
     ignoredUpdates:store.db.prepare('SELECT d.url,v.title,i.reason,i.created_at FROM ignored_updates i JOIN documents d ON d.id=i.document_id JOIN document_versions v ON v.document_id=d.id AND v.content_hash=i.content_hash WHERE i.event_id=? ORDER BY i.created_at DESC LIMIT 30').all(id),
     approvalToken:hash({revision:row.revision,ru:ru?.payload,review:review?.payload,preparation:prepared?.payload,languages,publication:published?.fingerprint??null}),

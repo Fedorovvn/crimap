@@ -3,6 +3,7 @@ import {usageDashboard} from './usage-dashboard.mjs';
 
 export const jobLabels={feed:'Обход источника',article:'Разбор статьи',archive:'Обход архива',gather:'Поиск дополнительных источников',prepare:'Подготовка карточки',review:'Финальная проверка Pro',repair:'Исправление карточки',translate:'Перевод Flash',localize:'Перевод EN/HU','resolve-date':'Уточнение даты',recheck:'Проверка обновлений'};
 const actions={
+ 'publication-update-compared':['events','Сравнение обновления с публикацией'],
  'feed-polled':['sources','Источник проверен'], 'feed-article-queued':['articles','Новая статья'], 'feed-article-filtered':['filtered','Отсеяно бесплатно'],
  'document-processed':['articles','Статья разобрана'], 'repeat-skipped':['duplicates','Повтор пропущен'], 'events-merged':['duplicates','Дубли объединены'],
  'uninteresting-update-skipped':['filtered','Обновление неинтересного события'], 'prepared':['events','Карточка подготовлена'], 'pro-final-editor':['events','Проверка Pro завершена'],
@@ -14,7 +15,7 @@ const actions={
  'editorial-retry':['events','Пересборка поставлена в очередь'],
  'review-auto-corrected':['events','Pro исправила ошибки итогового текста'],
 };
-const eventActions=new Set(['repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred','editorial-retry','review-auto-corrected']);
+const eventActions=new Set(['publication-update-compared','repeat-skipped','events-merged','uninteresting-update-skipped','prepared','pro-final-editor','published','translations-ready','date-resolved','merge-needs-retry','recheck','event-filtered','review-deferred','editorial-retry','review-auto-corrected']);
 export function readableError(text){
  if(!text)return null;
  if(/budget reached/i.test(text))return 'Недостаточно общего бюджета для следующего запроса. Увеличьте лимит и нажмите «Сохранить и продолжить».';
@@ -63,6 +64,7 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
  const logs=[];let examined=null;
  for(const row of raw){
    examined=row.id;const d=parse(row.detail);let [group,label]=actions[row.action];
+   if(row.action==='publication-update-compared'&&d.skip){group='duplicates';label='Нет новых сведений — Pro не запускалась';}
    if(row.action==='document-processed'&&d.filtered){group='filtered';label='Статья отсеяна';}
    if(row.action==='document-processed'&&d.repeat){group='duplicates';label='Статья не добавляет новых событий';}
    if(row.action==='job-finished'&&d.outcome!=='complete'){group=d.error?'errors':'tasks';label=d.error?'Задача остановлена с ошибкой':'Задача приостановлена';}

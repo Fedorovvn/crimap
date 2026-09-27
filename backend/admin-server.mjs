@@ -10,6 +10,7 @@ import {changeTotalBudget,changeBudget,resumeCampaign,setEditorialMark,withdraw,
 import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
+import {currentUpdateAssessment} from './update-comparison.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -80,6 +81,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
             const event=JSON.parse(canonical);
             const baseline=row.public_id&&row.published_revision!==row.revision?readPublication(publicPath,row.slug):null;
             const comparisonReady=!baseline||row.publicationBaseline===baseline.fingerprint;
+            row.updateAssessment=currentUpdateAssessment(store,row,baseline);
             return {...row,processing:eventProcessing(store,row),searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
           });
           return send(200,{events,budget:store.totalBudget(),requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
@@ -126,7 +128,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       }
       if(action==='resolve-date'&&event.canonical.occurredAt)fail(409,'Дата уже установлена');
       if(action==='translate'&&event.russian)fail(409,'Перевод уже есть. Для повторного перевода сохраните новую версию через редактор.');
-      store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id});
+      store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id,...(action==='review'?{forceReview:true}:{})});
       store.log('editorial-queue',id,{action,reviewer,revision:event.revision});
       return send(200,{queued:action});
     } catch(e) {

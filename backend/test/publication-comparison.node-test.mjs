@@ -9,6 +9,7 @@ import {Pipeline} from '../pipeline.mjs';
 import {publish,migratePublic} from '../publish.mjs';
 import {eventDetail,documentsFor} from '../editorial.mjs';
 import {readPublication,comparisonFor,publicationChanges,reviewChanges} from '../publication-comparison.mjs';
+import {queueEditorialPreparation} from '../editorial-workflow.mjs';
 import {displayStrings} from '../site-localization.mjs';
 import {renderChanges,highlightChange} from '../admin/changes.mjs';
 
@@ -32,6 +33,36 @@ test('actual public projection has no false differences for sources, dates, tran
  }finally{f.close();}
 });
 
+test('Flash skips a wording-only update before translations and Pro, without approving or losing the draft',async()=>{
+ const f=fixture();try{
+  const changed={...f.event,title:'Budapest robbery'};
+  f.s.db.prepare('UPDATE events SET canonical=?,revision=2 WHERE id=1').run(JSON.stringify(changed));
+  f.s.db.prepare('INSERT INTO preparation VALUES(1,2,?,?)').run('{}','2026-09-27');
+  let calls=0;
+  const p=new Pipeline(f.s,{publicPath:f.path,model:{json:async(stage,_input,{validate})=>{calls++;assert.equal(stage,'update-compare');return validate({decision:'unchanged',confidence:.99,reason:'Изменён только порядок слов.'});}},reviewer:{json(){throw Error('No Pro call');}}});
+  assert.ok((await p.review(1,2)).updateAssessment.skip);
+  assert.ok((await p.review(1,2)).updateAssessment.skip);assert.equal(calls,1);
+  assert.equal(f.s.event(1).revision,2);assert.equal(readPublication(f.path,'test').revision,1);
+  assert.equal(f.s.db.prepare('SELECT count(*) n FROM translations WHERE revision=2').get().n,0);
+  assert.equal(f.s.db.prepare('SELECT count(*) n FROM quality_reviews WHERE revision=2').get().n,0);
+  assert.ok(eventDetail(f.s,1,f.path).updateAssessment.skip);
+  assert.equal(queueEditorialPreparation(f.s,1,f.path),false);
+  assert.throws(()=>publish(f.s,1,f.path,{reviewer:'Test'}));
+  f.s.db.prepare('UPDATE events SET revision=3 WHERE id=1').run();
+  assert.equal(eventDetail(f.s,1,f.path).updateAssessment,null);
+  assert.equal(queueEditorialPreparation(f.s,1,f.path),true);
+ }finally{f.close();}
+});
+
+test('Flash cannot discard an update against a publication changed during comparison',async()=>{
+ const f=fixture();try{
+  f.s.db.prepare('UPDATE events SET canonical=?,revision=2 WHERE id=1').run(JSON.stringify({...f.event,title:'Budapest robbery'}));
+  const p=new Pipeline(f.s,{publicPath:f.path,model:{json:async(_stage,_input,{validate})=>{const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET title='New public title'").run();db.close();return validate({decision:'unchanged',confidence:1,reason:'Повтор.'});}},reviewer:{}});
+  await assert.rejects(p.review(1,2),/Published version changed during Flash/);
+  assert.equal(f.s.db.prepare("SELECT count(*) n FROM audit WHERE action='publication-update-compared'").get().n,0);
+ }finally{f.close();}
+});
+
 test('comparison matches participants by key, shows removals and additions, and compares map and languages',()=>{
  const a={participants:[{key:'one',label:'Мужчина',profile:{age:30}},{key:'two',label:'Женщина'}],location:{latitude:47.5},media:[{imageUrl:'https://example.com/a.jpg',caption:'Старая'}],translations:{hu:{Текст:'Régi'}}};
  const b={...a,participants:[a.participants[1],{...a.participants[0],profile:{age:31}}],location:{latitude:47.51},media:[{imageUrl:'https://example.com/b.jpg',caption:'Новая'}],translations:{hu:{Текст:'Új'}}};
@@ -44,7 +75,7 @@ test('Pro receives the real published version, saves a comparison baseline and c
  const f=fixture();try{
   const changed={...f.event,title:'Robbery suspect detained'};f.s.db.prepare('UPDATE events SET canonical=?,revision=2 WHERE id=1').run(JSON.stringify(changed));f.drafts(2,changed);
   let received=false;
-  const p=new Pipeline(f.s,{publicPath:f.path,model:{json(){throw new Error('Drafts already prepared');}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{received=true;assert.ok(payload.schema.required.includes('publicationSummary'));assert.equal(payload.currentPublication.snapshot.title,f.event.title);assert.equal(payload.currentPublication.revision,1);assert.ok(payload.proposedPublicationChanges.some(c=>c.path==='title'));return validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'В заголовке уточнено задержание подозреваемого.',issues:[],requests:[],final:{}});}}});
+  const p=new Pipeline(f.s,{publicPath:f.path,model:{json:async(stage,_payload,{validate})=>{assert.equal(stage,'update-compare');return validate({decision:'changed',confidence:.99,reason:'Уточнение заголовка.'});}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{received=true;assert.ok(payload.schema.required.includes('publicationSummary'));assert.equal(payload.currentPublication.snapshot.title,f.event.title);assert.equal(payload.currentPublication.revision,1);assert.ok(payload.proposedPublicationChanges.some(c=>c.path==='title'));return validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'В заголовке уточнено задержание подозреваемого.',issues:[],requests:[],final:{}});}}});
   await p.review(1,2);assert.ok(received);
   const detail=eventDetail(f.s,1,f.path);assert.equal(detail.comparison.reviewed,true);assert.equal(detail.blockers.length,0);assert.ok(detail.comparison.changes.some(c=>c.path==='title'));assert.equal(detail.published.title,f.event.title);
   const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET summary='Updated separately' WHERE slug='test'").run();db.close();
@@ -57,6 +88,7 @@ test('publication changed during Pro processing invalidates the result rather th
  const f=fixture();try{
   f.s.db.prepare('UPDATE events SET revision=2 WHERE id=1').run();f.drafts(2);
   const p=new Pipeline(f.s,{publicPath:f.path,model:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{const out=validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'Содержательных изменений нет.',issues:[],requests:[],final:{}});const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET title='Changed while reviewing'").run();db.close();return out;}}});
+  f.s.log('editorial-retry',1,{revision:2});
   await assert.rejects(p.review(1,2),/Published version changed/);assert.equal(f.s.db.prepare('SELECT count(*) n FROM quality_reviews WHERE revision=2').get().n,0);
  }finally{f.close();}
 });

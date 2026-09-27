@@ -22,6 +22,7 @@ import { readPublication, comparisonFor, reviewChanges } from './publication-com
 import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
 import {validateResolvedDate} from './date-resolution.mjs';
 import {correctFinalTranslations} from './final-corrections.mjs';
+import {comparePublicationUpdate,currentUpdateAssessment} from './update-comparison.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -376,7 +377,6 @@ export class Pipeline {
     if(!await this.relevanceBeforeReview(id))return {filtered:true};
     if(await this.deduplicateExisting(id))return {deduplicated:true};
     if(!this.reviewer)throw new Error('Review model is not configured');
-    this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     // Missing dates/coordinates are facts for Pro to inspect, not a reason to
     // silently finish a review job without ever invoking the reviewer.
     const docs=this.eventDocuments(id);
@@ -391,6 +391,26 @@ export class Pipeline {
     const published=readPublication(this.publicPath,event.slug);
     const retry=this.store.db.prepare("SELECT id,detail FROM audit WHERE action='editorial-retry' AND subject=? ORDER BY id DESC LIMIT 1").get(String(id));
     const retryInfo=retry?JSON.parse(retry.detail):null;
+    let updateAssessment=null;
+    if(published&&published.revision!==event.revision&&retryInfo?.revision!==event.revision&&!this.activeJob?.payload.forceReview){
+      updateAssessment=currentUpdateAssessment(this.store,event,published);
+      if(!updateAssessment){
+        updateAssessment=await comparePublicationUpdate(this.model,event,docs,preparation,published);
+        this.ensureActive(id);
+        if(this.store.event(id).revision!==event.revision)throw new Error('Event changed during Flash update comparison');
+        if(readPublication(this.publicPath,event.slug)?.fingerprint!==published.fingerprint)throw new Error('Published version changed during Flash update comparison');
+        updateAssessment={...updateAssessment,revision:event.revision,baseline:published.fingerprint,preparationHash:hash(prepared?.payload??null)};
+        this.store.log('publication-update-compared',id,updateAssessment);
+      }
+      if(updateAssessment.skip){
+        // A skipped draft is NOT approved for publication. Keep observations and
+        // future rechecks so later facts can still produce a meaningful update.
+        this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
+        this.store.db.prepare('UPDATE events SET review_reason=? WHERE id=?').run(`Обновление пропущено: ${updateAssessment.reason}`,id);
+        return {skipped:'No meaningful publication changes',updateAssessment};
+      }
+    }
+    this.store.db.prepare('DELETE FROM quality_reviews WHERE event_id=? AND revision=?').run(id,event.revision);
     const retryFeedback=retryInfo?.translationReset&&retryInfo.revision===event.revision
       ? [{field:'translations',reason:'Rebuild incorrect translation drafts. Preserve all numeric facts and time values from the source exactly.',retryId:retry.id}]:[];
     // Persist inexpensive translation drafts separately, so a retry of Pro does
@@ -417,7 +437,7 @@ export class Pipeline {
       const previous=priorError?JSON.parse(priorError.detail):null;
       const payload={schema:zodToJsonSchema(outputSchema),previousValidationError:previous?.revision===event.revision?previous.error:null,event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
         currentPublication:published?{revision:published.revision,updatedAt:published.updated_at,snapshot:published.snapshot}:null,
-        proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[])};
+        proposedPublicationChanges:reviewChanges(comparisonFor(published,russian,docs,preparation,translations)?.changes??[]),flashUpdateAssessment:updateAssessment};
       return this.reviewer.json('review',payload,{maxTokens:28000,validate:async response=>{
         let raw=normalizeFinalResponse(response,event.canonical,russian);
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');

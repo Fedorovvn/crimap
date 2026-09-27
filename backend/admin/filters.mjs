@@ -26,7 +26,7 @@ export function filterEvents(events,input){
     if(f.type!=='all'&&e.eventType!==f.type)return false;
     if(f.publication==='unpublished'&&live||f.publication==='published'&&!live||f.publication==='live'&&!live||f.publication==='new'&&(live||current)||f.publication==='updates'&&(!live||current))return false;
     if(f.publication==='withdrawn'&&!e.withdrawn_at||f.publication==='new'&&e.withdrawn_at)return false;
-    if(f.review==='ready'&&!e.ready||f.review==='pending'&&e.verdict||f.review==='failed'&&!['revise','reject'].includes(e.verdict)||['pass','revise','reject'].includes(f.review)&&e.verdict!==f.review)return false;
+    if(f.review==='ready'&&!e.ready||f.review==='pending'&&(e.verdict||e.updateAssessment?.skip)||f.review==='failed'&&!['revise','reject'].includes(e.verdict)||['pass','revise','reject'].includes(f.review)&&e.verdict!==f.review)return false;
     if(f.review==='stopped'&&!e.processing?.stopped)return false;
     if(f.homicide==='only'&&!flags.homicide||f.homicide==='exclude'&&flags.homicide)return false;
     if(f.impact==='hide-minor'&&flags.impact==='minor'||['minor','significant','unknown'].includes(f.impact)&&flags.impact!==f.impact||f.impact==='fatal'&&!flags.fatal||f.impact==='injured'&&!flags.injured)return false;

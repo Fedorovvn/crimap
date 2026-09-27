@@ -1,6 +1,6 @@
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=n=>Number(n??0).toLocaleString('ru-RU'),compact=n=>Number(n??0).toLocaleString('ru-RU',{notation:'compact',maximumFractionDigits:1}),money=n=>'$'+Number(n??0).toFixed(4);
-const stageLabels={triage:'Проверка тематики',identify:'Краткое описание события',compare:'Сравнение дублей',extract:'Извлечение фактов',merge:'Объединение сведений',research:'План поиска источников',details:'Полнота карточки',media:'Поиск фотографий','media-review':'Оценка фотографий','resolve-date':'Уточнение даты',translate:'Перевод на русский','site-translate':'Переводы EN/HU',review:'Финальная редактура',repair:'Исправление (старый этап)'};
+const stageLabels={'update-compare':'Сравнение обновлений',triage:'Проверка тематики',identify:'Краткое описание события',compare:'Сравнение дублей',extract:'Извлечение фактов',merge:'Объединение сведений',research:'План поиска источников',details:'Полнота карточки',media:'Поиск фотографий','media-review':'Оценка фотографий','resolve-date':'Уточнение даты',translate:'Перевод на русский','site-translate':'Переводы EN/HU',review:'Финальная редактура',repair:'Исправление (старый этап)'};
 let current=null,selected='identity',metric='tokens';
 function detail(){
  if(!current)return;const step=current.steps.find(s=>s.id===selected)??current.steps[0];
@@ -20,4 +20,3 @@ export function renderUsage(data){
 }
 $('#usage-flow').addEventListener('click',e=>{const b=e.target.closest('[data-usage-step]');if(b){selected=b.dataset.usageStep;detail();}});
 $('#usage-metric').addEventListener('change',e=>{metric=e.target.value;renderUsage(current);});
-
