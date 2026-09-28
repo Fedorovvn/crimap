@@ -8,9 +8,26 @@ const industrialChemical=/(?:klor|ammonia|vegyi|chemical|chlorine|хлор|ам�
 const facility=/(?:uzem|gyar|factory|plant\b|industrial|завод|предприяти|промышлен)/;
 const release=/(?:szivarg|kiszabad|mergez|felho|leak|spill|release|toxic cloud|утеч|выброс|облак|отрав)/;
 const independentViolence=/(?:kesel|megszur|leszur|lovoldoz|ralott|kirabol|emberoles|gyilk|stabb|shooting|homicide|robbery|нож|зареза|стрельб|застрел|убийств|ограб|поджог|arson|gyujtogat|chemical attack|vegyi tamadas|химическ[а-я]* атак)/;
+// These describe a police outcome to an earlier non-violent property offence,
+// rather than a new threat faced by an ordinary person. Keep a concrete home
+// intrusion if the source reports force, a threatened resident or an injury.
+const nonviolentPropertyCrime=/(?:lakasbetor|lakasbetores|betores|betoro|besurrano|tolvaj|lopas|burglar(?:y)?|house break(?:-in)?|theft|квартирн|краж|вор)/;
+const policeOutcome=/(?:orizetbe|letartoztat|elfogtak|elfogas|bilincs|rendorsegi (?:intezkedes|akcio)|arrested|detained|charged|sentenced|court|biro|полици[яи].*(?:задерж|арест)|задержал|задержан|арестован|суд)/;
+// A report focused on a person climbing or walking on infrastructure is not a
+// public-safety incident by itself. Blood, an attack or a danger to someone
+// else continues through the ordinary relevance checks below.
+const selfRiskInfrastructure=/(?:zajvedo|zajgatlo|shumozashit|шумозащит|hanggatlo|(?:^|[^a-z])korlat(?:$|[^a-z])|barrier|ограждени)/;
+const selfRiskAction=/(?:masz|felmasz|setal|jar|tetejen|tetejere|walk(?:ing)?|climb(?:ing)?|ид[её]т|ходит|лез)/;
+const concreteHarmOrThreat=/(?:kesel|megszur|leszur|tamadas|megtamad|bantalmaz|rabl|gyilk|emberoles|halal|meghalt|halott|sulyos|eletveszely|veres|verzo|bloody|bloodied|injured|killed|died|нож|нападен|ранен|погиб|смерт|тяж[её]л|кров)/;
 
 export function scopeDecision(title,text=''){
   const head=norm(title),all=norm(title+'\n'+text);
+  if(nonviolentPropertyCrime.test(all)&&policeOutcome.test(all)&&!independentViolence.test(all)&&!concreteHarmOrThreat.test(all)){
+    return {decision:'drop',reason:'Полицейское задержание по имущественному преступлению без подтверждённой угрозы или вреда людям',signals:[]};
+  }
+  if(selfRiskInfrastructure.test(all)&&selfRiskAction.test(all)&&!concreteHarmOrThreat.test(all)){
+    return {decision:'drop',reason:'Рискованное действие самого участника без подтверждённого вреда или угрозы другим людям',signals:[]};
+  }
   // Explicit headlines can be rejected for free, even if injuries are severe.
   // Mixed stories with human violence still need a contextual decision.
   if(!independentViolence.test(all)){

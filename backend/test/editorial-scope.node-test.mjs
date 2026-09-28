@@ -20,6 +20,17 @@ test('drug raids with weapons and sporting accidents do not bypass contextual fi
   'Mass illness at a Budapest festival; drugs suspected, cause unknown',
  ])assert.equal(cheapDecision(title,'').decision,'ambiguous',title);
 });
+test('free triage rejects property-crime police outcomes and self-risk on infrastructure without a victim',async()=>{
+ const t=new Triage({json:async()=>{throw new Error('No model needed');}});
+ for(const [title,text] of [
+  ['Sorozatbetörőt fogtak el Újbudán', 'A rendőrök őrizetbe vették a férfit több lakásbetörés miatt.'],
+  ['Серийного квартирного вора задержали', 'Полиция задержала подозреваемого после нескольких краж из квартир.'],
+  ['Férfi sétált az M0 zajvédő falának tetején', 'A bejelentő rendőrautót látott a helyszínen.'],
+  ['Man walking on top of a motorway noise barrier', 'Police attended after a witness called emergency services.'],
+ ]){const r=await t.check({title,text});assert.equal(r.keep,false,title);assert.equal(r.method,'rules');}
+ assert.notEqual(cheapDecision('Késelés egy lakásban Budapesten','A lakót megsebesítették.').decision,'drop');
+ assert.notEqual(cheapDecision('Véres férfi mászott egy villamos tetejére Budapesten','A rendőrök intézkedtek.').decision,'drop');
+});
 test('mixed human violence and incidental dogs/drugs cannot be rejected by keyword',async()=>{
  let calls=0;const t=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,reason:'Нападение на прохожего'});}});
  for(const title of ['Man stabbed while walking his dog in Budapest','Drug dealer stabbed a passerby in Budapest','Chemical attack at a Budapest factory; chlorine released']){
