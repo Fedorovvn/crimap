@@ -73,6 +73,17 @@ test('startup refresh replaces an old fast fatality check with the quiet undated
     assert.ok(due>Date.now()+60*60000&&due<Date.now()+3*3600000,'startup replaces the former rapid due time');
   }finally{s.close();}
 });
+test('expired fatality hold completes an inherited recheck instead of reviving it after restart',()=>{
+  const s=new Store(':memory:');try{
+    const traffic={...event,type:'traffic-accident',occurredAt:null,timePrecision:'unknown',summary:'A collision was reported.',title:'Collision at Wesselényi utca'};
+    const firstSeen=new Date(Date.now()-8*24*60*60*1000).toISOString();
+    s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('expired-traffic',firstSeen,JSON.stringify(traffic));
+    s.db.prepare("INSERT INTO jobs(kind,job_key,payload,due_at) VALUES('recheck','1','{\"eventId\":1}',?)").run(new Date(Date.now()-15*60*1000).toISOString());
+    s.holdForFatality(1,{refresh:true});
+    assert.equal(s.event(1).next_check_at,null);
+    assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key='1'").get().state,'done');
+  }finally{s.close();}
+});
 test('a new undated article stops after the cheap identity record',async()=>{
   const s=new Store(':memory:');let stages=[];
   const article='A man was stabbed at Wesselényi utca, Budapest. The incident date is not stated.';

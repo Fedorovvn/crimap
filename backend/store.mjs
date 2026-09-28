@@ -104,6 +104,14 @@ export class Store {
     if(event.state!=='awaiting-fatality')this.log('traffic-deferred',id,{revision:event.revision,policy:TRAFFIC_POLICY,reason:TRAFFIC_HOLD_REASON,previousState:event.state});
     // Keep old reviews as history, but never expose them as current approval.
     const recheck=this.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key=?").get(String(id));
+    // The short fact-check cycle is finite.  A restart after the final
+    // checkpoint must not resurrect an old queued recheck and spend a model
+    // call merely because it predates this policy.
+    if(!next){
+      this.db.prepare("UPDATE jobs SET state='done',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE kind='recheck' AND job_key=? AND state IN ('queued','paused','failed','waiting-fatality')").run(String(id));
+      this.log('pending-facts-complete',id,{firstSeenAt:event.firstSeenAt,reason:'No confirmed fatality after the short fact-check cycle'});
+      return true;
+    }
     if(next&&(!recheck||!['queued','running','paused'].includes(recheck.state)))this.enqueue('recheck',id,{eventId:id},next);
     else if(next&&refresh&&recheck.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='recheck' AND job_key=?").run(next,String(id));
     return true;
