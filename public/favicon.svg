@@ -1,8 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">Crime Map</title>
-  <rect width="512" height="512" rx="112" fill="#151b21"/>
-  <path d="M-14 120 122 188l104-54 113 56 187-86M-6 330l118-50 103 53 97-43 216 88M89-8l41 124-22 108 73 85-14 130 92 88M366-10l-35 122 31 83-64 92 17 125-28 108" fill="none" stroke="#45515a" stroke-width="23" stroke-linecap="round" stroke-linejoin="round" opacity=".82"/>
-  <path d="m256 119 126 137-126 137L130 256 256 119Z" fill="#d64c4c"/>
-  <path d="m256 158 88 98-88 98-88-98 88-98Z" fill="#f07a70" opacity=".42"/>
-  <circle cx="256" cy="256" r="35" fill="#fff4ef"/>
+  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="30"/></filter>
+  <rect width="512" height="512" rx="112" fill="#171d23"/>
+  <g fill="none" stroke="#657078" stroke-linecap="round" opacity=".32">
+    <path d="M-10 146 115 210 222 143 384 218 522 139" stroke-width="11"/>
+    <path d="M397-12 355 112 391 205 335 305 363 523" stroke-width="7"/>
+  </g>
+  <path d="m256 72 184 184-184 184L72 256 256 72Z" fill="#e65253" opacity=".26" filter="url(#glow)"/>
+  <path d="m256 93 163 163-163 163L93 256 256 93Z" fill="#e65253"/>
 </svg>
