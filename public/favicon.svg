@@ -1,11 +1,11 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
   <title id="title">Crime Map</title>
-  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="30"/></filter>
-  <rect width="512" height="512" rx="112" fill="#171d23"/>
-  <g fill="none" stroke="#657078" stroke-linecap="round" opacity=".32">
-    <path d="M-10 146 115 210 222 143 384 218 522 139" stroke-width="11"/>
-    <path d="M397-12 355 112 391 205 335 305 363 523" stroke-width="7"/>
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="24"/></filter>
+  <rect width="512" height="512" rx="112" fill="#262b2e"/>
+  <g fill="none" stroke="#71787b" stroke-linecap="round" opacity=".34">
+    <path d="M-18 178 105 213l88-49 104 42 97-69 136 37" stroke-width="9"/>
+    <path d="M78-16 117 99 93 188l57 80-14 104M405-16 361 101l29 79-54 72 18 108" stroke-width="6"/>
   </g>
-  <path d="m256 72 184 184-184 184L72 256 256 72Z" fill="#e65253" opacity=".26" filter="url(#glow)"/>
-  <path d="m256 93 163 163-163 163L93 256 256 93Z" fill="#e65253"/>
+  <path d="m256 122 134 134-134 134-134-134 134-134Z" fill="#ef514d" opacity=".46" filter="url(#glow)"/>
+  <path d="m256 137 119 119-119 119-119-119 119-119Z" fill="#ef514d" stroke="#ffc3b9" stroke-width="5"/>
 </svg>

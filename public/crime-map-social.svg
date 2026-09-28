@@ -1,14 +1,14 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-labelledby="title description">
   <title id="title">Crime Map — True Crime карта Будапешта</title>
   <desc id="description">Проверенные городские происшествия на интерактивной карте Будапешта</desc>
-  <filter id="glow" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="46"/></filter>
-  <rect width="1200" height="630" fill="#171d23"/>
-  <g fill="none" stroke="#6a747b" stroke-linecap="round" opacity=".26">
-    <path d="M-40 166 214 280l181-118 221 105 265-135 390 171" stroke-width="15"/>
-    <path d="M815-22 746 147l50 114-91 161 46 231M1052-20 976 150l43 139-67 135" stroke-width="9"/>
+  <filter id="glow" x="-100%" y="-100%" width="300%" height="300%"><feGaussianBlur stdDeviation="36"/></filter>
+  <rect width="1200" height="630" fill="#262b2e"/>
+  <g fill="none" stroke="#747c80" stroke-linecap="round" opacity=".3">
+    <path d="M-35 199 205 267l154-97 194 78 180-128 187 66 324-99" stroke-width="14"/>
+    <path d="M806-22 746 124l35 106-79 107 34 129M1085-22 1023 130l42 96-65 112" stroke-width="9"/>
   </g>
-  <path d="m906 87 218 218-218 218-218-218L906 87Z" fill="#e65253" opacity=".22" filter="url(#glow)"/>
-  <path d="m906 117 188 188-188 188-188-188 188-188Z" fill="#e65253"/>
+  <path d="m906 121 184 184-184 184-184-184 184-184Z" fill="#ef514d" opacity=".46" filter="url(#glow)"/>
+  <path d="m906 139 166 166-166 166-166-166 166-166Z" fill="#ef514d" stroke="#ffc3b9" stroke-width="5"/>
   <text x="93" y="265" fill="#f4f7f5" font-family="Arial, Helvetica, sans-serif" font-size="76" font-weight="700" letter-spacing="-2">Crime Map</text>
   <text x="98" y="329" fill="#aeb8bd" font-family="Arial, Helvetica, sans-serif" font-size="26" letter-spacing="5">TRUE CRIME КАРТА БУДАПЕШТА</text>
   <text x="98" y="426" fill="#d5ddda" font-family="Arial, Helvetica, sans-serif" font-size="27">Проверенные городские происшествия</text>
