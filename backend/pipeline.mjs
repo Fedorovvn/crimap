@@ -1,6 +1,6 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
-import {matchCandidates,identify,compareBrief,comparisonCard} from './dedup.mjs';
+import {matchCandidates,identify,compareBrief,comparisonCard,provisionalEvent} from './dedup.mjs';
 import {consolidate} from './consolidate.mjs';
 import {completeDetails,detailFingerprint,validateLegalLinks} from './details.mjs';
 import {retainLocationCoordinates} from './map-surfaces.mjs';
@@ -8,7 +8,7 @@ import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
 import { hash,jobBudget } from './store.mjs';
-import { nextCheck, intervalFor, retryDelay } from './scheduler.mjs';
+import { nextCheck, nextDateResolution, intervalFor, retryDelay } from './scheduler.mjs';
 import {discoverFeed} from './discovery.mjs';
 import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
@@ -46,7 +46,7 @@ export class Pipeline {
   }
   seed(){
     for(const row of this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting' AND json_extract(canonical,'$.type')='traffic-accident'").all())this.store.holdForFatality(row.id);
-    for(const e of this.store.db.prepare("SELECT id,campaign_id FROM events WHERE json_extract(canonical,'$.occurredAt') IS NULL AND merged_into IS NULL AND state!='excluded'").all())this.store.holdForDate(e.id,{eventId:e.id,campaignId:e.campaign_id});
+    for(const e of this.store.db.prepare("SELECT id,campaign_id FROM events WHERE json_extract(canonical,'$.occurredAt') IS NULL AND merged_into IS NULL AND state!='excluded'").all())this.store.holdForDate(e.id,{eventId:e.id,campaignId:e.campaign_id},{refresh:true});
     for(const e of this.store.db.prepare("SELECT id FROM events WHERE editorial_mark='priority' AND merged_into IS NULL").all())queueEditorialPreparation(this.store,e.id,this.publicPath);
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
     for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
@@ -126,7 +126,7 @@ export class Pipeline {
       }
       this.store.log('date-search',searchKey,{results:found.results.length});result=await assess();
     }
-    if(!result.occurredAt)return new Date(Date.now()+86400000).toISOString();
+    if(!result.occurredAt)return nextDateResolution(this.store.event(id));
     this.store.transaction(()=>{
       this.ensureActive(id);if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during date research');
       const event={...row.canonical,occurredAt:result.occurredAt,timePrecision:result.timePrecision,evidence:[...row.canonical.evidence.filter(e=>!['occurredAt','timePrecision'].includes(e.field)),{field:'occurredAt',documentId:result.documentId,quote:result.quote}]};
@@ -158,7 +158,7 @@ export class Pipeline {
       this.store.db.prepare('INSERT OR REPLACE INTO triage_log VALUES(?,?,?,?,?,?)').run(doc.id,doc.contentHash,Number(result.keep),result.method,result.reason,iso());
       if(!result.keep){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,irrelevantReason:result.reason,filtered:true});return {documentId:doc.id,events:0,filtered:true};}
     }
-    let focusIncidents;const identityTargets=[];
+    let focusIncidents;const identityTargets=[],undatedNew=[];
     if(this.triage||this.store.db.prepare("SELECT 1 FROM events WHERE editorial_mark='uninteresting' AND merged_into IS NULL LIMIT 1").get()){
       const briefs=await identify(this.model,doc);
       if(!briefs.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,filtered:true,irrelevantReason:'В статье не найдено отдельного подходящего происшествия'});return {documentId:doc.id,events:0,filtered:true};}
@@ -167,18 +167,33 @@ export class Pipeline {
         const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},this.store.candidates(brief).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
         if(comparison.decision!=='new'&&this.store.event(comparison.eventId)?.editorial_mark==='uninteresting')this.ignoreUpdate(comparison.eventId,doc,brief,comparison.reason);
         else if(comparison.decision==='repeat')this.store.log('repeat-skipped',comparison.eventId,{documentId:doc.id,contentHash:doc.contentHash,reason:comparison.reason});
+        else if(comparison.decision==='new'&&!brief.occurredAt&&!deferredTraffic)undatedNew.push(brief);
         else {focusIncidents.push(brief);if(comparison.decision==='update')identityTargets.push(comparison.eventId);}
       }
-      if(!focusIncidents.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,repeat:true});return {documentId:doc.id,events:0,repeat:true};}
+      if(!focusIncidents.length&&!undatedNew.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,repeat:true});return {documentId:doc.id,events:0,repeat:true};}
+    }
+    let firstId,events=[];
+    // A brand-new incident without an occurrence date becomes a small, fully
+    // evidenced matching record. It does not pay for extraction, search,
+    // images, geocoding, translation or Pro until a later source gives it a
+    // date. Updates to an existing incident still use extraction: they may be
+    // exactly the article that supplies the missing date or new facts.
+    for(const brief of undatedNew){
+      const id=await this.upsert(this.validate(provisionalEvent(brief,doc),[doc]),doc);
+      firstId??=id;events.push(this.store.event(id).canonical);
+    }
+    if(focusIncidents?.length===0){
+      this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,deferredDate:events.length});
+      return {documentId:doc.id,events:events.length,deferredDate:events.length};
     }
     const input={schema:this.schema,focusIncidents,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:deferredTraffic?[]:this.laws,...(deferredTraffic?{mode:'deferred-traffic-minimal'}:{})};
     const options={validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
     const result=await this.model.json('extract',input,options),extractionModel=this.model.model;
     this.ensureActive();
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
-    const events=result.events.filter(e=>e.type!=='missing-person').map(event=>this.validate(event,[doc]));
-    let firstId;
-    for(const event of events){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&events.length===1?identityTargets[0]:undefined});firstId??=id;}
+    const extracted=result.events.filter(e=>e.type!=='missing-person').map(event=>this.validate(event,[doc]));
+    events.push(...extracted);
+    for(const event of extracted){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&extracted.length===1?identityTargets[0]:undefined});firstId??=id;}
     if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
     this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,irrelevantReason:result.irrelevantReason,deferredTraffic});
     return {documentId:doc.id,events:events.length};

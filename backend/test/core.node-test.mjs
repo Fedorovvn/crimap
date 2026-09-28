@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../store.mjs';
-import { intervalFor,nextCheck } from '../scheduler.mjs';
+import { intervalFor,nextCheck,nextDateResolution } from '../scheduler.mjs';
 import { checkedUrl,publicAddress,robotsAllowed,Reader } from '../network.mjs';
 import { parseFeed,parseArticle,sourceFor } from '../sources.mjs';
 import { eventSchema,validateEvidence,applyTranslation,translationStrings } from '../contract.mjs';
@@ -18,11 +18,19 @@ const url='https://www.police.hu/test-incident';
 const quotation='On 20 September 2026 at 12:00 a robbery occurred at Test utca in Budapest. A 40-year-old man was detained. Police are investigating.';
 function fixture(){return {title:'Robbery on Test utca',summary:'Police report a robbery in Budapest. A 40-year-old man was detained.',type:'robbery',status:'suspects-detained',occurredAt:'2026-09-20T12:00:00+02:00',timePrecision:'exact',location:{city:'Budapest',label:'Test utca',precision:'street'},signals:['suspect-detained'],caseReferences:[],participants:[{key:'suspect-40',role:'suspect',label:'40-year-old suspect',status:'detained',profile:{kind:'person',gender:'male',age:40},sourceUrl:url,sourceLabel:'police.hu',asOf:'2026-09-21T10:00:00Z'}],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','location','status','signals','occurredAt','participants.0','participants.0.status','participants.0.profile.age','participants.0.profile.gender'].map(field=>({field,documentId:'1',quote:quotation}))};}
 const doc={id:'1',url,sourceId:'police-brfk',sourceKind:'official',text:quotation,title:'Robbery',imageUrls:[],publishedAt:'2026-09-21T10:00:00Z'};
-test('scheduler covers every agreed boundary, first-seen fallback and retirement',()=>{
+test('scheduler covers the quiet cadence, Budapest daytime window and retirement',()=>{
   const start=Date.parse('2025-01-01T00:00:00Z'),event={occurredAt:new Date(start).toISOString()};
-  for(const [age,expected] of [[0,600],[7199,600],[7200,900],[14400,1800],[43200,3600],[86400,21600],[259200,86400],[604800,86400],[1209600,172800],[2592000,604800],[7776000,2592000],[31536000,null]])assert.equal(intervalFor(event,start+age*1000),expected);
+  for(const [age,expected] of [[0,900],[10799,900],[10800,14400],[86400,43200],[259200,86400],[864000,1209600],[2592000,2592000],[31536000,null]])assert.equal(intervalFor(event,start+age*1000),expected);
+  // At 04:00 local, the next four-hour daytime check waits for 10:00 Budapest.
+  assert.equal(nextCheck(event,start+3*3600000),'2025-01-01T09:00:00.000Z');
+  // The two daily checks after the first day are at 10:00 and 18:00 local.
+  assert.equal(nextCheck(event,start+35*3600000),'2025-01-02T17:00:00.000Z');
   assert.equal(nextCheck(event,start+31535999*1000),null);
-  assert.equal(intervalFor({firstSeenAt:event.occurredAt},start),600);
+  const undated={firstSeenAt:event.occurredAt};
+  assert.equal(intervalFor(undated,start),900);
+  assert.equal(nextDateResolution(undated,start),new Date(start+604800000).toISOString());
+  assert.equal(nextDateResolution(undated,start+2592000*1000),new Date(start+5184000*1000).toISOString());
+  assert.equal(nextDateResolution(undated,start+31536000*1000),null);
   assert.throws(()=>intervalFor(event,start-1));
 });
 test('queue leases survive restart and reject completion by stale owner',()=>{

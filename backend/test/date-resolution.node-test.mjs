@@ -47,11 +47,44 @@ test('undated sources stay reusable; unchanged text does not spend Flash again o
 test('a supported day creates a new revision and resumes preparation without publishing',async()=>{
   const s=new Store(':memory:');try{const d=seed(s,'The stabbing happened on 20 September 2026.');
     const p=new Pipeline(s,{preparation:{},model:{json:async(stage,input,{validate})=>validate({occurredAt:day,timePrecision:'day',documentId:d.id,quote:d.text,reason:'Дата из текста'})}});
-    s.holdForDate(1);await p.runOne({kinds:['resolve-date']});
+    s.holdForDate(1);s.db.prepare("UPDATE jobs SET due_at=? WHERE kind='resolve-date' AND job_key='1'").run(new Date().toISOString());await p.runOne({kinds:['resolve-date']});
     assert.equal(s.event(1).revision,2);assert.equal(s.event(1).state,'draft');assert.equal(s.event(1).occurred_at,day);
     assert.equal(s.event(1).public_id,null);assert.equal(s.event(1).canonical.evidence[0].quote,d.text);
     assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='gather'").get().state,'queued');
     assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date'").get().state,'done');
+  }finally{s.close();}
+});
+test('a new undated article stops after the cheap identity record',async()=>{
+  const s=new Store(':memory:');let stages=[];
+  const article='A man was stabbed at Wesselényi utca, Budapest. The incident date is not stated.';
+  const p=new Pipeline(s,{reader:{read:async()=>({url:'https://www.police.hu/undated',body:`<article><h1>Knife incident</h1><p>${article}</p></article>`})},triage:{check:async()=>({keep:true,defer:false,reason:'Подходит',method:'test'})},model:{json:async(stage,input,{validate})=>{
+    stages.push(stage);if(stage!=='identify')throw new Error(`Unexpected expensive stage: ${stage}`);
+    return validate({incidents:[{title:'Knife incident at Wesselényi utca',summary:'A man was stabbed in Budapest.',type:'assault',occurredAt:null,location:{city:'Budapest',label:'Wesselényi utca',precision:'street'},caseReferences:[],facts:[{fact:'A man was stabbed.',quote:'A man was stabbed at Wesselényi utca, Budapest.'}]}]});
+  }}});
+  try{
+    const result=await p.ingest('https://www.police.hu/undated');
+    assert.deepEqual(stages,['identify']);assert.equal(result.deferredDate,1);
+    const saved=s.event(1);assert.equal(saved.state,'awaiting-date');assert.equal(saved.canonical.occurredAt,null);
+    const due=Date.parse(s.db.prepare("SELECT due_at FROM jobs WHERE kind='resolve-date'").get().due_at);
+    assert.ok(due>Date.now()+6*86400000,'date resolution is quiet, not daily');
+    assert.equal(s.db.prepare("SELECT count(*) n FROM jobs WHERE kind IN ('gather','prepare','review','translate')").get().n,0);
+  }finally{s.close();}
+});
+test('a matched uninteresting event is retained as an ignored update and never reaches extraction',async()=>{
+  const s=new Store(':memory:'),dated={...event,occurredAt:day,timePrecision:'day',location:{city:'Budapest',label:'Wesselényi utca tram stop',precision:'street'}};
+  s.db.prepare("INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical,editorial_mark,editorial_reasons) VALUES(1,?,?,?,?,?,?)").run('not-for-map','2026-09-20',day,JSON.stringify(dated),'uninteresting','["self-risk"]');
+  const article='A man was stabbed at Wesselényi utca tram stop in Budapest on 20 September 2026.';let stages=[];
+  const p=new Pipeline(s,{reader:{read:async()=>({url:'https://www.police.hu/known',body:`<article><h1>Known incident</h1><p>${article}</p></article>`})},triage:{check:async()=>({keep:true,defer:false,reason:'Подходит',method:'test'})},model:{json:async(stage,input,{validate})=>{
+    stages.push(stage);
+    if(stage==='identify')return validate({incidents:[{title:'Man stabbed at Wesselényi utca tram stop',summary:'A man was stabbed in Budapest.',type:'assault',occurredAt:day,location:dated.location,caseReferences:[],facts:[{fact:'A man was stabbed.',quote:article}]}]});
+    if(stage==='compare')return validate({decision:'repeat',eventId:1,reason:'Same place, day and victim'});
+    throw new Error(`Unexpected expensive stage: ${stage}`);
+  }}});
+  try{
+    const result=await p.ingest('https://www.police.hu/known');
+    assert.equal(result.repeat,true);assert.deepEqual(stages,['identify','compare']);
+    assert.equal(s.db.prepare('SELECT count(*) n FROM ignored_updates WHERE event_id=1').get().n,1);
+    assert.equal(s.db.prepare("SELECT count(*) n FROM jobs WHERE kind IN ('gather','prepare','review')").get().n,0);
   }finally{s.close();}
 });
 test('new dated coverage can nominate an undated incident for comparison; date filter is persisted',()=>{

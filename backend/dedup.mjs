@@ -40,11 +40,25 @@ export function comparisonCard(e){
     sourceKind:e.sourceKind,sourceUrl:e.sourceUrl};
 }
 export async function identify(model,doc){
-  return model.json('identify',{documentId:doc.id,title:doc.title,text:doc.text,publishedAt:doc.publishedAt},{maxTokens:2400,validate:raw=>{
+  // Identity is deliberately a short, cheap gate. The lead and ending retain
+  // the usual incident declaration and later correction without paying to
+  // send a full long-form article before it has passed duplicate/date checks.
+  const value=String(doc.text??'').trim(),limit=16000,tail=4000;
+  const text=value.length<=limit?value:`${value.slice(0,limit-tail)}\n\n[article shortened for identity screening]\n\n${value.slice(-tail)}`;
+  return model.json('identify',{documentId:doc.id,title:doc.title,text,publishedAt:doc.publishedAt},{maxTokens:1300,validate:raw=>{
     const r=z.object({incidents:z.array(identity).max(10)}).strict().parse(raw);
     for(const e of r.incidents)for(const f of e.facts)if(!normalizeQuote(doc.text).includes(normalizeQuote(f.quote)))throw new Error('Identity quote is not in original source');
     return r.incidents;
   }});
+}
+export function provisionalEvent(brief,doc){
+  const quote=brief.facts.find(f=>normalizeQuote(doc.text).includes(normalizeQuote(f.quote)))?.quote??doc.title;
+  if(!normalizeQuote(doc.text).includes(normalizeQuote(quote)))throw new Error('Undated identity needs a source quotation');
+  return {
+    title:brief.title,summary:brief.summary,type:brief.type,status:'reported',occurredAt:null,timePrecision:'unknown',location:brief.location,
+    signals:[],caseReferences:brief.caseReferences,participants:[],context:[],legal:[],updates:[],media:[],
+    evidence:['title','summary','type','location','status'].map(field=>({field,documentId:String(doc.id),quote}))
+  };
 }
 export async function compareBrief(model,incoming,candidates){
   // Topic/editorial exclusions win, but a duplicate-only rejection must not

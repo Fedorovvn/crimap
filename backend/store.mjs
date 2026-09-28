@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {installEventIndex,indexedCandidates} from './event-index.mjs';
 import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON,TRAFFIC_POLICY} from './traffic-policy.mjs';
-import {nextCheck} from './scheduler.mjs';
+import {nextCheck,nextDateResolution} from './scheduler.mjs';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 export function jobBudget(kind,payload,event){
   // Delivery has no model or search cost. It must not wait behind a finished
@@ -81,7 +81,16 @@ export class Store {
     this.db.prepare("UPDATE events SET state='awaiting-date',next_check_at=NULL WHERE id=?").run(id);
     this.db.prepare("UPDATE jobs SET state='waiting-date',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','resolve-date') AND state IN ('queued','running','paused','failed')").run(id);
     const job=this.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date' AND job_key=?").get(String(id));
-    if(!job||!['queued','running','paused'].includes(job.state)||(refresh&&job.state!=='running'))this.enqueue('resolve-date',id,{...payload,eventId:id});
+    const due=nextDateResolution(event);
+    if(!due){
+      this.db.prepare("UPDATE jobs SET state='done',rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='resolve-date' AND job_key=? AND state IN ('queued','paused','waiting-date')").run(String(id));
+      this.log('date-resolution-retired',id,{firstSeenAt:event.firstSeenAt,reason:'No confirmed occurrence date after one year'});
+      return true;
+    }
+    if(!job||!['queued','running','paused'].includes(job.state))this.enqueue('resolve-date',id,{...payload,eventId:id},due);
+    // Existing undated events are migrated to the quiet cadence at startup.
+    // A paused job stays paused when a campaign budget is exhausted.
+    else if(refresh&&job.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='resolve-date' AND job_key=?").run(due,String(id));
     return true;
   }
   holdForFatality(id){
