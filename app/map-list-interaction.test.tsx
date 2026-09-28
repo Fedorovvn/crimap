@@ -29,6 +29,16 @@ it('uses the compact map-and-feed interaction below the two-column breakpoint',a
  await user.hover(card);expect(map.dataset.hovered).toBe('');
  await user.hover(screen.getByRole('button',{name:'Map old'}));expect(card.dataset.hovered).toBe('false');
 });
+it('selecting a mobile marker scrolls only the feed and cannot scroll past its card',async()=>{
+ vi.stubGlobal('matchMedia',(q:string)=>({matches:!q.includes('min-width: 1280px')&&!q.includes('reduced-motion'),addEventListener:vi.fn(),removeEventListener:vi.fn()}));
+ let frame:FrameRequestCallback|undefined;vi.spyOn(window,'requestAnimationFrame').mockImplementation(callback=>{frame=callback;return 1;});
+ const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
+ const feed=screen.getByTestId('incident-feed'),card=screen.getByRole('button',{name:/Нападение.*old/});
+ const scroll=vi.fn();feed.scrollTo=scroll;Object.defineProperty(feed,'scrollTop',{value:120,writable:true});Object.defineProperty(feed,'clientHeight',{value:500});Object.defineProperty(feed,'scrollHeight',{value:1600});
+ vi.spyOn(feed,'getBoundingClientRect').mockReturnValue({top:200,height:500} as DOMRect);vi.spyOn(card,'getBoundingClientRect').mockReturnValue({top:700,height:100} as DOMRect);
+ await user.click(screen.getByRole('button',{name:'Map old'}));frame?.(0);
+ expect(scroll).toHaveBeenCalledWith({top:604,behavior:'smooth'});expect(screen.getByTestId('map').dataset.selected).toBe('old');
+});
 it('all time is default and a period change clears single-marker camera focus',async()=>{
  const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
  expect(screen.getByRole('button',{name:'Всё время'}).getAttribute('aria-pressed')).toBe('true');

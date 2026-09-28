@@ -271,6 +271,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const feedRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
+  const mapSelectionFrameRef = useRef<number | null>(null);
   const selected = selectVisibleIncident(visibleIncidents, selectedSlug);
   const activeMarkerSlug = desktop || mobileDetailOpen ? (selected?.slug ?? "") : preselectedSlug;
 
@@ -327,6 +328,10 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     if (savedTheme === "day" || savedTheme === "night") setTheme(savedTheme);
   }, []);
 
+  useEffect(() => () => {
+    if (mapSelectionFrameRef.current !== null) window.cancelAnimationFrame(mapSelectionFrameRef.current);
+  }, []);
+
   function changeTheme(nextTheme: "day" | "night") {
     setTheme(nextTheme);
     window.localStorage.setItem("budapest-signal-theme", nextTheme);
@@ -348,9 +353,19 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     setPreselectedSlug(slug);
     setMobileDetailOpen(false);
 
-    window.requestAnimationFrame(() => {
+    if (mapSelectionFrameRef.current !== null) window.cancelAnimationFrame(mapSelectionFrameRef.current);
+    mapSelectionFrameRef.current = window.requestAnimationFrame(() => {
+      mapSelectionFrameRef.current = null;
       const card = cardRefs.current.get(slug);
-      if (card && "scrollIntoView" in card) card.scrollIntoView({ block: "center", behavior: "smooth" });
+      const feed = feedRef.current;
+      if (!card || !feed) return;
+      // scrollIntoView also moves the page and can race a second marker click.
+      // Keep the selected card just below the map, within the feed itself.
+      const cardBounds = card.getBoundingClientRect();
+      const feedBounds = feed.getBoundingClientRect();
+      const target = feed.scrollTop + cardBounds.top - feedBounds.top - 16;
+      const max = Math.max(0, feed.scrollHeight - feed.clientHeight);
+      feed.scrollTo({ top: Math.max(0, Math.min(max, target)), behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth" });
     });
   }
 
