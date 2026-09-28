@@ -29,7 +29,7 @@ Backend находится в `backend/`: RSS/Atom, чтение статей, D
 - [План и состояние реализации](docs/backend/PLAN.md)
 - [Контракт всех полей карточек](docs/backend/CONTRACT.md), машинные схемы — `contracts/v2/`
 - [Архитектура, модели и расписание](docs/backend/ARCHITECTURE.md)
-- [Схема фактической валидации, фильтров и возвратов](docs/backend/VALIDATION-FLOW.md)
+- [Схема фактической валидации, фильтров, возвратов и границ модельных запросов](docs/backend/VALIDATION-FLOW.md)
 - [Запуск, проверка, публикация и файлы предложений](docs/backend/OPERATIONS.md)
 - Инструкции моделей — `backend/prompts/`; каталог источников — `backend/source-catalog.json`.
 
