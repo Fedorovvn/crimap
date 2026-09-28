@@ -22,6 +22,9 @@ const IncidentMap = dynamic(
 );
 function MapLoading() { const {t}=useI18n(); return <div className="grid h-full w-full place-items-center bg-[var(--map-loading)] text-sm font-medium text-[var(--muted-text)]">{t("Загрузка карты…")}</div>; }
 
+const LIVE_FEED_INTERVAL_MS = 15_000;
+const LIVE_FEED_LAST_SUCCESS_KEY = "crime-map-feed-last-success";
+
 export type IncidentView = {
   translations?: Partial<Record<"en" | "hu", Record<string, string>>>;
   eventType?: string;
@@ -69,6 +72,24 @@ export type IncidentView = {
     isSensitive: boolean;
   }[];
 };
+
+function isPublicIncidentFeed(value: unknown): value is IncidentView[] {
+  return Array.isArray(value) && value.every((incident) => (
+    typeof incident === "object" && incident !== null
+    && typeof (incident as IncidentView).id === "number"
+    && typeof (incident as IncidentView).slug === "string"
+    && typeof (incident as IncidentView).updatedAt === "string"
+    && Array.isArray((incident as IncidentView).updates)
+  ));
+}
+
+export function hasIncidentFeedChanged(current: IncidentView[], next: IncidentView[]) {
+  return current.length !== next.length || current.some((incident, index) => (
+    incident.id !== next[index]?.id
+    || incident.slug !== next[index]?.slug
+    || incident.updatedAt !== next[index]?.updatedAt
+  ));
+}
 
 function formatDate(value: string, locale: Locale) {
   return new Intl.DateTimeFormat(dateLocales[locale], {
@@ -263,7 +284,8 @@ export function IncidentsView(props: { incidents: IncidentView[] }) {
 }
 function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const {locale,setLocale,t}=useI18n();
-  const typedIncidents = useMemo(()=>incidents.map(incident=>({...incident, eventType:incident.eventType ?? ({"ДТП":"traffic-accident","Нападение":"assault","Драка":"fight","Ограбление":"robbery","Несчастный случай":"accident","Пропавший человек":"missing-person"}[getIncidentType(incident)] ?? "other"), signals:getIncidentSignals(incident),updates:incident.updates.map(update=>({...update,signals:getIncidentSignals({title:update.title,status:"",summary:update.detail,eventType:incident.eventType})}))})),[incidents]);
+  const [liveIncidents, setLiveIncidents] = useState(incidents);
+  const typedIncidents = useMemo(()=>liveIncidents.map(incident=>({...incident, eventType:incident.eventType ?? ({"ДТП":"traffic-accident","Нападение":"assault","Драка":"fight","Ограбление":"robbery","Несчастный случай":"accident","Пропавший человек":"missing-person"}[getIncidentType(incident)] ?? "other"), signals:getIncidentSignals(incident),updates:incident.updates.map(update=>({...update,signals:getIncidentSignals({title:update.title,status:"",summary:update.detail,eventType:incident.eventType})}))})),[liveIncidents]);
   const [period, setPeriod] = useState<(typeof PERIODS)[number]>(PERIODS[3]);
   const [severity, setSeverity] = useState<Severity>("all");
   const [theme, setTheme] = useState<"day" | "night">("night");
@@ -289,6 +311,46 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const mapSelectionFrameRef = useRef<number | null>(null);
   const selected = selectVisibleIncident(visibleIncidents, selectedSlug);
   const activeMarkerSlug = desktop || mobileDetailOpen ? (selected?.slug ?? "") : preselectedSlug;
+
+  useEffect(() => { setLiveIncidents(incidents); }, [incidents]);
+
+  useEffect(() => {
+    if (mobileDetailOpen) return;
+    let active = true;
+    let timer: number | undefined;
+    const refresh = async () => {
+      if (document.visibilityState !== "visible") return;
+      try {
+        const response = await fetch("/api/incidents", { cache: "no-store", headers: { Accept: "application/json" } });
+        if (!response.ok) return;
+        const payload: unknown = await response.json();
+        const next = (payload as { incidents?: unknown }).incidents;
+        if (!active || !isPublicIncidentFeed(next)) return;
+        setLiveIncidents(current => hasIncidentFeedChanged(current, next) ? next : current);
+        window.localStorage.setItem(LIVE_FEED_LAST_SUCCESS_KEY, String(Date.now()));
+      } catch {
+        // A failed background check must never interrupt reading the feed.
+      }
+    };
+    const schedule = (delay: number) => {
+      timer = window.setTimeout(async () => {
+        await refresh();
+        if (active) schedule(LIVE_FEED_INTERVAL_MS);
+      }, delay);
+    };
+    const saved = Number(window.localStorage.getItem(LIVE_FEED_LAST_SUCCESS_KEY));
+    const elapsed = Number.isFinite(saved) && saved > 0 ? Date.now() - saved : LIVE_FEED_INTERVAL_MS;
+    schedule(Math.max(0, LIVE_FEED_INTERVAL_MS - elapsed));
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void refresh();
+    };
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    return () => {
+      active = false;
+      if (timer !== undefined) window.clearTimeout(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+    };
+  }, [mobileDetailOpen]);
 
   useEffect(() => {
     const feed = feedRef.current, list = listRef.current;

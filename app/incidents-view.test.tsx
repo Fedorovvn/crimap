@@ -2,7 +2,7 @@ import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { REFERENCE_TIME } from "./incidents-model";
-import { getIncidentSignals, getIncidentType, IncidentsView, type IncidentView } from "./incidents-view";
+import { getIncidentSignals, getIncidentType, hasIncidentFeedChanged, IncidentsView, type IncidentView } from "./incidents-view";
 
 const incidents: IncidentView[] = [
   {
@@ -137,6 +137,12 @@ describe("IncidentsView", () => {
     expect(getIncidentType(incidents[1])).toBe("Нападение");
     expect(getIncidentSignals(incidents[1])).toEqual(["death", "suspect-detained"]);
     expect(getIncidentSignals({ title: "Ограбление", status: "Подозреваемый разыскивается", summary: "" })).toEqual(["suspect-wanted"]);
+  });
+
+  it("refreshes the live feed only when the public incident revision changes", () => {
+    expect(hasIncidentFeedChanged(incidents, incidents.map(incident => ({ ...incident })))).toBe(false);
+    expect(hasIncidentFeedChanged(incidents, [{ ...incidents[0], updatedAt: "2026-09-05T10:00:00+02:00" }, incidents[1]])).toBe(true);
+    expect(hasIncidentFeedChanged(incidents, [incidents[1], incidents[0]])).toBe(true);
   });
 
   it("renders the map, both incident cards and an official source", () => {
