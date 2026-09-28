@@ -8,7 +8,7 @@ import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
 import { hash,jobBudget } from './store.mjs';
-import { nextCheck, nextDateResolution, intervalFor, retryDelay } from './scheduler.mjs';
+import { nextCheck, nextPendingFactCheck, intervalFor, retryDelay } from './scheduler.mjs';
 import {discoverFeed} from './discovery.mjs';
 import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
@@ -47,6 +47,9 @@ export class Pipeline {
   seed(){
     for(const row of this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting' AND json_extract(canonical,'$.type')='traffic-accident'").all())this.store.holdForFatality(row.id,{refresh:true});
     for(const e of this.store.db.prepare("SELECT id,campaign_id FROM events WHERE json_extract(canonical,'$.occurredAt') IS NULL AND merged_into IS NULL AND state!='excluded'").all())this.store.holdForDate(e.id,{eventId:e.id,campaignId:e.campaign_id},{refresh:true});
+    for(const row of this.store.db.prepare("SELECT id FROM events WHERE public_id IS NULL AND json_extract(canonical,'$.occurredAt') IS NOT NULL AND merged_into IS NULL AND state!='excluded'").all())if(!this.store.holdForFatality(row.id,{refresh:true}))this.store.stopPeriodicRecheck(row.id);
+    for(const row of this.store.db.prepare("SELECT id FROM events WHERE withdrawn_at IS NOT NULL AND merged_into IS NULL").all())this.store.stopPeriodicRecheck(row.id);
+    for(const row of this.store.db.prepare("SELECT id FROM events WHERE public_id IS NOT NULL AND withdrawn_at IS NULL AND merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting'").all())this.store.schedulePublishedRecheck(row.id,{refresh:true});
     for(const e of this.store.db.prepare("SELECT id FROM events WHERE editorial_mark='priority' AND merged_into IS NULL").all())queueEditorialPreparation(this.store,e.id,this.publicPath);
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
     for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
@@ -126,7 +129,7 @@ export class Pipeline {
       }
       this.store.log('date-search',searchKey,{results:found.results.length});result=await assess();
     }
-    if(!result.occurredAt)return nextDateResolution(this.store.event(id));
+    if(!result.occurredAt)return nextPendingFactCheck(this.store.event(id));
     this.store.transaction(()=>{
       this.ensureActive(id);if(this.store.event(id).revision!==row.revision)throw new Error('Event changed during date research');
       const event={...row.canonical,occurredAt:result.occurredAt,timePrecision:result.timePrecision,evidence:[...row.canonical.evidence.filter(e=>!['occurredAt','timePrecision'].includes(e.field)),{field:'occurredAt',documentId:result.documentId,quote:result.quote}]};
@@ -135,7 +138,7 @@ export class Pipeline {
       this.store.db.prepare('INSERT INTO event_revisions(event_id,revision,payload,reason,created_at) VALUES(?,?,?,?,?)').run(id,revision,JSON.stringify(event),'date-resolved',iso());
       this.store.db.prepare("UPDATE jobs SET state='done' WHERE json_extract(payload,'$.eventId')=? AND state='waiting-date'").run(id);
       this.store.enqueue(this.preparation?'gather':'translate',id,{eventId:id,campaignId:this.campaignId,budgetScope:this.budgetScope});
-      const next=nextCheck(this.store.event(id));if(next)this.store.enqueue('recheck',id,{eventId:id},next);
+      this.store.schedulePublishedRecheck(id);
       this.store.log('date-resolved',id,{revision,...result});
     });
     return null;
@@ -257,7 +260,7 @@ export class Pipeline {
         if(target.state==='awaiting-fatality')this.store.log('traffic-resumed',target.id,{revision:current.revision,reason:'Новые сведения позволяют продолжить подготовку'});
       }
       if(current.canonical.occurredAt)this.store.db.prepare("UPDATE jobs SET state='done',rerun=0 WHERE json_extract(payload,'$.eventId')=? AND (state='waiting-date' OR (kind='resolve-date' AND state IN ('queued','paused')))").run(target.id);
-      if(current.canonical.occurredAt&&intervalFor(current)!==null&&!this.store.db.prepare("SELECT id FROM jobs WHERE kind='recheck' AND job_key=?").get(String(target.id)))this.store.enqueue('recheck',target.id,{eventId:target.id},nextCheck(current));
+      this.store.schedulePublishedRecheck(target.id);
     });
     return target?.id;
   }
@@ -580,7 +583,9 @@ export class Pipeline {
     this.ensureActive(id);
     if(!needsFatalityConfirmation(this.store.event(id)?.canonical)&&this.deferUndated(id))return null;
     let event=this.store.event(id);if(!event)throw new Error('Unknown event');
-    if(event.merged_into||event.state==='excluded'||event.canonical.type==='missing-person'||intervalFor(event)===null)return null;
+    const pendingFacts=needsFatalityConfirmation(event.canonical)||!event.canonical.occurredAt;
+    const published=!!event.public_id&&!event.withdrawn_at;
+    if(event.merged_into||event.state==='excluded'||event.canonical.type==='missing-person'||(!published&&!pendingFacts)||(published&&intervalFor(event)===null))return null;
     const documents=[...new Map(this.eventDocuments(id).map(d=>[d.url,d])).values()],failures=[];
     for(const doc of documents){try{await this.ingest(doc.url,doc.publishedAt);}catch(e){failures.push(e.message);}}
     let researchAvailable=false;
@@ -594,7 +599,7 @@ export class Pipeline {
     this.ensureActive(id);
     this.store.log('recheck',id,{researchAvailable,knownSources:documents.length,failures});
     if(failures.length)throw new Error(`Partial recheck failure: ${failures.slice(0,3).join('; ')}`);
-    event=this.store.event(id);const next=nextCheck(event);
+    event=this.store.event(id);const next=event.public_id&&!event.withdrawn_at?nextCheck(event):nextPendingFactCheck(event);
     this.store.db.prepare('UPDATE events SET last_checked_at=?,next_check_at=? WHERE id=?').run(iso(),next,id);return next;
   }
   async runOne({kinds}={}){
@@ -647,7 +652,7 @@ export class Pipeline {
       }
       const event=job.kind==='recheck'?this.store.event(job.payload.eventId):null;
       if(this.campaignId&&job.attempts>=3&&!['review','repair'].includes(job.kind)){this.store.db.prepare("UPDATE jobs SET state='failed',last_error=?,lease_token=NULL,lease_until=NULL WHERE id=? AND lease_token=?").run(e.message,job.id,job.lease_token);this.store.log('archive-job-failed',job.id,{kind:job.kind,error:e.message,campaignId:this.campaignId,budgetScope:this.budgetScope});this.archive?.settle();return true;}
-      const retired=event&&intervalFor(event)===null;
+      const retired=event&&(event.public_id&&!event.withdrawn_at?intervalFor(event)===null:nextPendingFactCheck(event)===null);
       const budgetWait=/Daily (model budget|search limit)/.test(e.message)?Date.parse(new Date(Date.now()+86400000).toISOString().slice(0,10)+'T00:00:30Z')-Date.now():null;
       this.store.finish(job,retired?null:new Date(Date.now()+(budgetWait??retryDelay(job.attempts,e.retryAfter))).toISOString(),e.message);
       this.store.log('job-failure',job.id,{kind:job.kind,error:e.message});

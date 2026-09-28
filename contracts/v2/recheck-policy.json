@@ -14,7 +14,7 @@
   },
   "confirmedClarifications": [
     {"field": "stages", "status": "user-confirmed", "reason": "0–3 hours every 15 minutes; then fewer daytime checks through the first year."},
-    {"field": "undatedStages", "status": "implementation-convention", "reason": "Undated events are retained for later matching but their known sources are checked weekly for a month, then monthly."}
+    {"field": "pendingFactCheckAgesSeconds", "status": "user-confirmed", "reason": "Unpublished events awaiting an occurrence date or a confirmed death receive two checks in four hours and three more through the following week, then stop active research."}
   ],
   "stages": [
     {
@@ -57,10 +57,7 @@
       "schedule": "interval"
     }
   ],
-  "undatedStages": [
-    {"minAgeSeconds": 0, "maxAgeSecondsExclusive": 2592000, "intervalSeconds": 604800, "schedule": "interval"},
-    {"minAgeSeconds": 2592000, "maxAgeSecondsExclusive": 31536000, "intervalSeconds": 2592000, "schedule": "interval"}
-  ],
+  "pendingFactCheckAgesSeconds": [7200, 14400, 86400, 259200, 604800],
   "stopAtAgeSeconds": 31536000,
   "initialCheck": "immediate-if-younger-than-stop-age",
   "nextCheckAnchor": "successful-check-completion",

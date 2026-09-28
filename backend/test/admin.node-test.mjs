@@ -90,7 +90,7 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
         assert.equal((await(await request('events')).json()).events[0].editorial_mark,mark);
         const markedDetail=await(await request('events/1')).json();assert.equal(markedDetail.editorial_mark,mark);assert.equal(markedDetail.approvalToken,approvalBeforeMark);
         if(mark==='uninteresting')assert.equal((await request('events/1/review',{revision:3})).status,409);
-        assert.deepEqual(s.event(1),{...beforeMark,editorial_mark:mark});
+        assert.deepEqual(s.event(1),{...beforeMark,editorial_mark:mark,...(mark==='uninteresting'?{next_check_at:null}:{})});
         assert.equal(publicDb.prepare("SELECT json_extract(details,'$.hidden') hidden FROM incident_metadata WHERE incident_id=1").get().hidden,null);
       }
 

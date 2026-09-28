@@ -64,13 +64,12 @@ export function nextCheck(event,now=Date.now()){
   const next=nextByStage(now,stage),stop=start+policy.stopAtAgeSeconds*1000;
   return next<stop?new Date(next).toISOString():null;
 }
-// An event whose occurrence date is unknown is retained for matching, but its
-// own sources are revisited rarely. Its age always starts at discovery, never
-// at an inferred publication date.
-export function nextDateResolution(event,now=Date.now()){
-  const start=Date.parse(event.firstSeenAt),stage=stageFor(policy.undatedStages,ageAt(start,now));
-  if(!stage)return null;
-  const next=nextByStage(now,stage),stop=start+policy.stopAtAgeSeconds*1000;
-  return next<stop?new Date(next).toISOString():null;
+// A short evidence chase is for unpublished records that still lack either
+// an occurrence date or a confirmed fatality. It is deliberately anchored at
+// discovery and has fixed checkpoints, not an open-ended polling interval.
+export function nextPendingFactCheck(event,now=Date.now()){
+  const start=Date.parse(event.firstSeenAt);ageAt(start,now);
+  const target=policy.pendingFactCheckAgesSeconds.find(age=>start+age*1000>now);
+  return target===undefined?null:new Date(start+target*1000).toISOString();
 }
 export function retryDelay(attempt,retryAfter=0){return Math.max(Math.min(60*2**Math.min(attempt,10),21600),Math.min(retryAfter,86400))*1000;}

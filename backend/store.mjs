@@ -4,7 +4,7 @@ import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {installEventIndex,indexedCandidates} from './event-index.mjs';
 import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON,TRAFFIC_POLICY} from './traffic-policy.mjs';
-import {nextCheck,nextDateResolution} from './scheduler.mjs';
+import {nextCheck,nextPendingFactCheck} from './scheduler.mjs';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 export function jobBudget(kind,payload,event){
   // Delivery has no model or search cost. It must not wait behind a finished
@@ -81,10 +81,10 @@ export class Store {
     this.db.prepare("UPDATE events SET state='awaiting-date',next_check_at=NULL WHERE id=?").run(id);
     this.db.prepare("UPDATE jobs SET state='waiting-date',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','resolve-date') AND state IN ('queued','running','paused','failed')").run(id);
     const job=this.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date' AND job_key=?").get(String(id));
-    const due=nextDateResolution(event);
+    const due=nextPendingFactCheck(event);
     if(!due){
       this.db.prepare("UPDATE jobs SET state='done',rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='resolve-date' AND job_key=? AND state IN ('queued','paused','waiting-date')").run(String(id));
-      this.log('date-resolution-retired',id,{firstSeenAt:event.firstSeenAt,reason:'No confirmed occurrence date after one year'});
+      this.log('pending-facts-complete',id,{firstSeenAt:event.firstSeenAt,reason:'No confirmed occurrence date after the short fact-check cycle'});
       return true;
     }
     if(!job||!['queued','running','paused'].includes(job.state))this.enqueue('resolve-date',id,{...payload,eventId:id},due);
@@ -98,7 +98,7 @@ export class Store {
     if(!event||!needsFatalityConfirmation(event.canonical)||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
     // A road crash without a confirmed occurrence date is still held for a
     // fatality update, but must not get the rapid dated-event polling cadence.
-    const next=event.canonical.occurredAt?nextCheck(event):nextDateResolution(event);
+    const next=nextPendingFactCheck(event);
     this.db.prepare("UPDATE events SET state='awaiting-fatality',review_reason=?,next_check_at=? WHERE id=?").run(TRAFFIC_HOLD_REASON,next,id);
     this.db.prepare("UPDATE jobs SET state='waiting-fatality',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','recheck') AND state IN ('queued','running','paused','failed','waiting-date')").run(id);
     if(event.state!=='awaiting-fatality')this.log('traffic-deferred',id,{revision:event.revision,policy:TRAFFIC_POLICY,reason:TRAFFIC_HOLD_REASON,previousState:event.state});
@@ -107,6 +107,21 @@ export class Store {
     if(next&&(!recheck||!['queued','running','paused'].includes(recheck.state)))this.enqueue('recheck',id,{eventId:id},next);
     else if(next&&refresh&&recheck.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='recheck' AND job_key=?").run(next,String(id));
     return true;
+  }
+  schedulePublishedRecheck(id,{refresh=false}={}){
+    const event=this.event(id);
+    if(!event||!event.public_id||event.withdrawn_at||event.merged_into||event.state==='excluded'||event.editorial_mark==='uninteresting'||!event.canonical.occurredAt)return false;
+    const next=nextCheck(event);
+    this.db.prepare('UPDATE events SET next_check_at=? WHERE id=?').run(next,id);
+    if(!next)return true;
+    const job=this.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key=?").get(String(id));
+    if(!job||!['queued','running','paused'].includes(job.state))this.enqueue('recheck',id,{eventId:id},next);
+    else if(refresh&&job.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='recheck' AND job_key=?").run(next,String(id));
+    return true;
+  }
+  stopPeriodicRecheck(id){
+    this.db.prepare("UPDATE jobs SET state='done',rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='recheck' AND job_key=? AND state IN ('queued','paused','failed')").run(String(id));
+    this.db.prepare('UPDATE events SET next_check_at=NULL WHERE id=?').run(id);
   }
   claim(now=new Date().toISOString(),kinds=null){
     if(kinds&&(!kinds.length||kinds.some(k=>typeof k!=='string')))throw new Error('Invalid job kind filter');

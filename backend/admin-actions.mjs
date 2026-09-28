@@ -2,7 +2,6 @@ import {DatabaseSync} from 'node:sqlite';
 import {fail} from './editorial.mjs';
 import {interestReasons} from './admin/interest-reasons.mjs';
 import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs';
-import {nextCheck} from './scheduler.mjs';
 
 export function retryEvent(store,id,revision,reviewer){
   return store.transaction(()=>{
@@ -52,7 +51,7 @@ export function setEditorialMark(store,id,mark,reviewer,{reasons=[],note='',publ
       }else{
         if(mark==='priority'||event.editorial_mark==='uninteresting')queued=queueEditorialPreparation(store,id,publicPath);
         if(event.editorial_mark==='uninteresting'){
-          const next=nextCheck(event);if(next)store.enqueue('recheck',id,{eventId:id},next);
+          store.schedulePublishedRecheck(id);
           for(const doc of store.db.prepare('SELECT DISTINCT d.url,d.published_at FROM ignored_updates i JOIN documents d ON d.id=i.document_id WHERE i.event_id=?').all(id))store.enqueue('article',doc.url,{url:doc.url,publishedAt:doc.published_at,eventId:id,revisitIgnoredEvent:id,campaignId:event.campaign_id});
         }
       }

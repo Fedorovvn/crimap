@@ -60,7 +60,7 @@ test('undated traffic waiting for a fatality uses the quiet date cadence',()=>{
     s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('undated-traffic',new Date().toISOString(),JSON.stringify(traffic));
     s.holdForFatality(1);
     const row=s.db.prepare("SELECT due_at FROM jobs WHERE kind='recheck' AND job_key='1'").get();
-    assert.ok(Date.parse(row.due_at)>Date.now()+6*86400000,'undated traffic is not polled every 15 minutes');
+    assert.ok(Date.parse(row.due_at)>Date.now()+60*60000&&Date.parse(row.due_at)<Date.now()+3*3600000,'undated traffic gets its first fact check after two hours');
   }finally{s.close();}
 });
 test('startup refresh replaces an old fast fatality check with the quiet undated cadence',()=>{
@@ -70,7 +70,7 @@ test('startup refresh replaces an old fast fatality check with the quiet undated
     s.db.prepare("INSERT INTO jobs(kind,job_key,payload,due_at) VALUES('recheck','1','{\"eventId\":1}',?)").run(new Date(Date.now()+15*60000).toISOString());
     s.holdForDate(1,{eventId:1},{refresh:true});
     const due=Date.parse(s.db.prepare("SELECT due_at FROM jobs WHERE kind='recheck' AND job_key='1'").get().due_at);
-    assert.ok(due>Date.now()+6*86400000,'startup replaces the former rapid due time');
+    assert.ok(due>Date.now()+60*60000&&due<Date.now()+3*3600000,'startup replaces the former rapid due time');
   }finally{s.close();}
 });
 test('a new undated article stops after the cheap identity record',async()=>{
@@ -85,7 +85,7 @@ test('a new undated article stops after the cheap identity record',async()=>{
     assert.deepEqual(stages,['identify']);assert.equal(result.deferredDate,1);
     const saved=s.event(1);assert.equal(saved.state,'awaiting-date');assert.equal(saved.canonical.occurredAt,null);
     const due=Date.parse(s.db.prepare("SELECT due_at FROM jobs WHERE kind='resolve-date'").get().due_at);
-    assert.ok(due>Date.now()+6*86400000,'date resolution is quiet, not daily');
+    assert.ok(due>Date.now()+60*60000&&due<Date.now()+3*3600000,'the first fact check is two hours after discovery');
     assert.equal(s.db.prepare("SELECT count(*) n FROM jobs WHERE kind IN ('gather','prepare','review','translate')").get().n,0);
   }finally{s.close();}
 });

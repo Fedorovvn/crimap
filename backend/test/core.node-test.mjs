@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { Store } from '../store.mjs';
-import { intervalFor,nextCheck,nextDateResolution } from '../scheduler.mjs';
+import { intervalFor,nextCheck,nextPendingFactCheck } from '../scheduler.mjs';
 import { checkedUrl,publicAddress,robotsAllowed,Reader } from '../network.mjs';
 import { parseFeed,parseArticle,sourceFor } from '../sources.mjs';
 import { eventSchema,validateEvidence,applyTranslation,translationStrings } from '../contract.mjs';
@@ -28,9 +28,7 @@ test('scheduler covers the quiet cadence, Budapest daytime window and retirement
   assert.equal(nextCheck(event,start+31535999*1000),null);
   const undated={firstSeenAt:event.occurredAt};
   assert.equal(intervalFor(undated,start),900);
-  assert.equal(nextDateResolution(undated,start),new Date(start+604800000).toISOString());
-  assert.equal(nextDateResolution(undated,start+2592000*1000),new Date(start+5184000*1000).toISOString());
-  assert.equal(nextDateResolution(undated,start+31536000*1000),null);
+  for(const [age,next] of [[0,7200],[7200,14400],[14400,86400],[86400,259200],[259200,604800],[604800,null]])assert.equal(nextPendingFactCheck(undated,start+age*1000),next===null?null:new Date(start+next*1000).toISOString());
   assert.throws(()=>intervalFor(event,start-1));
 });
 test('queue leases survive restart and reject completion by stale owner',()=>{
@@ -57,7 +55,7 @@ test('full pipeline is idempotent, publishes atomically, and stops old polling',
   const model={model:'fixture',json:async(stage,payload,options)=>{calls++;const raw=stage==='extract'?{schemaVersion:'2.0',events:[fixture()]}:stage==='translate'?{language:'ru',strings:payload.strings}:{sameEvent:true,reason:'same incident',event:payload.incoming};return options?.validate?options.validate(raw):raw;}};
   const p=new Pipeline(s,{reader:{read:async()=>({url,body:`<html><article>${quotation}</article></html>`})},model});
   try{await p.ingest(url);await p.ingest(url);assert.equal(calls,1);assert.equal(s.db.prepare('SELECT count(*) n FROM events').get().n,1);await p.translate(1);migratePublic(path);assert.throws(()=>publish(s,1,path,{reviewer:'Test'}),/review/);s.db.prepare('INSERT INTO quality_reviews VALUES(1,1,?,?,?)').run('fixture',JSON.stringify({verdict:'pass'}),new Date().toISOString());assert.throws(()=>publish(s,1,path,{reviewer:'Test'}),/coordinates/);
-    const e=s.event(1).canonical;e.location.latitude=47.5;e.location.longitude=19.06;s.db.prepare('UPDATE events SET canonical=? WHERE id=1').run(JSON.stringify(e));await p.translate(1);assert.throws(()=>publish(s,1,path,{reviewer:'Test'}),/review/);s.db.prepare('INSERT INTO quality_reviews VALUES(1,1,?,?,?)').run('fixture',JSON.stringify({verdict:'pass'}),new Date().toISOString());const id=publish(s,1,path,{reviewer:'Test'});assert.equal(publish(s,1,path,{reviewer:'Test'}),id);const db=new DatabaseSync(path);try{assert.equal(db.prepare('SELECT count(*) n FROM incidents').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM incident_participants').get().n,1);}finally{db.close();}
+    const e=s.event(1).canonical;e.location.latitude=47.5;e.location.longitude=19.06;s.db.prepare('UPDATE events SET canonical=? WHERE id=1').run(JSON.stringify(e));await p.translate(1);assert.throws(()=>publish(s,1,path,{reviewer:'Test'}),/review/);s.db.prepare('INSERT INTO quality_reviews VALUES(1,1,?,?,?)').run('fixture',JSON.stringify({verdict:'pass'}),new Date().toISOString());const id=publish(s,1,path,{reviewer:'Test'});assert.equal(publish(s,1,path,{reviewer:'Test'}),id);assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key='1'").get().state,'queued');const db=new DatabaseSync(path);try{assert.equal(db.prepare('SELECT count(*) n FROM incidents').get().n,1);assert.equal(db.prepare('SELECT count(*) n FROM incident_participants').get().n,1);}finally{db.close();}
     s.db.prepare("UPDATE events SET occurred_at='2020-01-01T00:00:00Z' WHERE id=1").run();assert.equal(await p.recheck(1),null);
   }finally{s.close();rmSync(dir,{recursive:true,force:true});}
 });
