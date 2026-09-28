@@ -11,7 +11,7 @@ import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
 import {currentUpdateAssessment} from './update-comparison.mjs';
-import {pushConfig,savePushSubscription} from './push.mjs';
+import {pushCities,pushConfig,savePushSubscription} from './push.mjs';
 import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON} from './traffic-policy.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
@@ -43,7 +43,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       } else if (req.method!=='GET') fail(405,'Метод недоступен');
       if(path==='/api/push/config'&&req.method==='GET'){
         const config=pushConfig();
-        return send(200,{enabled:!!config,publicKey:config?.publicKey??null});
+        return send(200,{enabled:!!config,publicKey:config?.publicKey??null,cities:pushCities});
       }
       if(path==='/api/push/subscriptions'&&req.method==='POST'){
         if(!pushConfig())fail(503,'Уведомления пока не настроены');

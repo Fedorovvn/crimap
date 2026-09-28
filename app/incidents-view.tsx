@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { LocaleProvider, useI18n } from "./i18n";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
-import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
+import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon, XIcon } from "lucide-react";
 import { filterIncidents, matchesSeverity, PERIODS, SEVERITIES, type Severity, selectVisibleIncident } from "./incidents-model";
 import { HandcuffsIcon } from "./incident-icons";
 import { IncidentParticipants } from "./incident-participants";
@@ -137,6 +137,15 @@ function IncidentMediaGallery({ incident }: { incident: IncidentView }) {
 }
 
 type IncidentSignal = "death" | "injury" | "suspect-detained" | "suspect-wanted";
+type PushPreference = { severity: Severity; cities: string[] };
+
+const PUSH_PREFERENCES_KEY = "crime-map-push-preferences";
+const DEFAULT_PUSH_PREFERENCES: PushPreference = { severity: "all", cities: ["Budapest"] };
+const PUSH_LEVELS: { value: Severity; label: string; detail: string }[] = [
+  { value: "all", label: "Все инциденты", detail: "Все опубликованные события" },
+  { value: "serious", label: "Серьёзные инциденты", detail: "Нападения и все события с погибшими" },
+  { value: "fatal", label: "Смертельные инциденты", detail: "Только события с подтверждёнными погибшими" },
+];
 
 
 function KnifeIcon({ className, ...props }: SVGProps<SVGSVGElement>) {
@@ -271,6 +280,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>();
   const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
   const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "install-required" | "unsupported" | "error">("idle");
+  const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
+  const [pushPreferences, setPushPreferences] = useState<PushPreference>(DEFAULT_PUSH_PREFERENCES);
+  const [pushCities, setPushCities] = useState<string[]>(DEFAULT_PUSH_PREFERENCES.cities);
   const feedRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -310,6 +322,10 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   }, []);
 
   useEffect(() => {
+    try {
+      const saved = JSON.parse(window.localStorage.getItem(PUSH_PREFERENCES_KEY) ?? "null");
+      if (saved && ["all", "serious", "fatal"].includes(saved.severity) && Array.isArray(saved.cities) && saved.cities.every((city: unknown) => typeof city === "string")) setPushPreferences({ severity: saved.severity, cities: saved.cities });
+    } catch { /* Keep the safe default when an old browser value is malformed. */ }
     if (!("serviceWorker" in navigator)) return;
     navigator.serviceWorker.getRegistration("/push-worker.js")
       .then(registration => registration?.pushManager.getSubscription())
@@ -385,17 +401,27 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setPushState("unsupported"); return; }
     setPushState("subscribing");
     try {
-      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-      if (permission !== "granted") throw new Error("permission");
       const registration = await navigator.serviceWorker.register("/push-worker.js", { scope: "/" });
       const config = await fetch("/api/push/config", { cache: "no-store" });
       if (!config.ok) throw new Error("configuration");
-      const { enabled, publicKey } = await config.json() as { enabled: boolean; publicKey?: string };
+      const { enabled, publicKey, cities } = await config.json() as { enabled: boolean; publicKey?: string; cities?: string[] };
       if (!enabled || !publicKey) throw new Error("configuration");
-      const subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(publicKey) });
-      const response = await fetch("/api/push/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...subscription.toJSON(), locale }) });
+      const availableCities = Array.isArray(cities) && cities.length ? cities : DEFAULT_PUSH_PREFERENCES.cities;
+      const selectedCity = availableCities.includes(pushPreferences.cities[0]) ? pushPreferences.cities[0] : availableCities[0];
+      setPushCities(availableCities);
+      const existing = await registration.pushManager.getSubscription();
+      if (!existing) {
+        const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+        if (permission !== "granted") throw new Error("permission");
+      }
+      const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(publicKey) });
+      const preferences = { ...pushPreferences, cities: [selectedCity] };
+      const response = await fetch("/api/push/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...subscription.toJSON(), locale, ...preferences }) });
       if (!response.ok) throw new Error("subscription");
+      window.localStorage.setItem(PUSH_PREFERENCES_KEY, JSON.stringify(preferences));
+      setPushPreferences(preferences);
       setPushState("enabled");
+      setPushSettingsOpen(false);
     } catch { setPushState("error"); }
   }
 
@@ -470,11 +496,11 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           <div className="flex items-center gap-3">
             <button
               type="button"
-              onClick={enablePushNotifications}
-              disabled={pushState === "subscribing" || pushState === "enabled"}
+              onClick={() => setPushSettingsOpen(true)}
+              disabled={pushState === "subscribing"}
               aria-pressed={pushState === "enabled"}
-              aria-label={t(pushState === "enabled" ? "Уведомления о новых событиях включены" : pushState === "subscribing" ? "Включаем уведомления" : "Включить уведомления о новых событиях")}
-              title={t(pushState === "enabled" ? "Уведомления о новых событиях включены" : "Включить уведомления о новых событиях")}
+              aria-label={t(pushState === "subscribing" ? "Включаем уведомления" : "Настроить уведомления")}
+              title={t(pushState === "subscribing" ? "Включаем уведомления" : "Настроить уведомления")}
               className={`grid h-8 w-8 place-items-center rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] transition hover:text-[var(--app-text)] disabled:cursor-default ${pushState === "enabled" ? "text-[var(--success-text)]" : "text-[var(--subtle-text)]"}`}
             >
               <BellRingIcon aria-hidden="true" className={pushState === "subscribing" ? "size-4 animate-pulse" : "size-4"} strokeWidth={2.1} />
@@ -494,6 +520,35 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
         </div>
       </header>
       {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-72 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)] shadow-lg">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+      {pushSettingsOpen && <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && pushState !== "subscribing") setPushSettingsOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="push-settings-title" className="w-full max-w-md rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
+          <header className="flex items-start justify-between gap-4">
+            <div>
+              <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]">Crime Map</p>
+              <h2 id="push-settings-title" className="mt-1 text-xl font-semibold tracking-[-0.03em]">{t("Настройки уведомлений")}</h2>
+            </div>
+            <button type="button" onClick={() => setPushSettingsOpen(false)} disabled={pushState === "subscribing"} aria-label={t("Закрыть")} className="grid size-9 place-items-center rounded-full border border-[var(--hairline)] text-[var(--muted-text)] transition hover:text-[var(--app-text)] disabled:opacity-50"><XIcon aria-hidden="true" className="size-4" /></button>
+          </header>
+          <fieldset className="mt-6">
+            <legend className="text-sm font-semibold">{t("Какие события присылать")}</legend>
+            <div className="mt-3 grid gap-2">
+              {PUSH_LEVELS.map(level => <label key={level.value} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition ${pushPreferences.severity === level.value ? "border-[var(--accent-text)] bg-[var(--accent-soft)]" : "border-[var(--hairline)] hover:bg-[var(--control-bg)]"}`}>
+                <input type="radio" name="push-severity" value={level.value} checked={pushPreferences.severity === level.value} onChange={() => setPushPreferences(current => ({ ...current, severity: level.value }))} className="mt-1 accent-[var(--accent-text)]" />
+                <span><span className="block text-sm font-semibold">{t(level.label)}</span><span className="mt-0.5 block text-xs leading-5 text-[var(--muted-text)]">{t(level.detail)}</span></span>
+              </label>)}
+            </div>
+          </fieldset>
+          <label className="mt-5 block text-sm font-semibold">
+            {t("Город")}
+            <select value={pushPreferences.cities[0] ?? pushCities[0] ?? "Budapest"} onChange={event => setPushPreferences(current => ({ ...current, cities: [event.target.value] }))} className="mt-2 block w-full rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2.5 text-sm font-medium text-[var(--app-text)] outline-none focus:border-[var(--accent-text)]">
+              {pushCities.map(city => <option key={city} value={city}>{city === "Budapest" ? t("Будапешт") : city}</option>)}
+            </select>
+          </label>
+          <p className="mt-2 text-xs leading-5 text-[var(--muted-text)]">{t("Пока доступен Будапешт. Другие города появятся, когда Crime Map начнёт собирать по ним события.")}</p>
+          {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)]">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+          <button type="button" onClick={enablePushNotifications} disabled={pushState === "subscribing"} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90 disabled:cursor-wait disabled:opacity-70">{t(pushState === "subscribing" ? "Включаем уведомления" : pushState === "enabled" ? "Сохранить настройки" : "Включить уведомления")}</button>
+        </section>
+      </div>}
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden xl:mx-auto xl:block xl:max-w-[1440px] xl:overflow-visible xl:px-9 xl:py-8">
         <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col xl:grid xl:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">

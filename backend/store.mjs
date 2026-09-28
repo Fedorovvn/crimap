@@ -42,7 +42,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS triage_log(document_id INTEGER NOT NULL,content_hash TEXT NOT NULL,keep INTEGER NOT NULL,method TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(document_id,content_hash));
       CREATE TABLE IF NOT EXISTS preparation(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
       CREATE TABLE IF NOT EXISTS site_translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
-      CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,p256dh TEXT NOT NULL,auth TEXT NOT NULL,locale TEXT NOT NULL CHECK(locale IN ('ru','en','hu')),created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,p256dh TEXT NOT NULL,auth TEXT NOT NULL,locale TEXT NOT NULL CHECK(locale IN ('ru','en','hu')),severity TEXT NOT NULL DEFAULT 'all' CHECK(severity IN ('all','serious','fatal')),cities TEXT NOT NULL DEFAULT '["Budapest"]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS geocode_cache(query_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS service_limits(service TEXT PRIMARY KEY,next_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive_pages(campaign_id TEXT NOT NULL,source_id TEXT NOT NULL,url TEXT NOT NULL,earliest TEXT,latest TEXT,found INTEGER NOT NULL,filtered INTEGER NOT NULL,scanned_at TEXT NOT NULL,PRIMARY KEY(campaign_id,url));
@@ -53,6 +53,7 @@ export class Store {
     for(const column of ['merged_into INTEGER','withdrawn_at TEXT'])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
     if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name==='editorial_mark'))this.db.exec("ALTER TABLE events ADD COLUMN editorial_mark TEXT NOT NULL DEFAULT 'normal' CHECK(editorial_mark IN ('normal','uninteresting','priority'))");
     for(const column of ["editorial_reasons TEXT NOT NULL DEFAULT '[]'","editorial_note TEXT NOT NULL DEFAULT ''"])if(!this.db.prepare('PRAGMA table_info(events)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE events ADD COLUMN '+column);
+    for(const column of ["severity TEXT NOT NULL DEFAULT 'all' CHECK(severity IN ('all','serious','fatal'))","cities TEXT NOT NULL DEFAULT '[\"Budapest\"]'"])if(!this.db.prepare('PRAGMA table_info(push_subscriptions)').all().some(c=>c.name===column.split(' ')[0]))this.db.exec('ALTER TABLE push_subscriptions ADD COLUMN '+column);
     if(!this.db.prepare('PRAGMA table_info(campaigns)').all().some(c=>c.name==='discovery_stopped'))this.db.exec('ALTER TABLE campaigns ADD COLUMN discovery_stopped INTEGER NOT NULL DEFAULT 0');
     this.db.exec("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE state IN ('queued','running','paused','failed') AND json_extract(payload,'$.eventId') IN (SELECT id FROM events WHERE editorial_mark='uninteresting'); UPDATE events SET next_check_at=NULL WHERE editorial_mark='uninteresting'");
   }
