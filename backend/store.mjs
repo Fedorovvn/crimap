@@ -93,7 +93,7 @@ export class Store {
     else if(refresh&&job.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='resolve-date' AND job_key=?").run(due,String(id));
     return true;
   }
-  holdForFatality(id){
+  holdForFatality(id,{refresh=false}={}){
     const event=this.event(id);
     if(!event||!needsFatalityConfirmation(event.canonical)||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
     // A road crash without a confirmed occurrence date is still held for a
@@ -105,6 +105,7 @@ export class Store {
     // Keep old reviews as history, but never expose them as current approval.
     const recheck=this.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key=?").get(String(id));
     if(next&&(!recheck||!['queued','running','paused'].includes(recheck.state)))this.enqueue('recheck',id,{eventId:id},next);
+    else if(next&&refresh&&recheck.state!=='running')this.db.prepare("UPDATE jobs SET due_at=?,rerun=0,lease_token=NULL,lease_until=NULL WHERE kind='recheck' AND job_key=?").run(next,String(id));
     return true;
   }
   claim(now=new Date().toISOString(),kinds=null){

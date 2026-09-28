@@ -63,6 +63,16 @@ test('undated traffic waiting for a fatality uses the quiet date cadence',()=>{
     assert.ok(Date.parse(row.due_at)>Date.now()+6*86400000,'undated traffic is not polled every 15 minutes');
   }finally{s.close();}
 });
+test('startup refresh replaces an old fast fatality check with the quiet undated cadence',()=>{
+  const s=new Store(':memory:');try{
+    const traffic={...event,type:'traffic-accident',occurredAt:null,timePrecision:'unknown',summary:'A collision was reported.',title:'Collision at Wesselényi utca'};
+    s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('old-undated-traffic',new Date().toISOString(),JSON.stringify(traffic));
+    s.db.prepare("INSERT INTO jobs(kind,job_key,payload,due_at) VALUES('recheck','1','{\"eventId\":1}',?)").run(new Date(Date.now()+15*60000).toISOString());
+    s.holdForFatality(1,{refresh:true});
+    const due=Date.parse(s.db.prepare("SELECT due_at FROM jobs WHERE kind='recheck' AND job_key='1'").get().due_at);
+    assert.ok(due>Date.now()+6*86400000,'startup replaces the former rapid due time');
+  }finally{s.close();}
+});
 test('a new undated article stops after the cheap identity record',async()=>{
   const s=new Store(':memory:');let stages=[];
   const article='A man was stabbed at Wesselényi utca, Budapest. The incident date is not stated.';

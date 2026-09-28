@@ -45,7 +45,7 @@ export class Pipeline {
     const db=new DatabaseSync(this.publicPath,{readOnly:true});try{return db.prepare('SELECT i.id,i.slug,i.occurred_at,i.location_label,s.source_url,s.source_type,s.published_at FROM incidents i JOIN incident_sources s ON s.incident_id=i.id').all();}finally{db.close();}
   }
   seed(){
-    for(const row of this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting' AND json_extract(canonical,'$.type')='traffic-accident'").all())this.store.holdForFatality(row.id);
+    for(const row of this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting' AND json_extract(canonical,'$.type')='traffic-accident'").all())this.store.holdForFatality(row.id,{refresh:true});
     for(const e of this.store.db.prepare("SELECT id,campaign_id FROM events WHERE json_extract(canonical,'$.occurredAt') IS NULL AND merged_into IS NULL AND state!='excluded'").all())this.store.holdForDate(e.id,{eventId:e.id,campaignId:e.campaign_id},{refresh:true});
     for(const e of this.store.db.prepare("SELECT id FROM events WHERE editorial_mark='priority' AND merged_into IS NULL").all())queueEditorialPreparation(this.store,e.id,this.publicPath);
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
