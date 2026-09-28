@@ -24,6 +24,7 @@ import {validateResolvedDate} from './date-resolution.mjs';
 import {correctFinalTranslations} from './final-corrections.mjs';
 import {comparePublicationUpdate,currentUpdateAssessment} from './update-comparison.mjs';
 import {publish} from './publish.mjs';
+import {sendPublishedPushes} from './push.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -590,6 +591,7 @@ export class Pipeline {
       else if(job.kind==='localize')await this.localize(job.payload.eventId);
       else if(job.kind==='review')await this.review(job.payload.eventId,job.payload.revision);
       else if(job.kind==='publish')await this.publishAutomatically(job.payload.eventId,job.payload.revision);
+      else if(job.kind==='push')await sendPublishedPushes(this.store,job.payload);
       else if(job.kind==='recheck')next=await this.recheck(job.payload.eventId);
       else throw new Error('Unknown job kind');
       this.store.finish(job,next);

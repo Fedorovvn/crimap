@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { LocaleProvider, useI18n } from "./i18n";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
-import { ArrowLeftIcon, CarFrontIcon, CrossIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
+import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon } from "lucide-react";
 import { filterIncidents, matchesSeverity, PERIODS, SEVERITIES, type Severity, selectVisibleIncident } from "./incidents-model";
 import { HandcuffsIcon } from "./incident-icons";
 import { IncidentParticipants } from "./incident-participants";
@@ -268,6 +268,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const listRef = useRef<HTMLElement>(null);
   const [mobileDetailOpen, setMobileDetailOpen] = useState(false);
   const [preselectedSlug, setPreselectedSlug] = useState(incidents[0]?.slug ?? "");
+  const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>();
+  const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
+  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "unsupported" | "error">("idle");
   const feedRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -304,6 +307,14 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     const update = () => { setDesktop(query.matches); setHoveredSlug(""); };
     update(); query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
+  }, []);
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.getRegistration("/push-worker.js")
+      .then(registration => registration?.pushManager.getSubscription())
+      .then(subscription => { if (subscription) setPushState("enabled"); })
+      .catch(() => undefined);
   }, []);
 
   function hoverMapIncident(slug: string | null) {
@@ -346,6 +357,43 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   function closeMobileDetail() {
     setMobileDetailOpen(false);
     setPreselectedSlug(selected?.slug ?? "");
+  }
+
+  function locateUser() {
+    if (!navigator.geolocation) { setLocationState("error"); return; }
+    setLocationState("locating");
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        setUserLocation({ latitude: position.coords.latitude, longitude: position.coords.longitude });
+        setLocationState("ready");
+      },
+      () => setLocationState("error"),
+      { enableHighAccuracy: false, maximumAge: 300_000, timeout: 10_000 },
+    );
+  }
+
+  function vapidKey(value: string) {
+    const padding = "=".repeat((4 - value.length % 4) % 4);
+    const raw = window.atob((value + padding).replace(/-/g, "+").replace(/_/g, "/"));
+    return Uint8Array.from(raw, character => character.charCodeAt(0));
+  }
+
+  async function enablePushNotifications() {
+    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setPushState("unsupported"); return; }
+    setPushState("subscribing");
+    try {
+      const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
+      if (permission !== "granted") throw new Error("permission");
+      const registration = await navigator.serviceWorker.register("/push-worker.js", { scope: "/" });
+      const config = await fetch("/api/push/config", { cache: "no-store" });
+      if (!config.ok) throw new Error("configuration");
+      const { enabled, publicKey } = await config.json() as { enabled: boolean; publicKey?: string };
+      if (!enabled || !publicKey) throw new Error("configuration");
+      const subscription = await registration.pushManager.getSubscription() ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(publicKey) });
+      const response = await fetch("/api/push/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...subscription.toJSON(), locale }) });
+      if (!response.ok) throw new Error("subscription");
+      setPushState("enabled");
+    } catch { setPushState("error"); }
   }
 
   function selectIncidentOnMap(slug: string) {
@@ -417,6 +465,17 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             </div>
           </div>
           <div className="flex items-center gap-3">
+            <button
+              type="button"
+              onClick={enablePushNotifications}
+              disabled={pushState === "subscribing" || pushState === "enabled"}
+              aria-pressed={pushState === "enabled"}
+              aria-label={t(pushState === "enabled" ? "Уведомления о новых событиях включены" : pushState === "subscribing" ? "Включаем уведомления" : "Включить уведомления о новых событиях")}
+              title={t(pushState === "enabled" ? "Уведомления о новых событиях включены" : "Включить уведомления о новых событиях")}
+              className={`grid h-8 w-8 place-items-center rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] transition hover:text-[var(--app-text)] disabled:cursor-default ${pushState === "enabled" ? "text-[var(--success-text)]" : "text-[var(--subtle-text)]"}`}
+            >
+              <BellRingIcon aria-hidden="true" className={pushState === "subscribing" ? "size-4 animate-pulse" : "size-4"} strokeWidth={2.1} />
+            </button>
             <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5 text-[11px] font-semibold" aria-label={t('Язык')}>
 {(["ru","en","hu"] as const).map(language=><button type="button" key={language} onClick={()=>setLocale(language)} aria-label={localeNames[language]} aria-pressed={locale===language} className={`rounded-full px-2 py-1 ${locale===language?"bg-[var(--control-active)] text-[var(--control-active-text)]":"text-[var(--subtle-text)]"}`}>{language.toUpperCase()}</button>)}
             </div>
@@ -431,11 +490,12 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </div>
         </div>
       </header>
+      {(pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-60 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--muted-text)] shadow-lg">{t(pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden xl:mx-auto xl:block xl:max-w-[1440px] xl:overflow-visible xl:px-9 xl:py-8">
         <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col xl:grid xl:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
           <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] xl:min-h-[475px] xl:rounded-[1.4rem] xl:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
-            <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} hoveredSlug={desktop ? hoveredSlug : ""} onHover={hoverMapIncident} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
+            <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} hoveredSlug={desktop ? hoveredSlug : ""} onHover={hoverMapIncident} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} userLocation={userLocation} />
             <div className="map-filter-stack">
             <div className="map-controls flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" role="group" aria-label={t('Период событий')}>
               {PERIODS.map((item) => (
@@ -460,6 +520,12 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             <button type="button" onClick={closeMobileDetail} className="mobile-map-back absolute left-4 top-4 z-[1100] size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md" aria-label={t('Назад к списку происшествий')}>
               <ArrowLeftIcon aria-hidden="true" className="size-5" strokeWidth={2.2} />
             </button>
+            {!mobileDetailOpen && <>
+              <button type="button" onClick={locateUser} disabled={locationState === "locating"} aria-pressed={locationState === "ready"} aria-label={t(locationState === "locating" ? "Определяем местоположение" : "Показать моё местоположение")} title={t("Показать моё местоположение")} className="map-geolocation absolute bottom-4 right-4 z-[1100] grid size-11 place-items-center rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md transition hover:scale-105 disabled:cursor-wait disabled:opacity-70">
+                <LocateFixedIcon aria-hidden="true" className={locationState === "locating" ? "size-5 animate-pulse" : "size-5"} strokeWidth={2.1} />
+              </button>
+              {locationState === "error" && <p role="status" className="absolute bottom-16 right-4 z-[1100] max-w-52 rounded-xl border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] px-3 py-2 text-xs leading-4 text-[var(--map-overlay-text)] shadow-sm backdrop-blur-md">{t("Не удалось определить местоположение")}</p>}
+            </>}
             {mobileDetailOpen && selected && (
               <div className="mobile-map-summary absolute inset-x-4 bottom-4 z-[1100]">
                 <p className="mobile-map-summary-title text-sm font-semibold leading-5 text-[var(--map-overlay-text)]">{selected.title}</p>

@@ -53,7 +53,7 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     const translations=languages?Object.fromEntries(Object.entries(languages).map(([language,strings])=>[language,Object.fromEntries(Object.entries(strings).filter(([text])=>publicTexts.has(text)))])):undefined;
     db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision,translations}));
     db.exec('COMMIT');
-    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=?,withdrawn_at=NULL WHERE id=?").run(row.revision,id,eventId);store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
+    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=?,withdrawn_at=NULL WHERE id=?").run(row.revision,id,eventId);store.enqueue('push',`${eventId}:${row.revision}`,{eventId,revision:row.revision,publicId:id});store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
     if(store.db.isTransaction)record();else store.transaction(record);return id;
   }catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}finally{db.close();}
 }

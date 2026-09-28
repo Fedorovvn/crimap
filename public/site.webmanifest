@@ -1,0 +1,9 @@
+{
+  "name": "Crime Map",
+  "short_name": "Crime Map",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#10161c",
+  "theme_color": "#10161c",
+  "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+}

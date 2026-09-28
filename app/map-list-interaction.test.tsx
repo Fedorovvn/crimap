@@ -2,7 +2,7 @@ import {render,screen,cleanup} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {vi,it,expect,afterEach,beforeEach} from 'vitest';
 import {IncidentsView,type IncidentView} from './incidents-view';
-vi.mock('next/dynamic',()=>({default:()=>function MapStub(p:any){return <div data-testid="map" data-selected={p.selectedSlug} data-hovered={p.hoveredSlug} data-focused={p.focusedSlug}>{p.incidents.map((i:any)=><button key={i.slug} aria-label={'Map '+i.slug} onMouseEnter={()=>p.onHover(i.slug)} onMouseLeave={()=>p.onHover(null)} onClick={()=>p.onSelect(i.slug)}>{i.title}</button>)}</div>}}));
+vi.mock('next/dynamic',()=>({default:()=>function MapStub(p:any){return <div data-testid="map" data-selected={p.selectedSlug} data-hovered={p.hoveredSlug} data-focused={p.focusedSlug} data-user-location={p.userLocation?`${p.userLocation.latitude},${p.userLocation.longitude}`:''}>{p.incidents.map((i:any)=><button key={i.slug} aria-label={'Map '+i.slug} onMouseEnter={()=>p.onHover(i.slug)} onMouseLeave={()=>p.onHover(null)} onClick={()=>p.onSelect(i.slug)}>{i.title}</button>)}</div>}}));
 const event=(slug:string,date:string):IncidentView=>({id:slug==='first'?1:2,slug,title:slug,occurredAt:date,updatedAt:date,eventType:'assault',category:'Нападение',status:'В расследовании',verification:'Официальный источник',district:'VII',locationLabel:'Akácfa utca',locationPrecision:'Улица',latitude:47.5,longitude:19.06,summary:'Details '+slug,sources:[],updates:[],media:[]});
 const incidents=[event('first','2026-09-25T00:00:00Z'),event('old','2026-07-01T00:00:00Z')];
 beforeEach(()=>{vi.spyOn(Date,'now').mockReturnValue(Date.parse('2026-09-27T00:00:00Z'));vi.stubGlobal('matchMedia',(q:string)=>({matches:!q.includes('reduced-motion'),addEventListener:vi.fn(),removeEventListener:vi.fn()}));});
@@ -38,6 +38,13 @@ it('selecting a mobile marker scrolls only the feed and cannot scroll past its c
  vi.spyOn(feed,'getBoundingClientRect').mockReturnValue({top:200,height:500} as DOMRect);vi.spyOn(card,'getBoundingClientRect').mockReturnValue({top:700,height:100} as DOMRect);
  await user.click(screen.getByRole('button',{name:'Map old'}));frame?.(0);
  expect(scroll).toHaveBeenCalledWith({top:604,behavior:'smooth'});expect(screen.getByTestId('map').dataset.selected).toBe('old');
+});
+it('requests the device position only after the map control is pressed',async()=>{
+ const geolocation={getCurrentPosition:vi.fn((success:PositionCallback)=>success({coords:{latitude:47.5,longitude:19.1}} as GeolocationPosition))};vi.stubGlobal('navigator',{geolocation});
+ const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
+ expect(geolocation.getCurrentPosition).not.toHaveBeenCalled();
+ await user.click(screen.getByRole('button',{name:'Показать моё местоположение'}));
+ expect(geolocation.getCurrentPosition).toHaveBeenCalledTimes(1);expect(screen.getByTestId('map').dataset.userLocation).toBe('47.5,19.1');expect(screen.getByRole('button',{name:'Показать моё местоположение'}).getAttribute('aria-pressed')).toBe('true');
 });
 it('all time is default and a period change clears single-marker camera focus',async()=>{
  const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);

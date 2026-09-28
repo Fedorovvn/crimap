@@ -8,6 +8,7 @@ User=crimap
 Group=crimap
 WorkingDirectory=/srv/crimap/app
 EnvironmentFile=/etc/crimap/admin.env
+EnvironmentFile=-/etc/crimap/push.env
 ExecStart=/srv/crimap/runtime/node/bin/node backend/admin-server.mjs
 Restart=on-failure
 RestartSec=5

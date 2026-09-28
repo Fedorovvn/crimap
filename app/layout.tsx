@@ -4,6 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Crime Map",
   description: "Проверенные городские инциденты Будапешта на карте.",
+  manifest: "/site.webmanifest",
   other: {
     "codex-preview": "development",
   },

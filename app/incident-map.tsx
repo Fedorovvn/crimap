@@ -3,7 +3,7 @@
 import L from "leaflet";
 import { useI18n } from "./i18n";
 import { useEffect } from "react";
-import { MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
+import { CircleMarker, MapContainer, Marker, TileLayer, Tooltip, useMap } from "react-leaflet";
 
 export type MapIncident = {
   slug: string;
@@ -73,6 +73,19 @@ function ClearMapHover({ onHover }: { onHover?: (slug: string | null) => void })
   return null;
 }
 
+function UserLocation({ location }: { location?: { latitude: number; longitude: number } }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!location) return;
+    map.flyTo([location.latitude, location.longitude], Math.max(map.getZoom(), 14), { animate: true, duration: 0.45 });
+  }, [location, map]);
+
+  if (!location) return null;
+  const center: [number, number] = [location.latitude, location.longitude];
+  return <><CircleMarker center={center} radius={13} pathOptions={{ color: "#dceee3", weight: 2, opacity: 0.9, fillColor: "#8dd8bc", fillOpacity: 0.22 }} interactive={false} /><CircleMarker center={center} radius={6} pathOptions={{ color: "#f7fbf8", weight: 2, fillColor: "#258b70", fillOpacity: 1 }} interactive={false} /></>;
+}
+
 function incidentIcon(active: boolean, isNight: boolean, hovered: boolean) {
   const mode = isNight ? "is-night" : "is-day";
   const state = active ? "is-active" : hovered ? "is-hovered" : "";
@@ -94,6 +107,7 @@ export function IncidentMap({
   onSelect,
   theme,
   layoutMode,
+  userLocation,
 }: {
   incidents: MapIncident[];
   selectedSlug: string;
@@ -103,6 +117,7 @@ export function IncidentMap({
   onSelect: (slug: string) => void;
   theme: "day" | "night";
   layoutMode: "list" | "detail";
+  userLocation?: { latitude: number; longitude: number };
 }) {
   const {t}=useI18n();
   const isNight = theme === "night";
@@ -127,6 +142,7 @@ export function IncidentMap({
       <FitVisibleIncidents incidents={incidents} focusedSlug={focusedSlug} layoutMode={layoutMode} />
       <KeepMapSized />
       <ClearMapHover onHover={onHover} />
+      <UserLocation location={userLocation} />
       {incidents.map((incident) => {
         const active = incident.slug === selectedSlug;
         return (

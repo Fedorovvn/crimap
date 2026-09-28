@@ -5,7 +5,9 @@ import { createHash, randomUUID } from 'node:crypto';
 import {installEventIndex,indexedCandidates} from './event-index.mjs';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 export function jobBudget(kind,payload,event){
-  const campaignId=kind==='recheck'||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
+  // Delivery has no model or search cost. It must not wait behind a finished
+  // archive campaign after an approved incident has already been published.
+  const campaignId=['recheck','push'].includes(kind)||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
   return {campaignId,budgetScope:campaignId?'archive':'daily'};
 }
 export class Store {
@@ -38,6 +40,7 @@ export class Store {
       CREATE TABLE IF NOT EXISTS triage_log(document_id INTEGER NOT NULL,content_hash TEXT NOT NULL,keep INTEGER NOT NULL,method TEXT NOT NULL,reason TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(document_id,content_hash));
       CREATE TABLE IF NOT EXISTS preparation(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
       CREATE TABLE IF NOT EXISTS site_translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
+      CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,p256dh TEXT NOT NULL,auth TEXT NOT NULL,locale TEXT NOT NULL CHECK(locale IN ('ru','en','hu')),created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS geocode_cache(query_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS service_limits(service TEXT PRIMARY KEY,next_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive_pages(campaign_id TEXT NOT NULL,source_id TEXT NOT NULL,url TEXT NOT NULL,earliest TEXT,latest TEXT,found INTEGER NOT NULL,filtered INTEGER NOT NULL,scanned_at TEXT NOT NULL,PRIMARY KEY(campaign_id,url));
@@ -82,7 +85,7 @@ export class Store {
     // Discover cheaply first, then finish prepared cards before paying to extract
     // the next archive article. A campaign should not spend its entire budget on
     // half-finished drafts. Due times still govern retries and rate limits.
-    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} AND NOT EXISTS(SELECT 1 FROM campaigns c WHERE c.id=json_extract(jobs.payload,'$.campaignId') AND c.state='paused') AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='uninteresting') ORDER BY CASE WHEN kind!='recheck' AND EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='priority') THEN 0 ELSE 1 END,CASE WHEN json_extract(payload,'$.revisitIgnoredEvent') IS NOT NULL THEN 0 ELSE 1 END,CASE kind WHEN 'publish' THEN 0 WHEN 'archive' THEN 1 WHEN 'feed' THEN 2 WHEN 'gather' THEN 3 WHEN 'repair' THEN 4 WHEN 'prepare' THEN 5 WHEN 'translate' THEN 6 WHEN 'localize' THEN 7 WHEN 'review' THEN 8 ELSE 9 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
+    const row=this.db.prepare(`UPDATE jobs SET state='running',lease_token=?,lease_until=?,attempts=attempts+1,rerun=0 WHERE id=(SELECT id FROM jobs WHERE ((state='queued' AND due_at<=?) OR (state='running' AND lease_until<=?))${kindFilter} AND NOT EXISTS(SELECT 1 FROM campaigns c WHERE c.id=json_extract(jobs.payload,'$.campaignId') AND c.state='paused') AND NOT EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='uninteresting') ORDER BY CASE WHEN kind!='recheck' AND EXISTS(SELECT 1 FROM events e WHERE e.id=json_extract(jobs.payload,'$.eventId') AND e.editorial_mark='priority') THEN 0 ELSE 1 END,CASE WHEN json_extract(payload,'$.revisitIgnoredEvent') IS NOT NULL THEN 0 ELSE 1 END,CASE kind WHEN 'publish' THEN 0 WHEN 'push' THEN 1 WHEN 'archive' THEN 2 WHEN 'feed' THEN 3 WHEN 'gather' THEN 4 WHEN 'repair' THEN 5 WHEN 'prepare' THEN 6 WHEN 'translate' THEN 7 WHEN 'localize' THEN 8 WHEN 'review' THEN 9 ELSE 10 END,due_at,id LIMIT 1) RETURNING *`).get(token,lease,now,now,...(kinds??[]));
     return row?{...row,payload:JSON.parse(row.payload)}:null;
   }
   heartbeat(job){return this.db.prepare("UPDATE jobs SET lease_until=? WHERE id=? AND lease_token=? AND state='running'").run(new Date(Date.now()+15*60_000).toISOString(),job.id,job.lease_token).changes===1;}

@@ -9,6 +9,7 @@ User=crimap
 Group=crimap
 WorkingDirectory=/srv/crimap/app
 EnvironmentFile=/etc/crimap/collector.env
+EnvironmentFile=-/etc/crimap/push.env
 ExecStart=/srv/crimap/runtime/node/bin/node backend/cli.mjs worker
 Restart=on-failure
 RestartSec=15

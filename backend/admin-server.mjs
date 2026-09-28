@@ -11,6 +11,7 @@ import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
 import {currentUpdateAssessment} from './update-comparison.mjs';
+import {pushConfig,savePushSubscription} from './push.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -29,7 +30,8 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       const path = new URL(req.url,origin).pathname;
-      if (!path.startsWith('/admin/')) return send(404,{error:'Не найдено'});
+      const isPushApi=path==='/api/push/config'||path==='/api/push/subscriptions';
+      if (!path.startsWith('/admin/')&&!isPushApi) return send(404,{error:'Не найдено'});
       let body;
       if (req.method==='POST') {
         if (req.headers.origin!==base.origin) fail(403,'Недопустимый источник запроса');
@@ -38,6 +40,14 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         for await (const chunk of req) {size+=chunk.length;if(size>512_000)fail(413,'Слишком большой запрос');chunks.push(chunk);}
         try { body=JSON.parse(Buffer.concat(chunks).toString('utf8')); } catch {fail(400,'Некорректный JSON');}
       } else if (req.method!=='GET') fail(405,'Метод недоступен');
+      if(path==='/api/push/config'&&req.method==='GET'){
+        const config=pushConfig();
+        return send(200,{enabled:!!config,publicKey:config?.publicKey??null});
+      }
+      if(path==='/api/push/subscriptions'&&req.method==='POST'){
+        if(!pushConfig())fail(503,'Уведомления пока не настроены');
+        return send(201,savePushSubscription(store,body));
+      }
       if (path==='/admin/api/login' && req.method==='POST') {
         const now=Date.now(),ip=req.headers['x-real-ip']??req.socket.remoteAddress;
         for (const [key,value] of attempts) if(value.until<now)attempts.delete(key);
