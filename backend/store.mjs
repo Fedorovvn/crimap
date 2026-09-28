@@ -76,7 +76,7 @@ export class Store {
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at,state) VALUES(?,?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE excluded.state END`).run(kind,String(key),JSON.stringify(payload),due,state);
   }
   holdForDate(id,payload={}, {refresh=false}={}){
-    if(needsFatalityConfirmation(this.event(id)?.canonical))return this.holdForFatality(id);
+    if(needsFatalityConfirmation(this.event(id)?.canonical))return this.holdForFatality(id,{refresh});
     const event=this.event(id);if(!event||event.canonical.occurredAt||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
     this.db.prepare("UPDATE events SET state='awaiting-date',next_check_at=NULL WHERE id=?").run(id);
     this.db.prepare("UPDATE jobs SET state='waiting-date',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','resolve-date') AND state IN ('queued','running','paused','failed')").run(id);
