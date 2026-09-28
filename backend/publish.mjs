@@ -1,6 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { readFileSync, readdirSync } from 'node:fs';
 import { eventSchema } from './contract.mjs';
+import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON} from './traffic-policy.mjs';
 import { isPublishableContext } from '../app/context-model.ts';
 import { isPublishableLegal } from '../app/legal-model.ts';
 import { siteTranslations, displayStrings } from './site-localization.mjs';
@@ -19,6 +20,7 @@ export function migratePublic(path){
 export function publish(store,eventId,path,{includeContext=false,includeLegal=false,reviewer}={}){
   if(!reviewer?.trim())throw new Error('A named reviewer is required for publication');
   const row=store.event(eventId);if(!row)throw new Error('Unknown event');
+  if(needsFatalityConfirmation(row.canonical))throw new Error(TRAFFIC_HOLD_REASON);
   if(row.merged_into||row.state==='excluded')throw new Error('Event is merged or excluded');
   const review=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(eventId,row.revision);
   if(!review||JSON.parse(review.payload).verdict!=='pass')throw new Error('Current revision needs a passing quality review');

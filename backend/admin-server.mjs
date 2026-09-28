@@ -12,6 +12,7 @@ import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
 import {currentUpdateAssessment} from './update-comparison.mjs';
 import {pushConfig,savePushSubscription} from './push.mjs';
+import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON} from './traffic-policy.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
   if (!/^[a-f0-9]{64}$/.test(tokenHash??'')) throw new Error('Configure ADMIN_TOKEN_HASH');
@@ -89,10 +90,12 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
           FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'
           LEFT JOIN quality_reviews q ON q.event_id=e.id AND q.revision=e.revision WHERE e.merged_into IS NULL AND e.state!='excluded' ORDER BY e.first_seen_at DESC`).all().map(({canonical,hasRussian,prepared,localized,hasDocuments,...row})=>{
             const event=JSON.parse(canonical);
+            row.awaitingFatality=needsFatalityConfirmation(event);
+            if(row.awaitingFatality)row.verdict=null;
             const baseline=row.public_id&&row.published_revision!==row.revision?readPublication(publicPath,row.slug):null;
             const comparisonReady=!baseline||row.publicationBaseline===baseline.fingerprint;
             row.updateAssessment=currentUpdateAssessment(store,row,baseline);
-            return {...row,processing:eventProcessing(store,row),searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
+            return {...row,processing:eventProcessing(store,row),searchText:[event.title,event.summary,event.location.label,event.location.district].filter(Boolean).join(' '),facets:eventFacets(event),ready:!row.awaitingFatality&&row.published_revision!==row.revision&&!!(comparisonReady&&hasRussian&&hasDocuments&&row.verdict==='pass'&&event.occurredAt&&event.location.latitude!==undefined&&(!prepared||localized))};
           });
           return send(200,{events,budget:store.totalBudget(),requests:store.db.prepare('SELECT payload,event_id FROM field_requests ORDER BY created_at DESC LIMIT 100').all().map(r=>({...JSON.parse(r.payload),eventId:r.event_id})),
           campaigns:store.db.prepare(`SELECT c.*,coalesce((SELECT sum(coalesce(cost_usd,reserved_usd)) FROM usage WHERE campaign_id=c.id),0) spent,
@@ -136,6 +139,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         });
         return send(200,{publicId});
       }
+      if(['review','translate','resolve-date'].includes(action)&&event.awaitingFatality)fail(409,TRAFFIC_HOLD_REASON);
       if(action==='resolve-date'&&event.canonical.occurredAt)fail(409,'Дата уже установлена');
       if(action==='translate'&&event.russian)fail(409,'Перевод уже есть. Для повторного перевода сохраните новую версию через редактор.');
       store.enqueue(action,action==='review'?`${id}:${event.revision}`:id,{eventId:id,revision:event.revision,campaignId:action==='recheck'?null:event.campaign_id,...(action==='review'?{forceReview:true}:{})});

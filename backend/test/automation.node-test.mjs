@@ -9,25 +9,25 @@ import {DeepSeek} from '../model.mjs';
 import {Pipeline} from '../pipeline.mjs';
 import {translationStrings} from '../contract.mjs';
 
-test('free filters reject routine and minor traffic but retain tram violence and ambiguous severity',async()=>{
+test('free filters defer nonfatal road crashes but retain tram violence',async()=>{
   let calls=0;const t=new Triage({json:async()=>{calls++;return {keep:false,reason:'Negated serious injuries'};}});
   assert.equal(cheapDecision('Ideiglenes forgalomkorlátozás Budapesten').decision,'drop');
-  assert.equal((await t.check({title:'Baleset Budapesten',text:'Két autó ütközött a fővárosban, senki nem sérült meg.'})).keep,false);
+  assert.equal((await t.check({title:'Baleset Budapesten',text:'Két autó ütközött a fővárosban, senki nem sérült meg.'})).defer,true);
   assert.equal((await t.check({title:'Véres férfi mászott egy villamos tetejére Budapesten',text:'A rendőrök intézkedtek.'})).keep,true);
   assert.equal((await t.check({title:'Verekedés Budapesten',text:'Két férfi megtámadott egy járókelőt.'})).keep,true);
   assert.equal(calls,0);
-  assert.equal(cheapDecision('Baleset Budapesten','Két autó ütközött.').decision,'ambiguous');
-  await t.check({title:'Baleset Budapesten',text:'Súlyos sérülés nem történt.'});assert.equal(calls,1);
-  await t.check({title:'Budapest: két autó ütközött',text:'Forgalmi akadály keletkezett az úton.'});assert.equal(calls,2);
-  await t.check({title:'Rablás Szegeden',text:'Szegeden kiraboltak egy üzletet.'});assert.equal(calls,3);
+  assert.equal(cheapDecision('Baleset Budapesten','Két autó ütközött.').decision,'defer');
+  await t.check({title:'Baleset Budapesten',text:'Súlyos sérülés nem történt.'});assert.equal(calls,0);
+  await t.check({title:'Budapest: két autó ütközött',text:'Forgalmi akadály keletkezett az úton.'});assert.equal(calls,0);
+  await t.check({title:'Rablás Szegeden',text:'Szegeden kiraboltak egy üzletet.'});assert.equal(calls,1);
 });
 test('broad Hungarian green flags prevent free rejection despite routine or minor language',()=>{
   const phrases=['súlyosan megsérült','súlyos sérüléseket szenvedett','állapota válságos','életveszélyes állapotban','újraélesztették','mentőhelikopter érkezett','a roncsok közül szabadították ki','feszítővágóval mentettek','eszméletlenül találták','elvesztette az eszméletét','intenzív osztályra került','koponyasérülést szenvedett','nyílt törése volt','többen sérültek meg','felborult az autó','frontális ütközés','elgázolt egy embert','a villamos alá került','beszorult az utas','lángra kapott az autó','kritikus állapotban','amputálni kellett','keringésleállás történt','belehalt sérüléseibe','kizuhant a járműből','csupa vér volt','félmeztelenül tombolt','megfojtották','kirabolták','ütlegelték','evakuálták a házat'];
   for(const phrase of phrases)for(const complete of [false,true])assert.notEqual(cheapDecision('Forgalomkorlátozás Budapesten','Baleset történt, csak anyagi kár. '+phrase,{complete}).decision,'drop',phrase);
-  assert.equal(cheapDecision('Baleset Budapesten','Senki sem sérült meg.',{complete:false}).decision,'ambiguous');
-  assert.equal(cheapDecision('Baleset Budapesten','Az egyik utas könnyű sérüléseket szenvedett.',{complete:true}).decision,'ambiguous');
-  assert.equal(cheapDecision('Baleset Budapesten','A sérülésekről még nincs információ.',{complete:true}).decision,'ambiguous');
-  assert.equal(cheapDecision('Baleset Budapesten','Senki sem sérült meg.',{complete:true}).decision,'drop');
+  assert.equal(cheapDecision('Baleset Budapesten','Senki sem sérült meg.',{complete:false}).decision,'defer');
+  assert.equal(cheapDecision('Baleset Budapesten','Az egyik utas könnyű sérüléseket szenvedett.',{complete:true}).decision,'defer');
+  assert.equal(cheapDecision('Baleset Budapesten','A sérülésekről még nincs információ.',{complete:true}).decision,'defer');
+  assert.equal(cheapDecision('Baleset Budapesten','Senki sem sérült meg.',{complete:true}).decision,'defer');
 });
 const feature=(district,coordinates=[19.0638,47.5015])=>({properties:{name:'Akácfa utca',osm_type:'W',osm_id:123,osm_key:'highway',osm_value:'residential',city:'Budapest',countrycode:'HU',postcode:district},geometry:{type:'Point',coordinates}});
 test('geocoder distinguishes identical street names in different districts and never upgrades street precision',()=>{

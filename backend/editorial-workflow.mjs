@@ -4,6 +4,7 @@ import {currentUpdateAssessment} from './update-comparison.mjs';
 export function queueEditorialPreparation(store,id,publicPath=process.env.DATABASE_PATH){
   const event=store.event(id);
   if(!event||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
+  if(store.holdForFatality(id))return false;
   if(!event.canonical.occurredAt)return store.holdForDate(id,{eventId:id,campaignId:event.campaign_id},{refresh:true});
   const now=new Date().toISOString();
   const active=store.db.prepare("SELECT * FROM jobs WHERE json_extract(payload,'$.eventId')=? AND kind!='recheck' AND state IN ('queued','running','paused')").all(id).filter(j=>!JSON.parse(j.payload).revision||JSON.parse(j.payload).revision===event.revision);
@@ -29,5 +30,5 @@ export function queueEditorialPreparation(store,id,publicPath=process.env.DATABA
 }
 
 export function stopEventJobs(store,id){
-  return store.db.prepare("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND state IN ('queued','running','paused','failed','waiting-date')").run(id).changes;
+  return store.db.prepare("UPDATE jobs SET state='cancelled',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND state IN ('queued','running','paused','failed','waiting-date','waiting-fatality')").run(id).changes;
 }

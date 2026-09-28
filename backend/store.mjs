@@ -3,6 +3,8 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { createHash, randomUUID } from 'node:crypto';
 import {installEventIndex,indexedCandidates} from './event-index.mjs';
+import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON,TRAFFIC_POLICY} from './traffic-policy.mjs';
+import {nextCheck} from './scheduler.mjs';
 export const hash=value=>createHash('sha256').update(typeof value==='string'?value:JSON.stringify(value)).digest('hex');
 export function jobBudget(kind,payload,event){
   // Delivery has no model or search cost. It must not wait behind a finished
@@ -60,7 +62,9 @@ export class Store {
   enqueue(kind,key,payload={},due=new Date().toISOString()){
     const event=payload.eventId?this.event(payload.eventId):null;
     if(event?.editorial_mark==='uninteresting')return false;
-    if(event&&!event.canonical.occurredAt&&!['article','resolve-date'].includes(kind))return this.holdForDate(event.id,payload,{refresh:true});
+    if(event&&needsFatalityConfirmation(event.canonical)&&!['article','recheck'].includes(kind)){this.holdForFatality(event.id);return false;}
+    if(event?.state==='awaiting-fatality'&&kind==='recheck')payload={...payload,budgetScope:'daily'};
+    if(event&&!event.canonical.occurredAt&&!['article','resolve-date'].includes(kind)&&!(kind==='recheck'&&needsFatalityConfirmation(event.canonical)))return this.holdForDate(event.id,payload,{refresh:true});
     payload={...payload,...jobBudget(kind,payload,event)};
     if(['archive','article'].includes(kind)&&payload.campaignId&&!payload.eventId&&this.db.prepare('SELECT discovery_stopped FROM campaigns WHERE id=?').get(payload.campaignId)?.discovery_stopped)return false;
     // An explicit retry of completed archive work resumes that same campaign,
@@ -71,11 +75,24 @@ export class Store {
     this.db.prepare(`INSERT INTO jobs(kind,job_key,payload,due_at,state) VALUES(?,?,?,?,?) ON CONFLICT(kind,job_key) DO UPDATE SET payload=excluded.payload,due_at=min(jobs.due_at,excluded.due_at),rerun=CASE WHEN jobs.state='running' THEN 1 ELSE 0 END,state=CASE WHEN jobs.state='running' THEN 'running' ELSE excluded.state END`).run(kind,String(key),JSON.stringify(payload),due,state);
   }
   holdForDate(id,payload={}, {refresh=false}={}){
+    if(needsFatalityConfirmation(this.event(id)?.canonical))return this.holdForFatality(id);
     const event=this.event(id);if(!event||event.canonical.occurredAt||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
     this.db.prepare("UPDATE events SET state='awaiting-date',next_check_at=NULL WHERE id=?").run(id);
     this.db.prepare("UPDATE jobs SET state='waiting-date',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','resolve-date') AND state IN ('queued','running','paused','failed')").run(id);
     const job=this.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date' AND job_key=?").get(String(id));
     if(!job||!['queued','running','paused'].includes(job.state)||(refresh&&job.state!=='running'))this.enqueue('resolve-date',id,{...payload,eventId:id});
+    return true;
+  }
+  holdForFatality(id){
+    const event=this.event(id);
+    if(!event||!needsFatalityConfirmation(event.canonical)||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
+    const next=nextCheck(event);
+    this.db.prepare("UPDATE events SET state='awaiting-fatality',review_reason=?,next_check_at=? WHERE id=?").run(TRAFFIC_HOLD_REASON,next,id);
+    this.db.prepare("UPDATE jobs SET state='waiting-fatality',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','recheck') AND state IN ('queued','running','paused','failed','waiting-date')").run(id);
+    if(event.state!=='awaiting-fatality')this.log('traffic-deferred',id,{revision:event.revision,policy:TRAFFIC_POLICY,reason:TRAFFIC_HOLD_REASON,previousState:event.state});
+    // Keep old reviews as history, but never expose them as current approval.
+    const recheck=this.db.prepare("SELECT state FROM jobs WHERE kind='recheck' AND job_key=?").get(String(id));
+    if(next&&(!recheck||!['queued','running','paused'].includes(recheck.state)))this.enqueue('recheck',id,{eventId:id},next);
     return true;
   }
   claim(now=new Date().toISOString(),kinds=null){

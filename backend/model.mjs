@@ -25,7 +25,7 @@ export class DeepSeek {
     if(images.length&&(this.model!=='deepseek-flash'||stage!=='media-review'))throw new Error('Vision is reserved for Flash media review');
     const scope=['triage','identify','extract'].includes(stage)?readFileSync(new URL('./prompts/editorial-scope.md',import.meta.url),'utf8')+'\n\n':'';
     const correction=stage==='review'&&payload.mode==='correct-translation-fields';
-    const legalPolicy=!correction&&['extract','details','merge','repair','review'].includes(stage)?'\n\n'+readFileSync(new URL('./prompts/legal-coverage.md',import.meta.url),'utf8'):'';
+    const legalPolicy=!correction&&payload.mode!=='deferred-traffic-minimal'&&['extract','details','merge','repair','review'].includes(stage)?'\n\n'+readFileSync(new URL('./prompts/legal-coverage.md',import.meta.url),'utf8'):'';
     const instruction=scope+readFileSync(new URL(`./prompts/${correction?'review-correction':stage}.md`,import.meta.url),'utf8')+legalPolicy;
     const prompt=/\bjson\b/i.test(instruction)?instruction:'Return valid JSON only.\n'+instruction;
     const content=JSON.stringify(payload);if(content.length>160000)throw new Error('Model input exceeds limit');

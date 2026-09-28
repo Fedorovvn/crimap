@@ -25,6 +25,7 @@ import {correctFinalTranslations} from './final-corrections.mjs';
 import {comparePublicationUpdate,currentUpdateAssessment} from './update-comparison.mjs';
 import {publish} from './publish.mjs';
 import {sendPublishedPushes} from './push.mjs';
+import {needsFatalityConfirmation,TRAFFIC_POLICY} from './traffic-policy.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
@@ -44,6 +45,7 @@ export class Pipeline {
     const db=new DatabaseSync(this.publicPath,{readOnly:true});try{return db.prepare('SELECT i.id,i.slug,i.occurred_at,i.location_label,s.source_url,s.source_type,s.published_at FROM incidents i JOIN incident_sources s ON s.incident_id=i.id').all();}finally{db.close();}
   }
   seed(){
+    for(const row of this.store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting' AND json_extract(canonical,'$.type')='traffic-accident'").all())this.store.holdForFatality(row.id);
     for(const e of this.store.db.prepare("SELECT id,campaign_id FROM events WHERE json_extract(canonical,'$.occurredAt') IS NULL AND merged_into IS NULL AND state!='excluded'").all())this.store.holdForDate(e.id,{eventId:e.id,campaignId:e.campaign_id});
     for(const e of this.store.db.prepare("SELECT id FROM events WHERE editorial_mark='priority' AND merged_into IS NULL").all())queueEditorialPreparation(this.store,e.id,this.publicPath);
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
@@ -79,7 +81,10 @@ export class Pipeline {
     const blocked=id&&this.store.event(id)?.editorial_mark==='uninteresting';
     const lost=this.activeJob&&!this.store.db.prepare("SELECT 1 FROM jobs WHERE id=? AND state='running' AND lease_token=?").get(this.activeJob.id,this.activeJob.lease_token);
     if(blocked||lost)throw Object.assign(new Error('Обработка события остановлена редактором'),{code:'EDITORIAL_STOP'});
-    if(id&&this.activeJob&&!['article','resolve-date'].includes(this.activeJob.kind)&&!this.store.event(id)?.canonical.occurredAt){
+    if(id&&this.activeJob&&!['article','recheck'].includes(this.activeJob.kind)&&needsFatalityConfirmation(this.store.event(id)?.canonical)){
+      this.store.holdForFatality(id);throw Object.assign(new Error('ДТП ожидает подтверждения гибели'),{code:'TRAFFIC_PENDING'});
+    }
+    if(id&&this.activeJob&&!['article','resolve-date'].includes(this.activeJob.kind)&&!this.store.event(id)?.canonical.occurredAt&&!(this.activeJob.kind==='recheck'&&needsFatalityConfirmation(this.store.event(id)?.canonical))){
       this.store.holdForDate(id,this.activeJob.payload);
       throw Object.assign(new Error('Ожидает даты происшествия'),{code:'DATE_PENDING'});
     }
@@ -88,8 +93,10 @@ export class Pipeline {
     const row=this.store.event(id);if(!row||row.canonical.occurredAt)return false;
     this.store.holdForDate(id,{eventId:id,campaignId:this.campaignId??row.campaign_id,budgetScope:this.budgetScope});return true;
   }
+  deferTraffic(id){return this.store.holdForFatality(id);}
   async resolveDate(id){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return null;
     const row=this.store.event(id);if(!row||row.canonical.occurredAt)return null;
     const attach=doc=>this.store.db.prepare('INSERT OR IGNORE INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(?,?,?,?,?)').run(id,doc.id,doc.contentHash,JSON.stringify({dateResearch:true}),iso());
     const latest=()=>[...new Map(this.eventDocuments(id).map(d=>[d.id,d])).values()].map(d=>this.store.document(d.id)??d).reverse().slice(0,6);
@@ -144,8 +151,10 @@ export class Pipeline {
     const processed=this.store.db.prepare("SELECT id FROM audit WHERE action='document-processed' AND subject=? LIMIT 1").get(`${doc.id}:${doc.contentHash}`);
     const revisiting=revisitIgnoredEvent&&this.store.event(revisitIgnoredEvent)?.editorial_mark!=='uninteresting'&&this.store.db.prepare('SELECT 1 FROM ignored_updates WHERE event_id=? AND document_id=?').get(revisitIgnoredEvent,doc.id);
     if(processed&&!revisiting)return {unchanged:true,documentId:doc.id};
+    let deferredTraffic=false;
     if(this.triage){
       const result=await this.triage.check(doc);
+      deferredTraffic=result.defer===true;
       this.store.db.prepare('INSERT OR REPLACE INTO triage_log VALUES(?,?,?,?,?,?)').run(doc.id,doc.contentHash,Number(result.keep),result.method,result.reason,iso());
       if(!result.keep){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,irrelevantReason:result.reason,filtered:true});return {documentId:doc.id,events:0,filtered:true};}
     }
@@ -162,7 +171,7 @@ export class Pipeline {
       }
       if(!focusIncidents.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,repeat:true});return {documentId:doc.id,events:0,repeat:true};}
     }
-    const input={schema:this.schema,focusIncidents,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:this.laws};
+    const input={schema:this.schema,focusIncidents,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:deferredTraffic?[]:this.laws,...(deferredTraffic?{mode:'deferred-traffic-minimal'}:{})};
     const options={validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
     const result=await this.model.json('extract',input,options),extractionModel=this.model.model;
     this.ensureActive();
@@ -171,7 +180,7 @@ export class Pipeline {
     let firstId;
     for(const event of events){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&events.length===1?identityTargets[0]:undefined});firstId??=id;}
     if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
-    this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,irrelevantReason:result.irrelevantReason});
+    this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:events.length,irrelevantReason:result.irrelevantReason,deferredTraffic});
     return {documentId:doc.id,events:events.length};
   }
   async upsert(incoming,doc,{confirmedTarget}={}){
@@ -228,6 +237,10 @@ export class Pipeline {
       if(this.campaignId)this.store.db.prepare('UPDATE events SET campaign_id=? WHERE id=?').run(this.campaignId,target.id);
       this.store.enqueue(this.preparation?'gather':'translate',target.id,{eventId:target.id,campaignId:this.campaignId,budgetScope:this.budgetScope});
       const current=this.store.event(target.id);
+      if(!needsFatalityConfirmation(current.canonical)){
+        this.store.db.prepare("UPDATE jobs SET state='done',rerun=0 WHERE json_extract(payload,'$.eventId')=? AND state='waiting-fatality'").run(target.id);
+        if(target.state==='awaiting-fatality')this.store.log('traffic-resumed',target.id,{revision:current.revision,reason:'Новые сведения позволяют продолжить подготовку'});
+      }
       if(current.canonical.occurredAt)this.store.db.prepare("UPDATE jobs SET state='done',rerun=0 WHERE json_extract(payload,'$.eventId')=? AND (state='waiting-date' OR (kind='resolve-date' AND state IN ('queued','paused')))").run(target.id);
       if(current.canonical.occurredAt&&intervalFor(current)!==null&&!this.store.db.prepare("SELECT id FROM jobs WHERE kind='recheck' AND job_key=?").get(String(target.id)))this.store.enqueue('recheck',target.id,{eventId:target.id},nextCheck(current));
     });
@@ -261,6 +274,7 @@ export class Pipeline {
   }
   async gather(id){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     if(await this.deduplicateExisting(id))return {deduplicated:true};
     const row=this.store.event(id);if(!row||row.merged_into||row.state==='excluded')return;
@@ -274,6 +288,7 @@ export class Pipeline {
   }
   async prepare(id,{refresh=false}={}){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     if(await this.deduplicateExisting(id))return {deduplicated:true};
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
@@ -316,6 +331,7 @@ export class Pipeline {
   }
   async translate(id){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     const finalized=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,event.revision);
@@ -332,6 +348,7 @@ export class Pipeline {
   passed(id,revision){const r=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);return r&&JSON.parse(r.payload).verdict==='pass';}
   queueAutoPublication(id,revision){
     const event=this.store.event(id);
+    if(this.deferTraffic(id))return false;
     if(!this.autoPublish||!event||event.revision!==revision||event.editorial_mark==='uninteresting'||!qualifiesForAutoPublication(event.canonical))return false;
     this.store.enqueue('publish',`${id}:${revision}`,{eventId:id,revision,campaignId:this.campaignId,budgetScope:this.budgetScope});
     this.store.log('auto-publication-queued',id,{revision,reason:event.canonical.type==='assault'?'assault':'fatal outcome'});
@@ -349,6 +366,7 @@ export class Pipeline {
   }
   async localize(id) {
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const row=this.store.event(id);if(!row)throw new Error('Unknown event');
     const finalized=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,row.revision);
@@ -370,10 +388,11 @@ export class Pipeline {
     });
   }
   async relevanceBeforeReview(id){
+    if(this.deferTraffic(id))return false;
     if(!this.triage)return true;
     const row=this.store.event(id),e=row.canonical;
     const input={title:e.title,text:[e.summary,e.location?.city,...(e.participants??[]).map(p=>p.note??'')].filter(Boolean).join('\n')};
-    const key=hash({id,input,policy:readFileSync(new URL('./prompts/editorial-scope.md',import.meta.url),'utf8')});
+    const key=hash({id,input,trafficPolicy:TRAFFIC_POLICY,policy:readFileSync(new URL('./prompts/editorial-scope.md',import.meta.url),'utf8')});
     const cached=this.store.db.prepare("SELECT detail FROM audit WHERE action='event-relevance-checked' AND subject=? ORDER BY id DESC LIMIT 1").get(key);
     const result=cached?JSON.parse(cached.detail):await this.triage.check(input);
     this.ensureActive(id);
@@ -390,6 +409,7 @@ export class Pipeline {
   }
   async review(id,revision){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(revision&&revision!==event.revision)return {skipped:'Superseded revision'};
@@ -518,6 +538,7 @@ export class Pipeline {
   }
   async repair(id,revision){
     this.ensureActive(id);
+    if(this.deferTraffic(id))return {deferred:true,awaitingFatality:true};
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
     const row=this.store.event(id);if(!row||row.revision!==revision||row.auto_repairs>=2)return;
     // Legacy repair jobs enter the new final editor; Flash must not rewrite a
@@ -542,13 +563,13 @@ export class Pipeline {
   }
   async recheck(id){
     this.ensureActive(id);
-    if(this.deferUndated(id))return null;
+    if(!needsFatalityConfirmation(this.store.event(id)?.canonical)&&this.deferUndated(id))return null;
     let event=this.store.event(id);if(!event)throw new Error('Unknown event');
     if(event.merged_into||event.state==='excluded'||event.canonical.type==='missing-person'||intervalFor(event)===null)return null;
     const documents=[...new Map(this.eventDocuments(id).map(d=>[d.url,d])).values()],failures=[];
     for(const doc of documents){try{await this.ingest(doc.url,doc.publishedAt);}catch(e){failures.push(e.message);}}
     let researchAvailable=false;
-    if(this.search?.key){
+    if(this.search?.key&&!needsFatalityConfirmation(event.canonical)){
       const plan=await this.model.json('research',{title:event.canonical.title,location:event.canonical.location,occurredAt:event.occurredAt,caseReferences:event.canonical.caseReferences,checkedDay:iso().slice(0,10)},{maxTokens:800,validate:raw=>z.object({queries:z.array(z.string().max(600)).max(2)}).strict().parse(raw)});
       for(const query of plan.queries){this.ensureActive(id);
         const found=await this.search.query(query);researchAvailable=found.available;
@@ -577,6 +598,7 @@ export class Pipeline {
       for(const model of [this.model,this.reviewer])if(model)model.campaignId=this.campaignId;
       const current=job.payload.eventId?this.store.event(job.payload.eventId):null;
       if(current&&(current.merged_into||current.state==='excluded'||current.editorial_mark==='uninteresting')){this.store.finish(job);return true;}
+      if(current&&!['article','recheck'].includes(job.kind)&&this.deferTraffic(current.id))return true;
       let next=null;
       if(job.kind==='feed'){
         await discoverFeed(this.store,this.reader,job.payload);
@@ -597,6 +619,7 @@ export class Pipeline {
       this.store.finish(job,next);
       this.archive?.settle();
     }catch(e){
+      if(e.code==='TRAFFIC_PENDING'){this.store.log('traffic-work-held',job.payload.eventId,{kind:job.kind});return true;}
       if(e.code==='DATE_PENDING'){this.store.log('date-hold',job.payload.eventId,{kind:job.kind});return true;}
       if(e.code==='EDITORIAL_STOP'||(job.payload.eventId&&this.store.event(job.payload.eventId)?.editorial_mark==='uninteresting')){this.store.log('editorial-work-stopped',job.payload.eventId,{kind:job.kind});this.archive?.settle();return true;}
       if(e.message==='Total model budget reached'){

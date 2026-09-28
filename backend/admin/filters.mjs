@@ -3,7 +3,7 @@ export const defaults={search:'',sort:'occurred-desc',publication:'all',review:'
 const choices={sort:['occurred-desc','occurred-asc','received-desc','received-asc'],publication:['all','unpublished','published','live','withdrawn','new','updates'],review:['all','ready','pass','pending','failed','revise','reject'],section:['all','incidents','missing'],type:['all','traffic-accident','assault','fight','robbery','accident','fire','rescue','missing-person','transport-disruption','weather','other'],homicide:['all','only','exclude'],impact:['all','hide-minor','significant','fatal','injured','minor','unknown']};
 const validDate=s=>/^\d{4}-\d{2}-\d{2}$/.test(s)&&!Number.isNaN(Date.parse(s))&&new Date(s).toISOString().slice(0,10)===s;
 choices.dateStatus=['all','known','pending'];
-choices.review.push('stopped');
+choices.review.push('stopped','awaiting-fatality');
 choices.mark=['hide-uninteresting','priority','uninteresting','all'];
 choices.sort.push('priority-desc');
 export function normalizeFilters(value){const result={...defaults};if(!value||typeof value!=='object')return result;for(const [key,options] of Object.entries(choices))if(options.includes(value[key]))result[key]=value[key];if(typeof value.search==='string')result.search=value.search.slice(0,250);for(const key of ['from','to'])if(typeof value[key]==='string'&&validDate(value[key]))result[key]=value[key];if(result.publication==='live')result.publication='published';return result;}
@@ -28,6 +28,8 @@ export function filterEvents(events,input){
     if(f.publication==='withdrawn'&&!e.withdrawn_at||f.publication==='new'&&e.withdrawn_at)return false;
     if(f.review==='ready'&&!e.ready||f.review==='pending'&&(e.verdict||e.updateAssessment?.skip)||f.review==='failed'&&!['revise','reject'].includes(e.verdict)||['pass','revise','reject'].includes(f.review)&&e.verdict!==f.review)return false;
     if(f.review==='stopped'&&!e.processing?.stopped)return false;
+    if(f.review==='awaiting-fatality'&&!e.awaitingFatality)return false;
+    if(e.awaitingFatality&&['ready','pass','pending'].includes(f.review))return false;
     if(f.homicide==='only'&&!flags.homicide||f.homicide==='exclude'&&flags.homicide)return false;
     if(f.impact==='hide-minor'&&flags.impact==='minor'||['minor','significant','unknown'].includes(f.impact)&&flags.impact!==f.impact||f.impact==='fatal'&&!flags.fatal||f.impact==='injured'&&!flags.injured)return false;
     return !((f.from&&(!day||day<f.from))||(f.to&&(!day||day>f.to)));

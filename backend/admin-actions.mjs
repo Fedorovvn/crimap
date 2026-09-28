@@ -8,6 +8,7 @@ export function retryEvent(store,id,revision,reviewer){
   return store.transaction(()=>{
     const e=store.event(id);if(!e)fail(404,'Событие не найдено');
     if(e.revision!==revision)fail(409,'Есть новая версия события. Обновите карточку');
+    if(store.holdForFatality(id))return {awaitingFatality:true};
     if(e.merged_into||e.state==='excluded'||e.editorial_mark==='uninteresting'||e.withdrawn_at)fail(409,'Сначала верните событие в обработку');
     const jobs=store.db.prepare("SELECT * FROM jobs WHERE json_extract(payload,'$.eventId')=? AND state IN ('running','queued','failed','paused','waiting-date') AND (json_extract(payload,'$.revision') IS NULL OR json_extract(payload,'$.revision')=?)").all(id,e.revision);
     if(jobs.some(j=>j.state==='running'))return {alreadyQueued:true};

@@ -1,7 +1,7 @@
 import {renderUsage} from './usage-ui.mjs';
 const $=s=>document.querySelector(s),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Budapest',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Ещё не было';
-const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Обработка остановлена','waiting-date':'Ожидает даты',stale:'Прервано'};
+const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Обработка остановлена','waiting-fatality':'ДТП: ожидает сведений о погибших','waiting-date':'Ожидает даты',stale:'Прервано'};
 const external=(url,label)=>/^https?:\/\//.test(url??'')?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)} ↗</a>`:escape(label);
 const title=r=>r.eventId?`<a href="/admin/?event=${r.eventId}">${escape(r.title??`Событие №${r.eventId}`)}</a>`:external(r.url,r.title??r.sourceName??'Без отдельного события');
 let busy=false,nextBefore=null,older=false,view='queue',logs=[],sourceOptions='';
