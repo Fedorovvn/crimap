@@ -279,7 +279,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [preselectedSlug, setPreselectedSlug] = useState(incidents[0]?.slug ?? "");
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>();
   const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
-  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "install-required" | "unsupported" | "error">("idle");
+  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "disabled" | "install-required" | "unsupported" | "error">("idle");
   const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
   const [pushPreferences, setPushPreferences] = useState<PushPreference>(DEFAULT_PUSH_PREFERENCES);
   const [pushCities, setPushCities] = useState<string[]>(DEFAULT_PUSH_PREFERENCES.cities);
@@ -425,6 +425,22 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     } catch { setPushState("error"); }
   }
 
+  async function disablePushNotifications() {
+    if (!("serviceWorker" in navigator)) { setPushState("disabled"); return; }
+    setPushState("subscribing");
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/push-worker.js");
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        const response = await fetch("/api/push/subscriptions/cancel", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ endpoint: subscription.endpoint }) });
+        if (!response.ok) throw new Error("unsubscribe");
+        await subscription.unsubscribe();
+      }
+      window.localStorage.removeItem(PUSH_PREFERENCES_KEY);
+      setPushState("disabled");
+    } catch { setPushState("error"); }
+  }
+
   function selectIncidentOnMap(slug: string) {
     setSelectedSlug(slug);
     setPreselectedSlug(slug);
@@ -546,7 +562,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </label>
           <p className="mt-2 text-xs leading-5 text-[var(--muted-text)]">{t("Пока доступен Будапешт. Другие города появятся, когда Crime Map начнёт собирать по ним события.")}</p>
           {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)]">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+          {pushState === "disabled" && <p role="status" className="mt-4 text-center text-xs text-[var(--muted-text)]">{t("Уведомления отключены")}</p>}
           <button type="button" onClick={enablePushNotifications} disabled={pushState === "subscribing"} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90 disabled:cursor-wait disabled:opacity-70">{t(pushState === "subscribing" ? "Включаем уведомления" : pushState === "enabled" ? "Сохранить настройки" : "Включить уведомления")}</button>
+          {pushState === "enabled" && <button type="button" onClick={disablePushNotifications} className="mt-3 w-full rounded-xl border border-[var(--hairline)] px-4 py-3 text-sm font-semibold text-[var(--muted-text)] transition hover:border-[var(--subtle-text)] hover:text-[var(--app-text)]">{t("Отключить уведомления")}</button>}
         </section>
       </div>}
 

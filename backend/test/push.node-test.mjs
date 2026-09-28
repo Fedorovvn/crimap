@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import webpush from 'web-push';
 import {Store} from '../store.mjs';
-import {matchesPushPreferences,savePushSubscription,sendPublishedPushes} from '../push.mjs';
+import {matchesPushPreferences,removePushSubscription,savePushSubscription,sendPublishedPushes} from '../push.mjs';
 
 const now='2026-09-28T11:00:00.000Z';
 const event={title:'Knife attack near Test utca',summary:'A person was injured during a reported attack.',type:'assault',status:'investigating',occurredAt:now,timePrecision:'exact',location:{city:'Budapest',label:'Test utca',precision:'street',latitude:47.5,longitude:19.05},signals:['injury'],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:[]};
@@ -26,6 +26,8 @@ test('validated subscriptions receive one localized notification and expired end
     assert.equal(calls[0].payload.title,event.title);
     assert.equal(calls[0].payload.url,'/?incident=knife-attack');
     assert.equal(store.db.prepare('SELECT count(*) n FROM push_subscriptions').get().n,1);
+    assert.deepEqual(removePushSubscription(store,{endpoint:'https://push.example/current'}),{unsubscribed:true});
+    assert.equal(store.db.prepare('SELECT count(*) n FROM push_subscriptions').get().n,0);
     assert.throws(()=>savePushSubscription(store,{endpoint:'http://not-secure.example',keys:{p256dh:'x'.repeat(24),auth:'y'.repeat(24)}}));
   }finally{
     store.close();

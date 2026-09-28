@@ -36,6 +36,8 @@ export const messages: Record<string, [string, string]> = {
   'Город': ['City', 'Város'],
   'Пока доступен Будапешт. Другие города появятся, когда Crime Map начнёт собирать по ним события.': ['Budapest is available now. More cities will appear when Crime Map starts collecting incidents there.', 'Jelenleg Budapest érhető el. További városok akkor jelennek meg, amikor a Crime Map elkezd eseményeket gyűjteni ott.'],
   'Сохранить настройки': ['Save settings', 'Beállítások mentése'],
+  'Отключить уведомления': ['Turn off notifications', 'Értesítések kikapcsolása'],
+  'Уведомления отключены': ['Notifications are turned off', 'Az értesítések ki vannak kapcsolva'],
   'Период событий': ['Time period', 'Időszak'],
   'Тяжесть происшествий': ['Incident severity', 'Az események súlyossága'],
   'Все': ['All', 'Mind'], 'Серьёзные': ['Serious', 'Súlyos'], 'Смертельные': ['Fatal', 'Halálos'],

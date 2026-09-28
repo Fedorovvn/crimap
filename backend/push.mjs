@@ -37,14 +37,19 @@ export function pushConfig() {
 
 export function normalizePushSubscription(raw) {
   if (!raw || typeof raw!=='object') throw new Error('Invalid push subscription');
-  const endpoint=typeof raw.endpoint==='string'&&raw.endpoint.length<=2048?raw.endpoint:'';
-  let parsed;try { parsed=new URL(endpoint); } catch { throw new Error('Invalid push endpoint'); }
-  if (parsed.protocol!=='https:' || !parsed.hostname) throw new Error('Invalid push endpoint');
+  const endpoint=normalizePushEndpoint(raw.endpoint);
   const p256dh=typeof raw.keys?.p256dh==='string'?raw.keys.p256dh:'';
   const auth=typeof raw.keys?.auth==='string'?raw.keys.auth:'';
   if (!base64Url.test(p256dh)||!base64Url.test(auth)) throw new Error('Invalid push encryption keys');
   const severity=notificationLevels.has(raw.severity)?raw.severity:'all';
   return {endpoint,p256dh,auth,locale:locales.has(raw.locale)?raw.locale:'ru',severity,cities:normalizeCities(raw.cities)};
+}
+
+function normalizePushEndpoint(value) {
+  const endpoint=typeof value==='string'&&value.length<=2048?value:'';
+  let parsed;try { parsed=new URL(endpoint); } catch { throw new Error('Invalid push endpoint'); }
+  if (parsed.protocol!=='https:' || !parsed.hostname) throw new Error('Invalid push endpoint');
+  return endpoint;
 }
 
 export function savePushSubscription(store, raw) {
@@ -53,6 +58,13 @@ export function savePushSubscription(store, raw) {
     ON CONFLICT(endpoint) DO UPDATE SET p256dh=excluded.p256dh,auth=excluded.auth,locale=excluded.locale,severity=excluded.severity,cities=excluded.cities,updated_at=excluded.updated_at`).run(subscription.endpoint,subscription.p256dh,subscription.auth,subscription.locale,subscription.severity,JSON.stringify(subscription.cities),now,now);
   store.log('push-subscribed','web',{locale:subscription.locale,severity:subscription.severity,cities:subscription.cities});
   return {subscribed:true};
+}
+
+export function removePushSubscription(store, raw) {
+  const endpoint=normalizePushEndpoint(raw?.endpoint);
+  const removed=store.db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(endpoint).changes;
+  store.log('push-unsubscribed','web',{removed:removed===1});
+  return {unsubscribed:true};
 }
 
 function localized(strings, locale, text) { return locale==='ru'?text:strings?.[locale]?.[text]??text; }

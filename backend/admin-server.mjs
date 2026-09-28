@@ -11,7 +11,7 @@ import { eventFacets } from './admin-facets.mjs';
 import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
 import {currentUpdateAssessment} from './update-comparison.mjs';
-import {pushCities,pushConfig,savePushSubscription} from './push.mjs';
+import {pushCities,pushConfig,removePushSubscription,savePushSubscription} from './push.mjs';
 import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON} from './traffic-policy.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
@@ -31,7 +31,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
     res.setHeader('Content-Security-Policy',"default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' https:; object-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'self'");
     try {
       const path = new URL(req.url,origin).pathname;
-      const isPushApi=path==='/api/push/config'||path==='/api/push/subscriptions';
+      const isPushApi=path==='/api/push/config'||path==='/api/push/subscriptions'||path==='/api/push/subscriptions/cancel';
       if (!path.startsWith('/admin/')&&!isPushApi) return send(404,{error:'Не найдено'});
       let body;
       if (req.method==='POST') {
@@ -49,6 +49,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         if(!pushConfig())fail(503,'Уведомления пока не настроены');
         return send(201,savePushSubscription(store,body));
       }
+      if(path==='/api/push/subscriptions/cancel'&&req.method==='POST') return send(200,removePushSubscription(store,body));
       if (path==='/admin/api/login' && req.method==='POST') {
         const now=Date.now(),ip=req.headers['x-real-ip']??req.socket.remoteAddress;
         for (const [key,value] of attempts) if(value.until<now)attempts.delete(key);
