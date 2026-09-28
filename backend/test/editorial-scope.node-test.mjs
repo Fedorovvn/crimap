@@ -31,6 +31,11 @@ test('free triage rejects property-crime police outcomes and self-risk on infras
  assert.notEqual(cheapDecision('Késelés egy lakásban Budapesten','A lakót megsebesítették.').decision,'drop');
  assert.notEqual(cheapDecision('Véres férfi mászott egy villamos tetejére Budapesten','A rendőrök intézkedtek.').decision,'drop');
 });
+test('disappeared social-media pages are not mislabelled as missing people',()=>{
+ const result=cheapDecision('Eltűnt Hankó Balázs Facebook-oldala');
+ assert.equal(result.decision,'drop');
+ assert.match(result.reason,/Техническая или медийная/);
+});
 test('every candidate surviving the free filter is decided by Flash before extraction',async()=>{
  let calls=0;const t=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,defer:false,reason:'В статье описано нападение'});}});
  const result=await t.check({title:'Нападение в Будапеште',text:'На прохожего напали возле остановки.'});

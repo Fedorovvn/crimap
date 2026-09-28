@@ -13,7 +13,12 @@ export function cheapDecision(title,text='',{complete=false}={}) {
   const scope=scopeDecision(title,text);if(scope)return scope;
   if(isTrafficReport(title,text)&&!reportsDeath(title+'\n'+text))return {decision:'defer',reason:TRAFFIC_HOLD_REASON,signals:[]};
   const missing=/eltunt|eltunes|eltunese|nyoma veszett|ismeretlen helyre tavoz|missing (?:person|girl|boy|woman|man|child)|пропал|пропавш/;
+  // Hungarian headlines also use “eltűnt” for a deleted web page, account or
+  // post.  Those are neither a missing-person alert nor an incident for the
+  // map; classify them accurately before the human-missing rule below.
+  const nonPersonDisappearance=/(?:facebook|instagram|tiktok|social media|weboldal|honlap|oldal|page\b|profil|fiok|account|post\b|bejegyzes|poszt|website|site\b)/;
   const crime=/emberrab|elrabol|gyilk|emberoles|megol|holttest|kesel|megszur|assault|murder|kidnap/;
+  if(missing.test(head)&&nonPersonDisappearance.test(head))return {decision:'drop',reason:'Техническая или медийная новость, не розыск человека и не происшествие',signals:[]};
   if(missing.test(head)&&!crime.test(t))return {decision:'drop',reason:'Розыск пропавших людей временно вне тематики',signals:[]};
   // Vehicle fire alone is not a green flag. Leave uncertain cases to Flash.
   const vehicleFire=/(?:auto|gepkocsi|jarmu|kamion|truck|car|vehicle)/.test(head)&&/kigyull|kiegett|lang|tuz|fire|burn/.test(head);
