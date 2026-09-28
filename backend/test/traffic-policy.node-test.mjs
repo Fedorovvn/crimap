@@ -16,12 +16,13 @@ function seed(s,event=crash){s.db.prepare('INSERT INTO events(id,slug,first_seen
 const fatal={...crash,signals:['death'],summary:'One driver died from injuries sustained in the collision.',evidence:[{field:'signals',documentId:'1',quote:'A sofőr a kórházban belehalt sérüléseibe.'}]};
 
 test('road crashes with unknown, minor or critical outcomes wait for free; violence still passes',async()=>{
- const triage=new Triage({json:()=>{throw new Error('No model required');}});
+ let calls=0;const triage=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,defer:false,reason:'Подтверждено нападение'});}});
  for(const text of ['Senki sem sérült meg.','Mentőhelikopter érkezett.','Újraélesztették, életveszélyes állapotban vitték kórházba.','A sérülésekről nincs információ.']){
   assert.equal(cheapDecision('Baleset Budapesten',text,{complete:true}).decision,'defer');
   assert.equal((await triage.check({title:'Baleset Budapesten',text})).defer,true);
  }
  assert.equal((await triage.check({title:'Késelés Budapesten a villamoson',text:'Megszúrtak egy embert.'})).keep,true);
+ assert.equal(calls,1);
  assert.equal(needsFatalityConfirmation({...crash,type:'assault'}),false);
 });
 

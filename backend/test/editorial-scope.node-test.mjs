@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {cheapDecision,Triage} from '../triage.mjs';
+import {cheapDecision,Triage,triageExcerpt} from '../triage.mjs';
 import {interestReasons} from '../admin/interest-reasons.mjs';
 test('animal attacks and factory chemical leaks are rejected free despite injuries',async()=>{
  const t=new Triage({json:async()=>{throw new Error('No model needed');}});
@@ -30,6 +30,13 @@ test('free triage rejects property-crime police outcomes and self-risk on infras
  ]){const r=await t.check({title,text});assert.equal(r.keep,false,title);assert.equal(r.method,'rules');}
  assert.notEqual(cheapDecision('Késelés egy lakásban Budapesten','A lakót megsebesítették.').decision,'drop');
  assert.notEqual(cheapDecision('Véres férfi mászott egy villamos tetejére Budapesten','A rendőrök intézkedtek.').decision,'drop');
+});
+test('every candidate surviving the free filter is decided by Flash before extraction',async()=>{
+ let calls=0;const t=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,defer:false,reason:'В статье описано нападение'});}});
+ const result=await t.check({title:'Нападение в Будапеште',text:'На прохожего напали возле остановки.'});
+ assert.equal(result.keep,true);assert.equal(result.method,'flash-short');assert.equal(calls,1);
+ const long=`${'Начало статьи. '.repeat(1000)}Заключение с уточнённым исходом.`;
+ const excerpt=triageExcerpt(long);assert.ok(excerpt.length<=12060);assert.ok(excerpt.includes('Заключение с уточнённым исходом.'));
 });
 test('mixed human violence and incidental dogs/drugs cannot be rejected by keyword',async()=>{
  let calls=0;const t=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,reason:'Нападение на прохожего'});}});

@@ -9,17 +9,17 @@ import {DeepSeek} from '../model.mjs';
 import {Pipeline} from '../pipeline.mjs';
 import {translationStrings} from '../contract.mjs';
 
-test('free filters defer nonfatal road crashes but retain tram violence',async()=>{
-  let calls=0;const t=new Triage({json:async()=>{calls++;return {keep:false,reason:'Negated serious injuries'};}});
+test('free filters defer nonfatal road crashes and Flash decides retained tram violence',async()=>{
+  let calls=0;const t=new Triage({json:async(_stage,_payload,{validate})=>{calls++;return validate({keep:true,reason:'Concrete in-scope incident'});}});
   assert.equal(cheapDecision('Ideiglenes forgalomkorlátozás Budapesten').decision,'drop');
   assert.equal((await t.check({title:'Baleset Budapesten',text:'Két autó ütközött a fővárosban, senki nem sérült meg.'})).defer,true);
   assert.equal((await t.check({title:'Véres férfi mászott egy villamos tetejére Budapesten',text:'A rendőrök intézkedtek.'})).keep,true);
   assert.equal((await t.check({title:'Verekedés Budapesten',text:'Két férfi megtámadott egy járókelőt.'})).keep,true);
-  assert.equal(calls,0);
+  assert.equal(calls,2);
   assert.equal(cheapDecision('Baleset Budapesten','Két autó ütközött.').decision,'defer');
-  await t.check({title:'Baleset Budapesten',text:'Súlyos sérülés nem történt.'});assert.equal(calls,0);
-  await t.check({title:'Budapest: két autó ütközött',text:'Forgalmi akadály keletkezett az úton.'});assert.equal(calls,0);
-  await t.check({title:'Rablás Szegeden',text:'Szegeden kiraboltak egy üzletet.'});assert.equal(calls,1);
+  await t.check({title:'Baleset Budapesten',text:'Súlyos sérülés nem történt.'});assert.equal(calls,2);
+  await t.check({title:'Budapest: két autó ütközött',text:'Forgalmi akadály keletkezett az úton.'});assert.equal(calls,2);
+  await t.check({title:'Rablás Szegeden',text:'Szegeden kiraboltak egy üzletet.'});assert.equal(calls,3);
 });
 test('broad Hungarian green flags prevent free rejection despite routine or minor language',()=>{
   const phrases=['súlyosan megsérült','súlyos sérüléseket szenvedett','állapota válságos','életveszélyes állapotban','újraélesztették','mentőhelikopter érkezett','a roncsok közül szabadították ki','feszítővágóval mentettek','eszméletlenül találták','elvesztette az eszméletét','intenzív osztályra került','koponyasérülést szenvedett','nyílt törése volt','többen sérültek meg','felborult az autó','frontális ütközés','elgázolt egy embert','a villamos alá került','beszorult az utas','lángra kapott az autó','kritikus állapotban','amputálni kellett','keringésleállás történt','belehalt sérüléseibe','kizuhant a járműből','csupa vér volt','félmeztelenül tombolt','megfojtották','kirabolták','ütlegelték','evakuálták a házat'];

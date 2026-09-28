@@ -26,6 +26,15 @@ export function cheapDecision(title,text='',{complete=false}={}) {
   if(complete&&traffic.test(t)&&minor.test(t))return {decision:'drop',reason:'В полном тексте явно указано отсутствие пострадавших или только лёгкие последствия; зелёных флагов нет'};
   return {decision:'ambiguous',reason:'Нужна короткая проверка содержания'};
 }
+export function triageExcerpt(text,maxLength=12000){
+  const value=String(text??'').trim();
+  if(value.length<=maxLength)return value;
+  // The lead normally states the event; the ending catches later outcomes and
+  // corrections. This keeps the Flash gate inexpensive without using a title
+  // alone to decide whether a human-interest incident is relevant.
+  const tail=Math.min(3000,Math.floor(maxLength/3));
+  return `${value.slice(0,maxLength-tail)}\n\n[article shortened for relevance screening]\n\n${value.slice(-tail)}`;
+}
 const schema=z.object({keep:z.boolean(),defer:z.boolean().optional(),reason:z.string().min(1).max(700),quote:z.string().max(1000).optional()}).strict();
 export class Triage {
   constructor(model){this.model=model;}
@@ -34,8 +43,11 @@ export class Triage {
     const localHint=local.test(norm(doc.title+'\n'+doc.text));
     const cheap=cheapDecision(doc.title,doc.text,{complete:true});
     if(cheap.decision==='defer'&&localHint)return {keep:true,defer:true,reason:cheap.reason,method:'rules-deferred'};
-    if(cheap.decision==='drop'||(cheap.decision==='keep'&&localHint))return {keep:cheap.decision==='keep',reason:cheap.reason,method:'rules'};
-    const text=doc.text.slice(0,16000);
+    // Rules can stop only clear exclusions. Every surviving candidate, even a
+    // keyword-perfect local assault or burglary, gets Flash before identity,
+    // extraction, image work, geocoding and Pro.
+    if(cheap.decision==='drop')return {keep:false,reason:cheap.reason,method:'rules'};
+    const text=triageExcerpt(doc.text);
     const result=await this.model.json('triage',{title:doc.title,text},{maxTokens:450,validate:raw=>{
       const r=schema.parse(raw);if(r.quote&&!text.includes(r.quote)&&!doc.title.includes(r.quote))throw new Error('Triage quote is not in the article');return r;
     }});
