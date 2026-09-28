@@ -96,7 +96,9 @@ export class Store {
   holdForFatality(id){
     const event=this.event(id);
     if(!event||!needsFatalityConfirmation(event.canonical)||event.editorial_mark==='uninteresting'||event.merged_into||event.state==='excluded')return false;
-    const next=nextCheck(event);
+    // A road crash without a confirmed occurrence date is still held for a
+    // fatality update, but must not get the rapid dated-event polling cadence.
+    const next=event.canonical.occurredAt?nextCheck(event):nextDateResolution(event);
     this.db.prepare("UPDATE events SET state='awaiting-fatality',review_reason=?,next_check_at=? WHERE id=?").run(TRAFFIC_HOLD_REASON,next,id);
     this.db.prepare("UPDATE jobs SET state='waiting-fatality',rerun=0,lease_token=NULL,lease_until=NULL,last_error=NULL WHERE json_extract(payload,'$.eventId')=? AND kind NOT IN ('article','recheck') AND state IN ('queued','running','paused','failed','waiting-date')").run(id);
     if(event.state!=='awaiting-fatality')this.log('traffic-deferred',id,{revision:event.revision,policy:TRAFFIC_POLICY,reason:TRAFFIC_HOLD_REASON,previousState:event.state});

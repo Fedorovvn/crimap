@@ -54,6 +54,15 @@ test('a supported day creates a new revision and resumes preparation without pub
     assert.equal(s.db.prepare("SELECT state FROM jobs WHERE kind='resolve-date'").get().state,'done');
   }finally{s.close();}
 });
+test('undated traffic waiting for a fatality uses the quiet date cadence',()=>{
+  const s=new Store(':memory:');try{
+    const traffic={...event,type:'traffic-accident',occurredAt:null,timePrecision:'unknown',summary:'A collision was reported.',title:'Collision at Wesselényi utca'};
+    s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('undated-traffic',new Date().toISOString(),JSON.stringify(traffic));
+    s.holdForFatality(1);
+    const row=s.db.prepare("SELECT due_at FROM jobs WHERE kind='recheck' AND job_key='1'").get();
+    assert.ok(Date.parse(row.due_at)>Date.now()+6*86400000,'undated traffic is not polled every 15 minutes');
+  }finally{s.close();}
+});
 test('a new undated article stops after the cheap identity record',async()=>{
   const s=new Store(':memory:');let stages=[];
   const article='A man was stabbed at Wesselényi utca, Budapest. The incident date is not stated.';
