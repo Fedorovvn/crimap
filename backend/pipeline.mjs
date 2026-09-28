@@ -23,17 +23,19 @@ import {queueEditorialPreparation,stopEventJobs} from './editorial-workflow.mjs'
 import {validateResolvedDate} from './date-resolution.mjs';
 import {correctFinalTranslations} from './final-corrections.mjs';
 import {comparePublicationUpdate,currentUpdateAssessment} from './update-comparison.mjs';
+import {publish} from './publish.mjs';
 
 const iso=()=>new Date().toISOString();
 export const repairSchema=z.object({event:eventSchema}).strict();
 const normalized=s=>s.normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^\p{L}\p{N}]+/gu,' ').trim();
+export const qualifiesForAutoPublication=event=>event?.type==='assault'||event?.signals?.includes('death');
 export {matchCandidates} from './dedup.mjs';
 export class Pipeline {
-  constructor(store,{reader,model,reviewer,search,triage,preparation,archive,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??LIVE_SOURCE_IDS.join(',')).split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??200)}={}){
+  constructor(store,{reader,model,reviewer,search,triage,preparation,archive,publicPath=process.env.DATABASE_PATH,sourceIds=(process.env.COLLECTOR_SOURCES??LIVE_SOURCE_IDS.join(',')).split(','),maxItems=Number(process.env.FEED_MAX_ITEMS??200),autoPublish=false}={}){
     this.store=store;this.reader=reader;this.model=model;this.reviewer=reviewer;this.search=search;this.sourceIds=sourceIds;this.maxItems=maxItems;
     this.laws=JSON.parse(readFileSync(new URL('./verified-laws.json',import.meta.url),'utf8'));
     this.publicPath=publicPath;
-    this.triage=triage;this.preparation=preparation;this.archive=archive;this.campaignId=null;
+    this.triage=triage;this.preparation=preparation;this.archive=archive;this.autoPublish=autoPublish;this.campaignId=null;
     this.schema=zodToJsonSchema(extractionSchema,{name:'Extraction'});
   }
   publishedSources(){
@@ -327,6 +329,23 @@ export class Pipeline {
     if(this.preparation)this.store.enqueue('localize',id,{eventId:id,revision:event.revision,campaignId:this.campaignId,budgetScope:this.budgetScope});return translated;
   }
   passed(id,revision){const r=this.store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(id,revision);return r&&JSON.parse(r.payload).verdict==='pass';}
+  queueAutoPublication(id,revision){
+    const event=this.store.event(id);
+    if(!this.autoPublish||!event||event.revision!==revision||event.editorial_mark==='uninteresting'||!qualifiesForAutoPublication(event.canonical))return false;
+    this.store.enqueue('publish',`${id}:${revision}`,{eventId:id,revision,campaignId:this.campaignId,budgetScope:this.budgetScope});
+    this.store.log('auto-publication-queued',id,{revision,reason:event.canonical.type==='assault'?'assault':'fatal outcome'});
+    return true;
+  }
+  publishAutomatically(id,revision){
+    this.ensureActive(id);
+    const event=this.store.event(id);
+    if(!event||event.revision!==revision)return {skipped:'Superseded revision'};
+    if(event.merged_into||event.state==='excluded'||event.editorial_mark==='uninteresting')return {skipped:'Inactive event'};
+    if(!qualifiesForAutoPublication(event.canonical))return {skipped:'Does not meet automatic publication criteria'};
+    const publicId=publish(this.store,id,this.publicPath,{reviewer:'Автопубликация после Pro',includeContext:true,includeLegal:true});
+    this.store.log('auto-published',id,{revision,publicId,reason:event.canonical.type==='assault'?'assault':'fatal outcome'});
+    return {published:true,publicId};
+  }
   async localize(id) {
     this.ensureActive(id);
     if(this.deferUndated(id))return {deferred:true,awaitingDate:true};
@@ -493,6 +512,7 @@ export class Pipeline {
       this.store.log('pro-final-editor',id,{revision:nextRevision,verdict:result.verdict,changed:nextRevision!==event.revision});
     });
     recordRequests(this.store,result.requests,{eventId:id,revision:nextRevision,model:this.reviewer.model});
+    if(final.review.verdict==='pass')this.queueAutoPublication(id,nextRevision);
     return final.review;
   }
   async repair(id,revision){
@@ -569,6 +589,7 @@ export class Pipeline {
       else if(job.kind==='translate')await this.translate(job.payload.eventId);
       else if(job.kind==='localize')await this.localize(job.payload.eventId);
       else if(job.kind==='review')await this.review(job.payload.eventId,job.payload.revision);
+      else if(job.kind==='publish')await this.publishAutomatically(job.payload.eventId,job.payload.revision);
       else if(job.kind==='recheck')next=await this.recheck(job.payload.eventId);
       else throw new Error('Unknown job kind');
       this.store.finish(job,next);

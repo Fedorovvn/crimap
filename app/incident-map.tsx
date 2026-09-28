@@ -58,6 +58,21 @@ function KeepMapSized() {
   return null;
 }
 
+function ClearMapHover({ onHover }: { onHover?: (slug: string | null) => void }) {
+  const map = useMap();
+
+  useEffect(() => {
+    if (!onHover) return;
+    // Marker mouseout is normally enough, but Leaflet can retain an open
+    // tooltip while a pointer crosses a map control or begins a drag.
+    const clear = () => onHover(null);
+    map.on("mouseout", clear).on("dragstart", clear).on("zoomstart", clear).on("click", clear);
+    return () => { map.off("mouseout", clear).off("dragstart", clear).off("zoomstart", clear).off("click", clear); };
+  }, [map, onHover]);
+
+  return null;
+}
+
 function incidentIcon(active: boolean, isNight: boolean, hovered: boolean) {
   const mode = isNight ? "is-night" : "is-day";
   const state = active ? "is-active" : hovered ? "is-hovered" : "";
@@ -111,6 +126,7 @@ export function IncidentMap({
       />
       <FitVisibleIncidents incidents={incidents} focusedSlug={focusedSlug} layoutMode={layoutMode} />
       <KeepMapSized />
+      <ClearMapHover onHover={onHover} />
       {incidents.map((incident) => {
         const active = incident.slug === selectedSlug;
         return (
@@ -121,9 +137,11 @@ export function IncidentMap({
             zIndexOffset={active ? 600 : incident.slug === hoveredSlug ? 500 : 0}
             eventHandlers={{ click: () => onSelect(incident.slug), mouseover: () => onHover?.(incident.slug), mouseout: () => onHover?.(null) }}
           >
-            <Tooltip direction="top" offset={[0, -18]} opacity={1}>
-              {incident.title}
-            </Tooltip>
+            {incident.slug === hoveredSlug && (
+              <Tooltip permanent interactive={false} direction="top" offset={[0, -18]} opacity={1}>
+                {incident.title}
+              </Tooltip>
+            )}
           </Marker>
         );
       })}

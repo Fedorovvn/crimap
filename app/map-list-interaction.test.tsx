@@ -22,6 +22,13 @@ it('hover links cards and markers without selecting another article, and map hov
  expect(screen.getByText('Details first')).toBeTruthy();
  await user.unhover(screen.getByRole('button',{name:'Map old'}));expect(card.dataset.hovered).toBe('false');
 });
+it('uses the compact map-and-feed interaction below the two-column breakpoint',async()=>{
+ vi.stubGlobal('matchMedia',(q:string)=>({matches:!q.includes('min-width: 1280px')&&!q.includes('reduced-motion'),addEventListener:vi.fn(),removeEventListener:vi.fn()}));
+ const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
+ const map=screen.getByTestId('map'),card=screen.getByRole('button',{name:/Нападение.*old/});
+ await user.hover(card);expect(map.dataset.hovered).toBe('');
+ await user.hover(screen.getByRole('button',{name:'Map old'}));expect(card.dataset.hovered).toBe('false');
+});
 it('all time is default and a period change clears single-marker camera focus',async()=>{
  const user=userEvent.setup();render(<IncidentsView incidents={incidents}/>);
  expect(screen.getByRole('button',{name:'Всё время'}).getAttribute('aria-pressed')).toBe('true');

@@ -17,7 +17,7 @@ import {recoverArchive} from './archive-recovery.mjs';
 const {values,positionals}=parseArgs({allowPositionals:true,options:{db:{type:'string'},'public-db':{type:'string'},file:{type:'string'},reviewer:{type:'string'},context:{type:'boolean'},legal:{type:'boolean'},limit:{type:'string'},from:{type:'string'},to:{type:'string'},budget:{type:'string'}}});
 const [command='status',arg]=positionals,path=values.db??process.env.COLLECTOR_DATABASE_PATH??'data/collector.sqlite';
 const store=new Store(path),reader=new Reader(store),model=new DeepSeek(store),archive=new Archive(store,{reader});
-const pipeline=new Pipeline(store,{reader,model,reviewer:new DeepSeek(store,{model:process.env.DEEPSEEK_REVIEW_MODEL??'deepseek-v4-pro'}),search:new Search(store),triage:new Triage(model),preparation:new Preparation(store,{model}),archive});
+const pipeline=new Pipeline(store,{reader,model,reviewer:new DeepSeek(store,{model:process.env.DEEPSEEK_REVIEW_MODEL??'deepseek-v4-pro'}),search:new Search(store),triage:new Triage(model),preparation:new Preparation(store,{model}),archive,autoPublish:process.env.AUTO_PUBLISH_QUALIFIED_EVENTS!=='false'});
 let stopping=false;process.on('SIGTERM',()=>{stopping=true;});process.on('SIGINT',()=>{stopping=true;});
 if(['translate','review','complete-details','prepare','recheck'].includes(command)){
   const budget=jobBudget(command,{eventId:Number(arg)},store.event(Number(arg)));

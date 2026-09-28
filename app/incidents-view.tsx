@@ -296,7 +296,10 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   }, [visibleIncidents, mobileDetailOpen]);
 
   useEffect(() => {
-    const query = window.matchMedia("(min-width: 768px)");
+    // This is the actual two-column breakpoint. Below it, the map and feed
+    // use the compact one-column interaction model rather than a squeezed
+    // desktop map with a separate list.
+    const query = window.matchMedia("(min-width: 1280px)");
     const update = () => { setDesktop(query.matches); setHoveredSlug(""); };
     update(); query.addEventListener("change", update);
     return () => query.removeEventListener("change", update);
@@ -388,7 +391,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   }
 
   return (
-    <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] md:block md:h-auto md:min-h-screen md:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
+    <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] xl:block xl:h-auto xl:min-h-screen xl:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-3.5 lg:px-9">
           <div className="flex items-center gap-2.5">
@@ -414,9 +417,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
         </div>
       </header>
 
-      <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden md:mx-auto md:block md:max-w-[1440px] md:overflow-visible md:px-5 md:py-6 lg:px-9 lg:py-8">
-        <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col md:grid md:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
-          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] md:min-h-[475px] md:rounded-[1.4rem] md:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
+      <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden xl:mx-auto xl:block xl:max-w-[1440px] xl:overflow-visible xl:px-9 xl:py-8">
+        <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col xl:grid xl:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
+          <section className="map-frame relative basis-1/2 shrink-0 overflow-hidden border-y border-[var(--map-border)] bg-[var(--map-loading)] shadow-[var(--map-shadow)] xl:min-h-[475px] xl:rounded-[1.4rem] xl:border xl:col-start-1 xl:row-start-1" aria-label={t("Карта инцидентов Будапешта")} role="region">
             <IncidentMap theme={theme} incidents={visibleIncidents} selectedSlug={activeMarkerSlug} hoveredSlug={desktop ? hoveredSlug : ""} onHover={hoverMapIncident} focusedSlug={mobileDetailOpen ? (selected?.slug ?? "") : ""} onSelect={selectIncidentOnMap} layoutMode={mobileDetailOpen ? "detail" : "list"} />
             <div className="map-filter-stack">
             <div className="map-controls flex w-fit rounded-full border border-[var(--map-overlay-border)] bg-[var(--map-overlay)] p-1 shadow-sm backdrop-blur-md" role="group" aria-label={t('Период событий')}>
@@ -450,7 +453,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             )}
           </section>
 
-          <div ref={feedRef} onScroll={updateFeedScroll} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 md:contents" data-testid="incident-feed">
+          <div ref={feedRef} onScroll={updateFeedScroll} className="mobile-incident-feed min-h-0 flex-1 overflow-y-auto overscroll-contain px-5 py-4 xl:contents" data-testid="incident-feed">
             <aside ref={listRef} className="mobile-incident-list space-y-3 xl:col-start-2 xl:row-start-1" aria-label={t("Лента происшествий")}>
               {visibleIncidents.length ? (
                 visibleIncidents.map((incident) => (
@@ -484,7 +487,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             </aside>
 
             {selected && (
-              <section className="mobile-incident-detail mt-5 grid gap-6 lg:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)] xl:col-span-2 xl:row-start-2" data-has-media={selected.media.length > 0} aria-live="polite">
+              <section className="mobile-incident-detail mt-5 grid gap-6 xl:grid-cols-[minmax(0,1.2fr)_minmax(300px,0.8fr)] xl:col-span-2 xl:row-start-2" data-has-media={selected.media.length > 0} aria-live="polite">
             <div className="mobile-detail-content">
               <div className="incident-story-intro">
               <div className="mobile-detail-tags flex flex-col items-start gap-2 text-xs font-bold">
