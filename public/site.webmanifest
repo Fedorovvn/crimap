@@ -1,6 +1,7 @@
 {
   "name": "Crime Map",
   "short_name": "Crime Map",
+  "id": "/",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#10161c",

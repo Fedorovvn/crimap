@@ -21,6 +21,7 @@ export const messages: Record<string, [string, string]> = {
   'Уведомления о новых событиях включены': ['New incident notifications are enabled', 'Az új eseményekről szóló értesítések be vannak kapcsolva'],
   'Включаем уведомления': ['Enabling notifications', 'Értesítések bekapcsolása'],
   'Уведомления недоступны в этом браузере': ['Notifications are unavailable in this browser', 'Az értesítések nem érhetők el ebben a böngészőben'],
+  'На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления.': ['On iPhone, add Crime Map to the Home Screen, open it from its icon, then enable notifications.', 'iPhone-on adja a Crime Mapet a Főképernyőhöz, nyissa meg az ikonjáról, majd kapcsolja be az értesítéseket.'],
   'Не удалось включить уведомления': ['Could not enable notifications', 'Az értesítéseket nem sikerült bekapcsolni'],
   'Период событий': ['Time period', 'Időszak'],
   'Тяжесть происшествий': ['Incident severity', 'Az események súlyossága'],

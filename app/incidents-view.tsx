@@ -270,7 +270,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [preselectedSlug, setPreselectedSlug] = useState(incidents[0]?.slug ?? "");
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>();
   const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
-  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "unsupported" | "error">("idle");
+  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "install-required" | "unsupported" | "error">("idle");
   const feedRef = useRef<HTMLDivElement>(null);
   const workspaceRef = useRef<HTMLDivElement>(null);
   const cardRefs = useRef(new Map<string, HTMLButtonElement>());
@@ -379,6 +379,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   }
 
   async function enablePushNotifications() {
+    const iosBrowser = /iPad|iPhone|iPod/.test(navigator.userAgent);
+    const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
+    if (iosBrowser && !standalone) { setPushState("install-required"); return; }
     if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setPushState("unsupported"); return; }
     setPushState("subscribing");
     try {
@@ -490,7 +493,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </div>
         </div>
       </header>
-      {(pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-60 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs text-[var(--muted-text)] shadow-lg">{t(pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+      {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-72 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)] shadow-lg">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
 
       <section id="incidents" className="flex min-h-0 flex-1 flex-col overflow-hidden xl:mx-auto xl:block xl:max-w-[1440px] xl:overflow-visible xl:px-9 xl:py-8">
         <div ref={workspaceRef} className="mobile-incidents-workspace flex min-h-0 flex-1 flex-col xl:grid xl:gap-5 xl:grid-cols-[minmax(0,1.38fr)_360px]">
