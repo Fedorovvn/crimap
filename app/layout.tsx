@@ -11,17 +11,22 @@ export const metadata: Metadata = {
   openGraph: {
     type: "website", url: "/", siteName: "Crime Map", title: "Crime Map — True Crime карта Будапешта",
     description: "Проверенные происшествия и громкие дела Будапешта на интерактивной карте.", locale: "ru_RU", alternateLocale: ["en_GB", "hu_HU"],
-    images: [{ url: "/crime-map-social.png", width: 1200, height: 630, alt: "Crime Map — True Crime карта Будапешта" }],
+    images: [{ url: "/brand/v2/social.png", width: 1200, height: 1200, alt: "Crime Map — True Crime карта Будапешта" }],
   },
-  twitter: { card: "summary_large_image", title: "Crime Map — True Crime карта Будапешта", description: "Проверенные происшествия и громкие дела Будапешта на интерактивной карте.", images: ["/crime-map-social.png"] },
-  manifest: "/site.webmanifest",
+  twitter: { card: "summary_large_image", title: "Crime Map — True Crime карта Будапешта", description: "Проверенные происшествия и громкие дела Будапешта на интерактивной карте.", images: ["/brand/v2/social.png"] },
+  manifest: "/site.webmanifest?v=2",
   other: {
     "codex-preview": "development",
   },
   icons: {
-    icon: [{ url: "/favicon.svg", type: "image/svg+xml" }, { url: "/icon-192.png", sizes: "192x192", type: "image/png" }],
-    shortcut: "/favicon.svg",
-    apple: [{ url: "/apple-touch-icon.png", sizes: "180x180", type: "image/png" }],
+    icon: [
+      { url: "/brand/v2/favicon.ico", sizes: "16x16 32x32 48x48", type: "image/x-icon" },
+      { url: "/brand/v2/favicon-16.png", sizes: "16x16", type: "image/png" },
+      { url: "/brand/v2/favicon-32.png", sizes: "32x32", type: "image/png" },
+      { url: "/brand/v2/favicon-48.png", sizes: "48x48", type: "image/png" },
+    ],
+    shortcut: "/brand/v2/favicon.ico",
+    apple: [{ url: "/brand/v2/icon-180.png", sizes: "180x180", type: "image/png" }],
   },
 };
 

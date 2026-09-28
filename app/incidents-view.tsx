@@ -461,7 +461,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
         <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-3.5 lg:px-9">
           <div className="flex items-center gap-2.5">
-            <span className="grid h-8 w-8 place-items-center rounded-full border border-[var(--brand-border)] bg-[var(--brand)] font-mono text-xs font-bold text-[var(--brand-text)]">C</span>
+            <img src="/brand/v2/mark.png" alt="" aria-hidden="true" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
             <div>
               <p className="text-base font-semibold tracking-[-0.03em]">Crime Map</p>
               <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted-text)]">{t('городская лента')}</p>

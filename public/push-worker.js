@@ -4,8 +4,8 @@ self.addEventListener('push', event => {
     body: payload.body || '',
     tag: payload.tag || 'crime-map',
     data: { url: payload.url || '/' },
-    icon: '/favicon.svg',
-    badge: '/favicon.svg',
+    icon: '/brand/v2/icon-192.png',
+    badge: '/brand/v2/badge.png',
   }));
 });
 
