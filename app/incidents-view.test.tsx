@@ -104,7 +104,7 @@ const incidents: IncidentView[] = [
   },
 ];
 
-beforeEach(() => { vi.stubGlobal("matchMedia", (query: string) => ({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})); vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); window.localStorage.setItem("crime-map-safety-notice-v1","accepted"); });
+beforeEach(() => { vi.spyOn(navigator, 'languages', 'get').mockReturnValue(['ru-RU']); vi.stubGlobal("matchMedia", (query: string) => ({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})); vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); window.localStorage.setItem("crime-map-safety-notice-v1","accepted"); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 afterEach(() => {
@@ -117,15 +117,20 @@ describe("IncidentsView", () => {
     const user=userEvent.setup();
     window.localStorage.removeItem("crime-map-safety-notice-v1");
     render(<IncidentsView incidents={incidents} />);
-    expect(await screen.findByRole("dialog", {name:"Важный контекст"})).toBeTruthy();
-    expect(screen.getByText(/лента намеренно показывает исключения/i)).toBeTruthy();
+    expect(await screen.findByRole("dialog", {name:"Город больше, чем его происшествия"})).toBeTruthy();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await user.click(screen.getByRole('button', {name:'Magyar'}));
+    expect(screen.getByRole('dialog', {name:'A város több, mint a hírei'})).toBeTruthy();
+    expect(window.localStorage.getItem('crime-map-language')).toBe('hu');
+    await user.click(screen.getByRole('button', {name:'Русский'}));
     await user.click(screen.getByRole("button", {name:"Понятно, открыть карту"}));
     expect(window.localStorage.getItem("crime-map-safety-notice-v1")).toBe("accepted");
-    expect(screen.queryByRole("dialog", {name:"Важный контекст"})).toBeNull();
+    expect(screen.queryByRole("dialog")).toBeNull();
     await user.click(screen.getByRole("button", {name:"English"}));
     await user.click(screen.getByRole("button", {name:"About this safety context"}));
-    expect(screen.getByRole("dialog", {name:"Important context"})).toBeTruthy();
-    expect(screen.getByText(/not a personal risk assessment/i)).toBeTruthy();
+    expect(screen.getByRole("dialog", {name:"A city is more than its incidents"})).toBeTruthy();
+    expect(screen.getByText(/Budapest is generally a safe city/i)).toBeTruthy();
   });
 
   it("keeps language switching while hiding the paused missing-person section", async () => {

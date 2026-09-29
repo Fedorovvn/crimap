@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { LocaleProvider, useI18n } from "./i18n";
+import { Dialog as DialogPrimitive } from "radix-ui";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
 import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, InfoIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon, XIcon } from "lucide-react";
@@ -282,31 +283,36 @@ function IncidentLocation({ incident, placement }: { incident: IncidentView; pla
   </section>;
 }
 
+function LanguagePicker({ fullNames = false }: { fullNames?: boolean }) {
+  const {locale, setLocale, t} = useI18n();
+  return <div role="group" aria-label={t('Язык')} className={`language-picker ${fullNames ? 'language-picker--full' : ''}`}>
+    {(["ru", "en", "hu"] as const).map(language => <button type="button" key={language} onClick={() => setLocale(language)} aria-label={localeNames[language]} aria-pressed={locale === language}>{fullNames ? localeNames[language] : language.toUpperCase()}</button>)}
+  </div>;
+}
+
 function SafetyNotice({ open, acknowledged, onAcknowledge, onClose }: { open: boolean; acknowledged: boolean; onAcknowledge: () => void; onClose: () => void }) {
   const {t}=useI18n();
-  if (!open) return null;
-  return <div className="fixed inset-0 z-[1200] grid place-items-end bg-black/60 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={event => { if (acknowledged && event.target === event.currentTarget) onClose(); }}>
-    <section role="dialog" aria-modal="true" aria-labelledby="safety-notice-title" className="w-full max-w-md rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
-      <header className="flex items-start justify-between gap-4">
-        <div>
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]">Crime Map</p>
-          <h2 id="safety-notice-title" className="mt-1 text-xl font-semibold tracking-[-0.03em]">{t("Важный контекст")}</h2>
-        </div>
-        {acknowledged && <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="grid size-9 place-items-center rounded-full border border-[var(--hairline)] text-[var(--muted-text)] transition hover:text-[var(--app-text)]"><XIcon aria-hidden="true" className="size-4" /></button>}
-      </header>
-      <p className="mt-5 text-sm leading-6 text-[var(--body-text)]">{t("Crime Map собирает редкие тяжёлые инциденты в одном месте. Поэтому лента намеренно показывает исключения, а не повседневную жизнь города.")}</p>
-      <p className="mt-3 text-sm leading-6 text-[var(--muted-text)]">{t("Это не оценка личного риска и не показатель реального уровня безопасности Будапешта: для большого города таких событий сравнительно мало.")}</p>
-      <section className="mt-5 rounded-2xl border border-[var(--hairline)] bg-[var(--control-bg)] p-4">
-        <h3 className="text-sm font-semibold">{t("Данные для контекста")}</h3>
-        <ul className="mt-2 space-y-2 text-xs leading-5 text-[var(--muted-text)]">
-          <li><a href={EUROSTAT_SAFETY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent-text)] hover:underline">Eurostat ↗</a>{" — "}{t("в Венгрии в 2022 году зарегистрировали 5,5 ограбления на 100 000 жителей — один из низких показателей среди стран ЕС.")}</li>
-          <li><a href={SOLO_TRAVEL_STUDY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent-text)] hover:underline">WayAway / Time Out ↗</a>{" — "}{t("в исследовании 2023 года Будапешт занял третье место среди городов для одиноких путешественниц. Это внешний туристический рейтинг, а не официальная статистика.")}</li>
+  return <DialogPrimitive.Root open={open} onOpenChange={next => { if (!next && acknowledged) onClose(); }}>
+    <DialogPrimitive.Overlay className="safety-backdrop" />
+    <DialogPrimitive.Content className="safety-notice" onEscapeKeyDown={event => { if (!acknowledged) event.preventDefault(); }} onInteractOutside={event => { if (!acknowledged) event.preventDefault(); }}>
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2 text-sm font-semibold"><img src="/brand/v2/mark.png" alt="" width={24} height={24} />Crime Map</div>
+        {acknowledged && <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="grid size-8 place-items-center rounded-full text-[var(--muted-text)] hover:bg-[var(--control-bg)]"><XIcon aria-hidden="true" className="size-4" /></button>}
+      </div>
+      <div className="mt-5"><LanguagePicker fullNames /></div>
+      <DialogPrimitive.Title className="mt-6 text-2xl font-semibold leading-tight tracking-[-0.03em]">{t("Город больше, чем его происшествия")}</DialogPrimitive.Title>
+      <DialogPrimitive.Description className="mt-4 text-sm leading-6 text-[var(--body-text)]">{t("Будапешт — в целом безопасный город. Здесь собраны редкие тяжёлые события, а не повседневная жизнь города.")}</DialogPrimitive.Description>
+      <p className="mt-3 text-sm leading-6 text-[var(--muted-text)]">{t("По этой ленте нельзя оценить вероятность столкнуться с опасностью: мы специально отбираем только происшествия.")}</p>
+      <details className="safety-sources mt-5">
+        <summary className="cursor-pointer py-2 text-xs font-medium text-[var(--muted-text)]">{t("Данные и источники")}</summary>
+        <ul className="mt-2 space-y-4 text-xs leading-5 text-[var(--muted-text)]">
+          <li><a href={EUROSTAT_SAFETY_URL} target="_blank" rel="noreferrer" className="text-[var(--accent-text)]">Eurostat · 2022 ↗</a><p className="mt-1">{t("В Венгрии — 5,5 ограбления на 100 000 жителей, один из низких показателей в ЕС. Это данные по стране, не по Будапешту.")}</p></li>
+          <li><a href={SOLO_TRAVEL_STUDY_URL} target="_blank" rel="noreferrer" className="text-[var(--accent-text)]">WayAway / Time Out · 2023 ↗</a><p className="mt-1">{t("Будапешт — на третьем месте в рейтинге безопасности для одиноких путешественниц. Туристический рейтинг, не официальная статистика.")}</p></li>
         </ul>
-      </section>
-      <p className="mt-4 text-xs leading-5 text-[var(--subtle-text)]">{t("Соблюдайте обычные меры предосторожности и обращайтесь в экстренные службы при непосредственной опасности.")}</p>
-      <button type="button" onClick={acknowledged ? onClose : onAcknowledge} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90">{t(acknowledged ? "Закрыть" : "Понятно, открыть карту")}</button>
-    </section>
-  </div>;
+      </details>
+      <button type="button" onClick={acknowledged ? onClose : onAcknowledge} className="mt-6 w-full rounded-full bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90">{t(acknowledged ? "Вернуться к карте" : "Понятно, открыть карту")}</button>
+    </DialogPrimitive.Content>
+  </DialogPrimitive.Root>;
 }
 
 export function IncidentsView(props: { incidents: IncidentView[] }) {
@@ -610,15 +616,15 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   return (
     <main className="signal-shell flex h-[100dvh] min-h-0 flex-col overflow-hidden bg-[var(--app-bg)] text-[var(--app-text)] xl:block xl:h-auto xl:min-h-screen xl:overflow-visible" data-theme={theme} data-mobile-detail={mobileDetailOpen}>
       <header className="sticky top-0 z-20 shrink-0 border-b border-[var(--hairline)] bg-[var(--app-bg)]">
-        <div className="mx-auto flex max-w-[1440px] items-center justify-between gap-5 px-5 py-3.5 lg:px-9">
-          <div className="flex items-center gap-2.5">
-            <img src="/brand/v2/mark.png" alt="" aria-hidden="true" width={32} height={32} className="h-8 w-8 shrink-0 object-contain" />
+        <div className="site-topbar mx-auto max-w-[1440px] lg:px-9">
+          <div className="site-brand">
+            <img src="/brand/v2/mark.png" alt="" aria-hidden="true" width={32} height={32} className="site-brand-mark" />
             <div>
-              <p className="text-base font-semibold tracking-[-0.03em]">Crime Map</p>
-              <p className="font-mono text-[10px] uppercase tracking-[0.14em] text-[var(--muted-text)]">{t('городская лента')}</p>
+              <p className="site-brand-name">Crime Map</p>
+              <p className="site-brand-caption">{t('городская лента')}</p>
             </div>
           </div>
-          <div className="flex items-center gap-3">
+          <div className="site-topbar-controls">
             <button
               type="button"
               onClick={() => setPushSettingsOpen(true)}
@@ -633,10 +639,12 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             <button type="button" onClick={() => setSafetyNoticeOpen(true)} aria-label={t("О безопасности ленты")} title={t("О безопасности ленты")} className="grid h-8 w-8 place-items-center rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] text-[var(--subtle-text)] transition hover:text-[var(--app-text)]">
               <InfoIcon aria-hidden="true" className="size-4" strokeWidth={2.1} />
             </button>
-            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5 text-[11px] font-semibold" aria-label={t('Язык')}>
-{(["ru","en","hu"] as const).map(language=><button type="button" key={language} onClick={()=>setLocale(language)} aria-label={localeNames[language]} aria-pressed={locale===language} className={`rounded-full px-2 py-1 ${locale===language?"bg-[var(--control-active)] text-[var(--control-active-text)]":"text-[var(--subtle-text)]"}`}>{language.toUpperCase()}</button>)}
-            </div>
-            <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5" aria-label={t('Тема карты и интерфейса')}>
+            <div className="header-language-full"><LanguagePicker /></div>
+            <select className="header-language-compact" aria-label={t('Язык')} value={locale} onChange={event => setLocale(event.target.value as Locale)}>
+              {(["ru", "en", "hu"] as const).map(language => <option key={language} value={language}>{language.toUpperCase()}</option>)}
+            </select>
+            <button type="button" className="header-theme-compact" onClick={() => changeTheme(theme === 'day' ? 'night' : 'day')} aria-label={t('Переключить тему')}><span aria-hidden="true">{theme === 'day' ? '☾' : '☼'}</span></button>
+            <div className="header-theme-full rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5" aria-label={t('Тема карты и интерфейса')}>
               <button type="button" onClick={() => changeTheme("day")} aria-label={t('Дневной режим')} aria-pressed={theme === "day"} className={`grid h-7 w-7 place-items-center rounded-full transition ${theme === "day" ? "bg-[var(--control-active)] text-[var(--control-active-text)]" : "text-[var(--subtle-text)] hover:text-[var(--app-text)]"}`}>
                 <span aria-hidden="true">☼</span>
               </button>
