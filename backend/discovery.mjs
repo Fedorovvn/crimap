@@ -1,6 +1,26 @@
-import {parseFeed} from './sources.mjs';
+import {parseFeed,feeds} from './sources.mjs';
 import {cheapDecision} from './triage.mjs';
 import {hash} from './store.mjs';
+
+export function syncDiscoverySources(store,sourceIds){
+  const active=feeds(sourceIds),urls=new Set(active.map(f=>f.url)),ids=new Set(sourceIds);
+  store.transaction(()=>{
+    for(const job of store.db.prepare("SELECT * FROM jobs WHERE kind IN ('feed','article') AND state IN ('queued','paused','failed')").all()){
+      const payload=JSON.parse(job.payload);
+      const unusedFeed=job.kind==='feed'&&!urls.has(job.job_key);
+      const unusedArticle=job.kind==='article'&&payload.discoveredBy&&!ids.has(payload.discoveredBy)&&!payload.eventId&&!payload.campaignId
+        &&!store.db.prepare('SELECT 1 FROM documents d JOIN observations o ON o.document_id=d.id WHERE d.url=?').get(payload.url??job.job_key);
+      if(unusedFeed||unusedArticle){
+        store.db.prepare("UPDATE jobs SET state='cancelled',rerun=0,last_error=NULL WHERE id=?").run(job.id);
+        store.log('discovery-source-disabled',job.id,{kind:job.kind,sourceId:payload.sourceId??payload.discoveredBy,url:payload.url});
+      }
+    }
+    for(const feed of active){
+      const old=store.db.prepare("SELECT state FROM jobs WHERE kind='feed' AND job_key=?").get(feed.url);
+      if(!old||old.state==='cancelled')store.enqueue('feed',feed.url,feed);
+    }
+  });
+}
 
 // Discovery owns new URLs only. Updates of known articles belong to the event
 // recheck scheduler, never to a changed RSS headline/date/advertising excerpt.

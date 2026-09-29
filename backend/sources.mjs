@@ -8,7 +8,7 @@ export function sourceFor(url){
   const source=catalog.find(s=>[s.url,...(s.feeds??[]).map(f=>f.url)].some(u=>owner(new URL(u).hostname)===owner(host)));
   return source?{...source,kind:source.group==='official'?'official':source.group==='media'?'media':'community',independenceGroup:owner(host)}:null;
 }
-export const LIVE_SOURCE_IDS=['police-brfk','police-national','okf-events','prosecution','kekvillogo','bpiautosok','mavinform','telex','index'];
+export const LIVE_SOURCE_IDS=['police-brfk','kekvillogo'];
 export function feeds(ids=LIVE_SOURCE_IDS){
   return catalog.filter(s=>ids.includes(s.id)).flatMap(s=>(s.feeds??[]).map(f=>({url:f.url,sourceId:s.id,intervalSeconds:3600})));
 }

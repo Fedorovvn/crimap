@@ -9,7 +9,7 @@ import { DatabaseSync } from 'node:sqlite';
 import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
 import { hash,jobBudget } from './store.mjs';
 import { nextCheck, nextPendingFactCheck, intervalFor, retryDelay } from './scheduler.mjs';
-import {discoverFeed} from './discovery.mjs';
+import {discoverFeed,syncDiscoverySources} from './discovery.mjs';
 import { LIVE_SOURCE_IDS, feeds, sourceFor, parseArticle } from './sources.mjs';
 import { canonicalUrl } from './network.mjs';
 import { isDeepStrictEqual } from 'node:util';
@@ -52,7 +52,7 @@ export class Pipeline {
     for(const row of this.store.db.prepare("SELECT id FROM events WHERE public_id IS NOT NULL AND withdrawn_at IS NULL AND merged_into IS NULL AND state!='excluded' AND editorial_mark!='uninteresting'").all())this.store.schedulePublishedRecheck(row.id,{refresh:true});
     for(const e of this.store.db.prepare("SELECT id FROM events WHERE editorial_mark='priority' AND merged_into IS NULL").all())queueEditorialPreparation(this.store,e.id,this.publicPath);
     for(const source of this.publishedSources().filter(s=>s.source_type==='Официально'))if(!this.store.db.prepare("SELECT id FROM jobs WHERE kind='article' AND job_key=?").get(source.source_url))this.store.enqueue('article',source.source_url,{url:source.source_url,publishedAt:source.published_at});
-    for(const feed of feeds(this.sourceIds))if(!this.store.db.prepare('SELECT id FROM jobs WHERE kind=? AND job_key=?').get('feed',feed.url))this.store.enqueue('feed',feed.url,feed);
+    syncDiscoverySources(this.store,this.sourceIds);
     if(this.preparation)for(const e of this.store.db.prepare("SELECT id,revision,campaign_id FROM events WHERE state='draft'").all())if(!this.store.db.prepare('SELECT 1 FROM preparation WHERE event_id=? AND revision=?').get(e.id,e.revision))this.store.enqueue('prepare',e.id,{eventId:e.id,campaignId:e.campaign_id});
     if(this.preparation)for(const e of this.store.db.prepare("SELECT e.id,e.revision,e.campaign_id FROM events e JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru' WHERE e.state='draft'").all())if(!siteTranslations(this.store,e.id,e.revision))this.store.enqueue('localize',e.id,{eventId:e.id,campaignId:e.campaign_id});
   }
@@ -623,6 +623,7 @@ export class Pipeline {
       if(current&&!['article','recheck'].includes(job.kind)&&this.deferTraffic(current.id))return true;
       let next=null;
       if(job.kind==='feed'){
+        if(!feeds(this.sourceIds).some(feed=>feed.url===job.job_key)){this.store.finish(job);return true;}
         await discoverFeed(this.store,this.reader,job.payload);
         next=new Date(Date.now()+job.payload.intervalSeconds*1000).toISOString();
       }else if(job.kind==='article')await this.ingest(job.payload.url,job.payload.publishedAt,job.payload);

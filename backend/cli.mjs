@@ -28,7 +28,7 @@ if(['translate','review','complete-details','prepare','recheck'].includes(comman
 try{
   let result;
   if(command==='worker'){pipeline.seed();while(!stopping){const worked=await pipeline.runOne();if(!worked)await new Promise(r=>setTimeout(r,2000));}}
-  else if(command==='discover'){for(const feed of (await import('./sources.mjs')).feeds(pipeline.sourceIds))if(!store.db.prepare("SELECT 1 FROM jobs WHERE kind='feed' AND job_key=?").get(feed.url))store.enqueue('feed',feed.url,feed);for(let i=0;i<200&&!stopping;i++)if(!await pipeline.runOne({kinds:['feed']}))break;result={discovered:true};}
+  else if(command==='discover'){(await import('./discovery.mjs')).syncDiscoverySources(store,pipeline.sourceIds);for(let i=0;i<200&&!stopping;i++)if(!await pipeline.runOne({kinds:['feed']}))break;result={discovered:true};}
   else if(command==='run'){pipeline.seed();for(let i=0;i<Number(values.limit??10);i++)if(!await pipeline.runOne())break;result={processed:true};}
   else if(command==='ingest'){if(!arg)throw new Error('Supply a registered article URL');result=await pipeline.ingest(arg);}
   else if(command==='recheck')result=await pipeline.recheck(Number(arg));
