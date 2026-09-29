@@ -2,6 +2,7 @@
 
 import dynamic from "next/dynamic";
 import { LocaleProvider, useI18n } from "./i18n";
+import { detectPushSupport } from "./push-support";
 import { Dialog as DialogPrimitive } from "radix-ui";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
@@ -291,7 +292,7 @@ function LanguagePicker({ fullNames = false }: { fullNames?: boolean }) {
 }
 
 function SafetyNotice({ open, acknowledged, onAcknowledge, onClose }: { open: boolean; acknowledged: boolean; onAcknowledge: () => void; onClose: () => void }) {
-  const {t}=useI18n();
+  const {t,locale}=useI18n();
   return <DialogPrimitive.Root open={open} onOpenChange={next => { if (!next && acknowledged) onClose(); }}>
     <DialogPrimitive.Overlay className="safety-backdrop" />
     <DialogPrimitive.Content className="safety-notice" onEscapeKeyDown={event => { if (!acknowledged) event.preventDefault(); }} onInteractOutside={event => { if (!acknowledged) event.preventDefault(); }}>
@@ -303,13 +304,16 @@ function SafetyNotice({ open, acknowledged, onAcknowledge, onClose }: { open: bo
       <DialogPrimitive.Title className="mt-6 text-2xl font-semibold leading-tight tracking-[-0.03em]">{t("Город больше, чем его происшествия")}</DialogPrimitive.Title>
       <DialogPrimitive.Description className="mt-4 text-sm leading-6 text-[var(--body-text)]">{t("Будапешт — в целом безопасный город. Здесь собраны редкие тяжёлые события, а не повседневная жизнь города.")}</DialogPrimitive.Description>
       <p className="mt-3 text-sm leading-6 text-[var(--muted-text)]">{t("По этой ленте нельзя оценить вероятность столкнуться с опасностью: мы специально отбираем только происшествия.")}</p>
-      <details className="safety-sources mt-5">
-        <summary className="cursor-pointer py-2 text-xs font-medium text-[var(--muted-text)]">{t("Данные и источники")}</summary>
-        <ul className="mt-2 space-y-4 text-xs leading-5 text-[var(--muted-text)]">
-          <li><a href={EUROSTAT_SAFETY_URL} target="_blank" rel="noreferrer" className="text-[var(--accent-text)]">Eurostat · 2022 ↗</a><p className="mt-1">{t("В Венгрии — 5,5 ограбления на 100 000 жителей, один из низких показателей в ЕС. Это данные по стране, не по Будапешту.")}</p></li>
-          <li><a href={SOLO_TRAVEL_STUDY_URL} target="_blank" rel="noreferrer" className="text-[var(--accent-text)]">WayAway / Time Out · 2023 ↗</a><p className="mt-1">{t("Будапешт — на третьем месте в рейтинге безопасности для одиноких путешественниц. Туристический рейтинг, не официальная статистика.")}</p></li>
-        </ul>
-      </details>
+      <div className="mt-5 space-y-2">
+        <details className="safety-fact">
+          <summary><span className="safety-fact-number">{locale === 'en' ? '5.5' : '5,5'}</span><span><strong>{t('Один из низких уровней ограблений в ЕС')}</strong><small>{t('Венгрия · на 100 000 жителей · 2022')}</small></span><span className="safety-fact-toggle" aria-hidden="true">+</span></summary>
+          <div className="safety-fact-detail"><p>{t("В Венгрии — 5,5 ограбления на 100 000 жителей, один из низких показателей в ЕС. Это данные по стране, не по Будапешту.")}</p><a href={EUROSTAT_SAFETY_URL} target="_blank" rel="noreferrer">Eurostat ↗</a></div>
+        </details>
+        <details className="safety-fact">
+          <summary><span className="safety-fact-number">#3</span><span><strong>{t('Среди безопасных городов для путешественниц соло')}</strong><small>{t('Будапешт · туристический рейтинг · 2023')}</small></span><span className="safety-fact-toggle" aria-hidden="true">+</span></summary>
+          <div className="safety-fact-detail"><p>{t("Будапешт — на третьем месте в рейтинге безопасности для одиноких путешественниц. Туристический рейтинг, не официальная статистика.")}</p><a href={SOLO_TRAVEL_STUDY_URL} target="_blank" rel="noreferrer">WayAway / Time Out ↗</a></div>
+        </details>
+      </div>
       <button type="button" onClick={acknowledged ? onClose : onAcknowledge} className="mt-6 w-full rounded-full bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90">{t(acknowledged ? "Вернуться к карте" : "Понятно, открыть карту")}</button>
     </DialogPrimitive.Content>
   </DialogPrimitive.Root>;
@@ -337,7 +341,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [preselectedSlug, setPreselectedSlug] = useState(incidents[0]?.slug ?? "");
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number }>();
   const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
-  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "disabled" | "install-required" | "unsupported" | "error">("idle");
+  const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "disabled" | "install-required" | "unsupported" | "denied" | "dismissed" | "error">("idle");
   const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
   const [safetyNoticeOpen, setSafetyNoticeOpen] = useState(false);
   const [safetyNoticeAcknowledged, setSafetyNoticeAcknowledged] = useState(false);
@@ -509,14 +513,23 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
     return Uint8Array.from(raw, character => character.charCodeAt(0));
   }
 
-  async function enablePushNotifications() {
-    const iosBrowser = /iPad|iPhone|iPod/.test(navigator.userAgent);
+  function openPushNotifications() {
+    setPushSettingsOpen(true);
+    if (pushState !== 'enabled') void enablePushNotifications(true);
+  }
+
+  async function enablePushNotifications(keepSettingsOpen = false) {
     const standalone = window.matchMedia("(display-mode: standalone)").matches || (navigator as Navigator & { standalone?: boolean }).standalone === true;
-    if (iosBrowser && !standalone) { setPushState("install-required"); return; }
-    if (!("serviceWorker" in navigator) || !("PushManager" in window) || !("Notification" in window)) { setPushState("unsupported"); return; }
+    const support = detectPushSupport({userAgent:navigator.userAgent, maxTouchPoints:navigator.maxTouchPoints ?? 0, standalone, serviceWorker:'serviceWorker' in navigator, pushManager:'PushManager' in window, notifications:'Notification' in window});
+    if (support !== 'supported') { setPushState(support); return; }
+    if (Notification.permission === 'denied') { setPushState('denied'); return; }
     setPushState("subscribing");
     try {
-      const registration = await navigator.serviceWorker.register("/push-worker.js", { scope: "/" });
+      // Call directly from the click: awaiting a network request first loses the user gesture in Safari.
+      const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
+      if (permission !== 'granted') { setPushState(permission === 'denied' ? 'denied' : 'dismissed'); return; }
+      await navigator.serviceWorker.register("/push-worker.js", { scope: "/" });
+      const registration = await navigator.serviceWorker.ready;
       const config = await fetch("/api/push/config", { cache: "no-store" });
       if (!config.ok) throw new Error("configuration");
       const { enabled, publicKey, cities } = await config.json() as { enabled: boolean; publicKey?: string; cities?: string[] };
@@ -525,10 +538,6 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       const selectedCity = availableCities.includes(pushPreferences.cities[0]) ? pushPreferences.cities[0] : availableCities[0];
       setPushCities(availableCities);
       const existing = await registration.pushManager.getSubscription();
-      if (!existing) {
-        const permission = Notification.permission === "granted" ? "granted" : await Notification.requestPermission();
-        if (permission !== "granted") throw new Error("permission");
-      }
       const subscription = existing ?? await registration.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: vapidKey(publicKey) });
       const preferences = { ...pushPreferences, cities: [selectedCity] };
       const response = await fetch("/api/push/subscriptions", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...subscription.toJSON(), locale, ...preferences }) });
@@ -536,7 +545,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
       window.localStorage.setItem(PUSH_PREFERENCES_KEY, JSON.stringify(preferences));
       setPushPreferences(preferences);
       setPushState("enabled");
-      setPushSettingsOpen(false);
+      setPushSettingsOpen(keepSettingsOpen);
     } catch { setPushState("error"); }
   }
 
@@ -627,7 +636,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           <div className="site-topbar-controls">
             <button
               type="button"
-              onClick={() => setPushSettingsOpen(true)}
+              onClick={openPushNotifications}
               disabled={pushState === "subscribing"}
               aria-pressed={pushState === "enabled"}
               aria-label={t(pushState === "subscribing" ? "Включаем уведомления" : "Настроить уведомления")}
@@ -655,10 +664,23 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </div>
         </div>
       </header>
-      {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-72 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)] shadow-lg">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
       <SafetyNotice open={safetyNoticeOpen} acknowledged={safetyNoticeAcknowledged} onAcknowledge={acknowledgeSafetyNotice} onClose={() => setSafetyNoticeOpen(false)} />
-      {pushSettingsOpen && <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && pushState !== "subscribing") setPushSettingsOpen(false); }}>
-        <section role="dialog" aria-modal="true" aria-labelledby="push-settings-title" className="w-full max-w-md rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
+      <DialogPrimitive.Root open={pushSettingsOpen && pushState === 'install-required'} onOpenChange={setPushSettingsOpen}>
+        <DialogPrimitive.Overlay className="safety-backdrop" />
+        <DialogPrimitive.Content className="safety-notice">
+          <div className="flex items-center justify-between gap-3"><span className="text-sm font-semibold">Crime Map</span><button type="button" onClick={() => setPushSettingsOpen(false)} aria-label={t('Закрыть')} className="grid size-8 place-items-center"><XIcon size={16} /></button></div>
+          <DialogPrimitive.Title className="mt-5 text-xl font-semibold">{t('Уведомления на iPhone и iPad')}</DialogPrimitive.Title>
+          <DialogPrimitive.Description className="mt-3 text-sm leading-6 text-[var(--muted-text)]">{t('Чтобы получать уведомления, добавьте Crime Map на экран «Домой». Нужна iOS 16.4 или новее.')}</DialogPrimitive.Description>
+          <ol className="mt-5 list-decimal space-y-3 pl-5 text-sm leading-6 text-[var(--body-text)]">
+            <li>{t('Откройте меню «Поделиться» в браузере.')}</li>
+            <li>{t('Выберите «На экран Домой» и нажмите «Добавить». Если пункта нет, откройте сайт в Safari.')}</li>
+            <li>{t('Запустите Crime Map с новой иконки, нажмите колокольчик и разрешите уведомления.')}</li>
+          </ol>
+          <button type="button" onClick={() => setPushSettingsOpen(false)} className="mt-6 w-full rounded-full bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)]">{t('Понятно')}</button>
+        </DialogPrimitive.Content>
+      </DialogPrimitive.Root>
+      {pushSettingsOpen && pushState !== 'install-required' && <div className="fixed inset-0 z-[1200] grid place-items-end bg-black/55 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && pushState !== "subscribing") setPushSettingsOpen(false); }}>
+        <section role="dialog" aria-modal="true" aria-labelledby="push-settings-title" className="max-h-[calc(100dvh-24px)] w-full max-w-md overflow-y-auto rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
           <header className="flex items-start justify-between gap-4">
             <div>
               <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]">Crime Map</p>
@@ -666,7 +688,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             </div>
             <button type="button" onClick={() => setPushSettingsOpen(false)} disabled={pushState === "subscribing"} aria-label={t("Закрыть")} className="grid size-9 place-items-center rounded-full border border-[var(--hairline)] text-[var(--muted-text)] transition hover:text-[var(--app-text)] disabled:opacity-50"><XIcon aria-hidden="true" className="size-4" /></button>
           </header>
-          <fieldset className="mt-6">
+          <fieldset className="mt-6" disabled={pushState === 'subscribing'}>
             <legend className="text-sm font-semibold">{t("Какие события присылать")}</legend>
             <div className="mt-3 grid gap-2">
               {PUSH_LEVELS.map(level => <label key={level.value} className={`flex cursor-pointer items-start gap-3 rounded-2xl border p-3 transition ${pushPreferences.severity === level.value ? "border-[var(--accent-text)] bg-[var(--accent-soft)]" : "border-[var(--hairline)] hover:bg-[var(--control-bg)]"}`}>
@@ -677,14 +699,15 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
           </fieldset>
           <label className="mt-5 block text-sm font-semibold">
             {t("Город")}
-            <select value={pushPreferences.cities[0] ?? pushCities[0] ?? "Budapest"} onChange={event => setPushPreferences(current => ({ ...current, cities: [event.target.value] }))} className="mt-2 block w-full rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2.5 text-sm font-medium text-[var(--app-text)] outline-none focus:border-[var(--accent-text)]">
+            <select disabled={pushState === 'subscribing'} value={pushPreferences.cities[0] ?? pushCities[0] ?? "Budapest"} onChange={event => setPushPreferences(current => ({ ...current, cities: [event.target.value] }))} className="mt-2 block w-full rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2.5 text-sm font-medium text-[var(--app-text)] outline-none focus:border-[var(--accent-text)]">
               {pushCities.map(city => <option key={city} value={city}>{city === "Budapest" ? t("Будапешт") : city}</option>)}
             </select>
           </label>
           <p className="mt-2 text-xs leading-5 text-[var(--muted-text)]">{t("Пока доступен Будапешт. Другие города появятся, когда Crime Map начнёт собирать по ним события.")}</p>
-          {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="mt-4 rounded-xl border border-[var(--hairline)] bg-[var(--control-bg)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)]">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+          {(pushState === "unsupported" || pushState === "error" || pushState === "denied" || pushState === "dismissed") && <p role="status" className="mt-4 rounded-xl bg-[var(--control-bg)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)]">{t(pushState === 'denied' ? 'Уведомления заблокированы. Разрешите их в настройках браузера для этого сайта и снова нажмите колокольчик.' : pushState === 'dismissed' ? 'Разрешение пока не получено. Вы можете включить уведомления позже.' : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+          {pushState === 'enabled' && <p role="status" className="mt-4 text-sm text-[var(--success-text)]">{t('Уведомления о новых событиях включены')}</p>}
           {pushState === "disabled" && <p role="status" className="mt-4 text-center text-xs text-[var(--muted-text)]">{t("Уведомления отключены")}</p>}
-          <button type="button" onClick={enablePushNotifications} disabled={pushState === "subscribing"} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90 disabled:cursor-wait disabled:opacity-70">{t(pushState === "subscribing" ? "Включаем уведомления" : pushState === "enabled" ? "Сохранить настройки" : "Включить уведомления")}</button>
+          {!['unsupported','denied'].includes(pushState) && <button type="button" onClick={() => void enablePushNotifications()} disabled={pushState === "subscribing"} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90 disabled:cursor-wait disabled:opacity-70">{t(pushState === "subscribing" ? "Включаем уведомления" : pushState === "enabled" ? "Сохранить настройки" : "Включить уведомления")}</button>}
           {pushState === "enabled" && <button type="button" onClick={disablePushNotifications} className="mt-3 w-full rounded-xl border border-[var(--hairline)] px-4 py-3 text-sm font-semibold text-[var(--muted-text)] transition hover:border-[var(--subtle-text)] hover:text-[var(--app-text)]">{t("Отключить уведомления")}</button>}
         </section>
       </div>}
