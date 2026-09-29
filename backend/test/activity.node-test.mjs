@@ -80,7 +80,7 @@ test('stopping archive discovery preserves priority processing but prevents old 
 });
 test('worker records start and finish separately from a recurring next run',async()=>{
  const s=new Store(':memory:');try{
-  s.enqueue('feed','https://www.police.hu/feed',{url:'https://www.police.hu/feed',sourceId:'police-brfk',intervalSeconds:3600});
+  const {feeds}=await import('../sources.mjs');const feed=feeds(['police-brfk'])[0];s.enqueue('feed',feed.url,feed);
   const p=new Pipeline(s,{reader:{read:async url=>({url,body:'<rss><channel></channel></rss>'})}});
   assert.equal(await p.runOne(),true);
   const logs=s.db.prepare("SELECT action,detail FROM audit WHERE action IN ('job-started','job-finished') ORDER BY id").all();

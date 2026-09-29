@@ -30,6 +30,7 @@ Backend находится в `backend/`: RSS/Atom, чтение статей, D
 - [Контракт всех полей карточек](docs/backend/CONTRACT.md), машинные схемы — `contracts/v2/`
 - [Архитектура, модели и расписание](docs/backend/ARCHITECTURE.md)
 - [Схема фактической валидации, фильтров, возвратов и границ модельных запросов](docs/backend/VALIDATION-FLOW.md)
+- [Тест пакетного Flash-фильтра: решения, ошибки, токены и ограничения](docs/backend/BATCH-TRIAGE-AUDIT-2026-09-29.md) — эксперимент; рабочий фильтр остаётся одиночным.
 - [Запуск, проверка, публикация и файлы предложений](docs/backend/OPERATIONS.md)
 - Инструкции моделей — `backend/prompts/`; каталог источников — `backend/source-catalog.json`.
 

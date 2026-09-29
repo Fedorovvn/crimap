@@ -1,0 +1,1295 @@
+{
+  "startedAt": "2026-09-29T21:03:49.271Z",
+  "note": "Retrospective reviewer labels; geography clarification tuned on this same corpus, not held-out validation. Amounts are estimates, not invoices.",
+  "articles": [
+    {
+      "id": 10,
+      "title": "Emberölés Erzsébetvárosban – a nyomozók mindkét feltételezett elkövetőt elfogták",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/emberoles-erzsebetvarosban-a-nyomozok-mindket",
+      "expected": "keep"
+    },
+    {
+      "id": 1085,
+      "title": "Mentő és személyautó ütközött Budapesten, többen megsérültek",
+      "url": "https://index.hu/belfold/2026/09/29/budapest-ecseri-ut-gyali-ut-mentoauto-szemelyauto-utkozes-serultek-korhaz/",
+      "expected": "defer"
+    },
+    {
+      "id": 808,
+      "title": "A rendőrök kiszúrták a villamosmegállóban a betöréssel gyanúsított férfit, videón mutatták meg, mi történt ezután",
+      "url": "https://index.hu/belfold/2026/09/28/brfk-rendorseg-ujbuda-ferfi-orizetbe-vetel-lakasbetores/",
+      "expected": "drop"
+    },
+    {
+      "id": 1053,
+      "title": "Életet mentett a körzeti megbízott",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/helyi-hirek/eletet-mentett-a-korzeti-megbizott-1",
+      "expected": "drop"
+    },
+    {
+      "id": 134,
+      "title": "Gyilkosság Budapest belvárosában: megöltek egy férfit péntek hajnalban, az elkövetőt keresi a rendőrség | Kékvillogó",
+      "url": "https://kekvillogo.hu/gyilkossag-budapest-belvarosaban-megoltek-egy-ferfit-pentek-hajnalban-az-elkovetot-keresi-a-rendorseg/",
+      "expected": "keep"
+    },
+    {
+      "id": 1075,
+      "title": "Tömegkarambol történt az M0-son, több kilométeres a torlódás",
+      "url": "https://index.hu/belfold/2026/09/29/m0-autout-karambol-baleset-torlodas/",
+      "expected": "defer"
+    },
+    {
+      "id": 768,
+      "title": "Nem akartak hinni a szemüknek az M0-son – videón a jelenet - BpiAutósok.hu",
+      "url": "https://bpiautosok.hu/nem-akartak-hinni-a-szemuknek-az-m0-son-videon-a-jelenet/",
+      "expected": "drop"
+    },
+    {
+      "id": 1052,
+      "title": "Európai elfogatóparancs alapján fogták el",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/europai-elfogatoparancs-alapjan-fogtak-el",
+      "expected": "drop"
+    },
+    {
+      "id": 19,
+      "title": "Elfogták a szurkálót",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/elfogtak-a-szurkalot",
+      "expected": "keep"
+    },
+    {
+      "id": 1073,
+      "title": "Esemény részletei",
+      "url": "https://www.katasztrofavedelem.hu/modules/vesz/esemeny/92414",
+      "expected": "defer"
+    },
+    {
+      "id": 524,
+      "title": "Mentőhelikopter érkezett Gyálra, lezárták az M0-s felhajtóját egy súlyos baleset miatt",
+      "url": "https://index.hu/belfold/2026/09/26/gyal-baleset-m0-korosi-ut-motoros-baleset-utlezaras/",
+      "expected": "drop"
+    },
+    {
+      "id": 1042,
+      "title": "Óbudai korrupciós ügy: kiengedték a börtönből a 2. kerület jelenlegi és volt polgármesterét, valamint az MSZP egykori pártigazgatóját | Kékvillogó",
+      "url": "https://kekvillogo.hu/obudai-korrupcios-ugy-kiengedtek-a-bortonbol-a-2-kerulet-jelenlegi-es-volt-polgarmesteret-valamint-az-mszp-egykori-partigazgatojat/",
+      "expected": "drop"
+    },
+    {
+      "id": 9,
+      "title": "Őrizetben a Soroksári úti halálos baleset gyanúsítottja",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/kozlekedesrendeszet/orizetben-a-soroksari-uti-halalos",
+      "expected": "keep"
+    },
+    {
+      "id": 997,
+      "title": "Esemény részletei",
+      "url": "https://www.katasztrofavedelem.hu/modules/vesz/esemeny/92400",
+      "expected": "drop"
+    },
+    {
+      "id": 507,
+      "title": "Tarjányi Péter Magyar Péter tojásdobálásáról: Az elkövetők megtanulták, hogy közel lehet jutni a miniszterelnökhöz",
+      "url": "https://index.hu/belfold/2026/09/26/tarjanyi-peter-magyar-peter-szolnok-dobalas/",
+      "expected": "drop"
+    },
+    {
+      "id": 1026,
+      "title": "Ösvények vezettek a kábítószerhez",
+      "url": "https://www.police.hu/hu/hirek-es-informaciok/legfrissebb-hireink/bunugyek/osvenyek-vezettek-a-kabitoszerhez",
+      "expected": "drop"
+    },
+    {
+      "id": 124,
+      "title": "Tragédia: meghalt a 6 éves kisfiú, akit hetekkel ezelőtt gázolt el a villamos Budapest belvárosában | Kékvillogó",
+      "url": "https://kekvillogo.hu/tragedia-meghalt-a-6-eves-kisfiu-akit-hetekkel-ezelott-gazolt-el-a-villamos-budapest-belvarosaban/",
+      "expected": "keep"
+    },
+    {
+      "id": 1097,
+      "title": "Őrsi Gergely már otthonról jelentkezett, egyetlen szóval üzent",
+      "url": "https://index.hu/belfold/2026/09/29/orsi-gergely-letartoztatas-otthon-hazaengedtek-buda-parkfenntartas-korrupcio-gyanusitott/",
+      "expected": "drop"
+    },
+    {
+      "id": 200,
+      "title": "Gázolás Budapesten: újra kellett éleszteni egy 25 éves nőt, életveszélyes állapotban vitték kórházba | Kékvillogó",
+      "url": "https://kekvillogo.hu/gazolas-budapesten-ujra-kellett-eleszteni-egy-25-eves-not-eletveszelyes-allapotba-vittek-korhazba/",
+      "expected": "defer"
+    },
+    {
+      "id": 1096,
+      "title": "A honvédség állapotáról tájékozódott Baka András köztársasági elnök",
+      "url": "https://index.hu/belfold/2026/09/29/baka-andras-koztarsasagi-elnok-honvedseg-sandor-zsolt/",
+      "expected": "drop"
+    }
+  ],
+  "summary": [
+    {
+      "group": "single",
+      "calls": 22,
+      "decisions": 20,
+      "agreements": 20,
+      "differences": [],
+      "inputTokens": 57407,
+      "outputTokens": 1968,
+      "ledgerEstimateUsd": 0.0195837,
+      "cacheTimeAdjustedEstimateUsd": 0.0054453539999999995,
+      "failures": 2
+    },
+    {
+      "group": "batch5",
+      "calls": 4,
+      "decisions": 20,
+      "agreements": 20,
+      "differences": [],
+      "inputTokens": 33578,
+      "outputTokens": 1032,
+      "ledgerEstimateUsd": 0.011311799999999999,
+      "cacheTimeAdjustedEstimateUsd": 0.0047715480000000005,
+      "failures": 0
+    },
+    {
+      "group": "batch10",
+      "calls": 2,
+      "decisions": 20,
+      "agreements": 20,
+      "differences": [],
+      "inputTokens": 30096,
+      "outputTokens": 1035,
+      "ledgerEstimateUsd": 0.0102708,
+      "cacheTimeAdjustedEstimateUsd": 0.0026893200000000003,
+      "failures": 0
+    },
+    {
+      "group": "batch10-reversed",
+      "calls": 2,
+      "decisions": 20,
+      "agreements": 20,
+      "differences": [],
+      "inputTokens": 30096,
+      "outputTokens": 946,
+      "ledgerEstimateUsd": 0.010164,
+      "cacheTimeAdjustedEstimateUsd": 0.004630416,
+      "failures": 0
+    },
+    {
+      "group": "batch5-geo-first",
+      "calls": 4,
+      "decisions": 20,
+      "agreements": 18,
+      "differences": [
+        {
+          "id": 524,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "ДТП в Гьяле (вне Будапешта), без подтверждённой смерти; география исключает."
+        },
+        {
+          "id": 997,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "ДТП у Пирто (вне Будапешта), без подтверждённой смерти."
+        }
+      ],
+      "inputTokens": 33950,
+      "outputTokens": 1022,
+      "ledgerEstimateUsd": 0.0114114,
+      "cacheTimeAdjustedEstimateUsd": 0.0047649,
+      "failures": 0
+    },
+    {
+      "group": "batch10-geo-first",
+      "calls": 2,
+      "decisions": 20,
+      "agreements": 18,
+      "differences": [
+        {
+          "id": 524,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "Будапешт? Нет, Дьяль вне Будапешта; ДТП без смерти, вне географии."
+        },
+        {
+          "id": 997,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "Пирто вне Будапешта, ДТП без смерти."
+        }
+      ],
+      "inputTokens": 30282,
+      "outputTokens": 946,
+      "ledgerEstimateUsd": 0.0102198,
+      "cacheTimeAdjustedEstimateUsd": 0.002626188,
+      "failures": 0
+    },
+    {
+      "group": "batch10-reversed-geo-first",
+      "calls": 2,
+      "decisions": 20,
+      "agreements": 18,
+      "differences": [
+        {
+          "id": 997,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "ДТП в Пирто, вне Будапешта."
+        },
+        {
+          "id": 524,
+          "single": "defer",
+          "batch": "drop",
+          "reason": "ДТП в Дьяле, вне Будапешта."
+        }
+      ],
+      "inputTokens": 30282,
+      "outputTokens": 953,
+      "ledgerEstimateUsd": 0.0102282,
+      "cacheTimeAdjustedEstimateUsd": 0.004624883999999999,
+      "failures": 0
+    }
+  ],
+  "decisions": [
+    {
+      "group": "single",
+      "index": 0,
+      "ids": [
+        10
+      ],
+      "decisions": [
+        {
+          "id": 10,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 1,
+      "ids": [
+        1085
+      ],
+      "decisions": [],
+      "error": "Quote belongs to another article or is not verbatim"
+    },
+    {
+      "group": "single",
+      "index": 2,
+      "ids": [
+        808
+      ],
+      "decisions": [
+        {
+          "id": 808,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 3,
+      "ids": [
+        1053
+      ],
+      "decisions": [
+        {
+          "id": 1053,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 4,
+      "ids": [
+        134
+      ],
+      "decisions": [
+        {
+          "id": 134,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 5,
+      "ids": [
+        1075
+      ],
+      "decisions": [
+        {
+          "id": 1075,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 6,
+      "ids": [
+        768
+      ],
+      "decisions": [
+        {
+          "id": 768,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 7,
+      "ids": [
+        1052
+      ],
+      "decisions": [
+        {
+          "id": 1052,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 8,
+      "ids": [
+        19
+      ],
+      "decisions": [],
+      "error": "Quote belongs to another article or is not verbatim"
+    },
+    {
+      "group": "single",
+      "index": 9,
+      "ids": [
+        1073
+      ],
+      "decisions": [
+        {
+          "id": 1073,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 10,
+      "ids": [
+        524
+      ],
+      "decisions": [
+        {
+          "id": 524,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 11,
+      "ids": [
+        1042
+      ],
+      "decisions": [
+        {
+          "id": 1042,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 12,
+      "ids": [
+        9
+      ],
+      "decisions": [
+        {
+          "id": 9,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 13,
+      "ids": [
+        997
+      ],
+      "decisions": [
+        {
+          "id": 997,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 14,
+      "ids": [
+        507
+      ],
+      "decisions": [
+        {
+          "id": 507,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 15,
+      "ids": [
+        1026
+      ],
+      "decisions": [
+        {
+          "id": 1026,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 16,
+      "ids": [
+        124
+      ],
+      "decisions": [
+        {
+          "id": 124,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 17,
+      "ids": [
+        1097
+      ],
+      "decisions": [
+        {
+          "id": 1097,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 18,
+      "ids": [
+        200
+      ],
+      "decisions": [
+        {
+          "id": 200,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 19,
+      "ids": [
+        1096
+      ],
+      "decisions": [
+        {
+          "id": 1096,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5",
+      "index": 0,
+      "ids": [
+        10,
+        1085,
+        808,
+        1053,
+        134
+      ],
+      "decisions": [
+        {
+          "id": 10,
+          "verdict": "keep"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5",
+      "index": 1,
+      "ids": [
+        1075,
+        768,
+        1052,
+        19,
+        1073
+      ],
+      "decisions": [
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1073,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5",
+      "index": 2,
+      "ids": [
+        524,
+        1042,
+        9,
+        997,
+        507
+      ],
+      "decisions": [
+        {
+          "id": 524,
+          "verdict": "defer"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 997,
+          "verdict": "defer"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5",
+      "index": 3,
+      "ids": [
+        1026,
+        124,
+        1097,
+        200,
+        1096
+      ],
+      "decisions": [
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1096,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10",
+      "index": 0,
+      "ids": [
+        10,
+        1085,
+        808,
+        1053,
+        134,
+        1075,
+        768,
+        1052,
+        19,
+        1073
+      ],
+      "decisions": [
+        {
+          "id": 10,
+          "verdict": "keep"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        },
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1073,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10",
+      "index": 1,
+      "ids": [
+        524,
+        1042,
+        9,
+        997,
+        507,
+        1026,
+        124,
+        1097,
+        200,
+        1096
+      ],
+      "decisions": [
+        {
+          "id": 524,
+          "verdict": "defer"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 997,
+          "verdict": "defer"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        },
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1096,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-reversed",
+      "index": 0,
+      "ids": [
+        1096,
+        200,
+        1097,
+        124,
+        1026,
+        507,
+        997,
+        9,
+        1042,
+        524
+      ],
+      "decisions": [
+        {
+          "id": 1096,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        },
+        {
+          "id": 997,
+          "verdict": "defer"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 524,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-reversed",
+      "index": 1,
+      "ids": [
+        1073,
+        19,
+        1052,
+        768,
+        1075,
+        134,
+        1053,
+        808,
+        1085,
+        10
+      ],
+      "decisions": [
+        {
+          "id": 1073,
+          "verdict": "defer"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 10,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 1,
+      "ids": [
+        1085
+      ],
+      "decisions": [
+        {
+          "id": 1085,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "single",
+      "index": 8,
+      "ids": [
+        19
+      ],
+      "decisions": [
+        {
+          "id": 19,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5-geo-first",
+      "index": 0,
+      "ids": [
+        10,
+        1085,
+        808,
+        1053,
+        134
+      ],
+      "decisions": [
+        {
+          "id": 10,
+          "verdict": "keep"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5-geo-first",
+      "index": 1,
+      "ids": [
+        1075,
+        768,
+        1052,
+        19,
+        1073
+      ],
+      "decisions": [
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1073,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5-geo-first",
+      "index": 2,
+      "ids": [
+        524,
+        1042,
+        9,
+        997,
+        507
+      ],
+      "decisions": [
+        {
+          "id": 524,
+          "verdict": "drop"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 997,
+          "verdict": "drop"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch5-geo-first",
+      "index": 3,
+      "ids": [
+        1026,
+        124,
+        1097,
+        200,
+        1096
+      ],
+      "decisions": [
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1096,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-geo-first",
+      "index": 0,
+      "ids": [
+        10,
+        1085,
+        808,
+        1053,
+        134,
+        1075,
+        768,
+        1052,
+        19,
+        1073
+      ],
+      "decisions": [
+        {
+          "id": 10,
+          "verdict": "keep"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        },
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1073,
+          "verdict": "defer"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-geo-first",
+      "index": 1,
+      "ids": [
+        524,
+        1042,
+        9,
+        997,
+        507,
+        1026,
+        124,
+        1097,
+        200,
+        1096
+      ],
+      "decisions": [
+        {
+          "id": 524,
+          "verdict": "drop"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 997,
+          "verdict": "drop"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        },
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1096,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-reversed-geo-first",
+      "index": 0,
+      "ids": [
+        1096,
+        200,
+        1097,
+        124,
+        1026,
+        507,
+        997,
+        9,
+        1042,
+        524
+      ],
+      "decisions": [
+        {
+          "id": 1096,
+          "verdict": "drop"
+        },
+        {
+          "id": 200,
+          "verdict": "defer"
+        },
+        {
+          "id": 1097,
+          "verdict": "drop"
+        },
+        {
+          "id": 124,
+          "verdict": "keep"
+        },
+        {
+          "id": 1026,
+          "verdict": "drop"
+        },
+        {
+          "id": 507,
+          "verdict": "drop"
+        },
+        {
+          "id": 997,
+          "verdict": "drop"
+        },
+        {
+          "id": 9,
+          "verdict": "keep"
+        },
+        {
+          "id": 1042,
+          "verdict": "drop"
+        },
+        {
+          "id": 524,
+          "verdict": "drop"
+        }
+      ],
+      "error": null
+    },
+    {
+      "group": "batch10-reversed-geo-first",
+      "index": 1,
+      "ids": [
+        1073,
+        19,
+        1052,
+        768,
+        1075,
+        134,
+        1053,
+        808,
+        1085,
+        10
+      ],
+      "decisions": [
+        {
+          "id": 1073,
+          "verdict": "defer"
+        },
+        {
+          "id": 19,
+          "verdict": "keep"
+        },
+        {
+          "id": 1052,
+          "verdict": "drop"
+        },
+        {
+          "id": 768,
+          "verdict": "drop"
+        },
+        {
+          "id": 1075,
+          "verdict": "defer"
+        },
+        {
+          "id": 134,
+          "verdict": "keep"
+        },
+        {
+          "id": 1053,
+          "verdict": "drop"
+        },
+        {
+          "id": 808,
+          "verdict": "drop"
+        },
+        {
+          "id": 1085,
+          "verdict": "defer"
+        },
+        {
+          "id": 10,
+          "verdict": "keep"
+        }
+      ],
+      "error": null
+    }
+  ]
+}
