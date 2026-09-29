@@ -26,7 +26,8 @@ export class DeepSeek {
     const scope=['triage','identify','extract'].includes(stage)?readFileSync(new URL('./prompts/editorial-scope.md',import.meta.url),'utf8')+'\n\n':'';
     const correction=stage==='review'&&payload.mode==='correct-translation-fields';
     const legalPolicy=!correction&&payload.mode!=='deferred-traffic-minimal'&&['extract','details','merge','repair','review'].includes(stage)?'\n\n'+readFileSync(new URL('./prompts/legal-coverage.md',import.meta.url),'utf8'):'';
-    const instruction=scope+readFileSync(new URL(`./prompts/${correction?'review-correction':stage}.md`,import.meta.url),'utf8')+legalPolicy;
+    const promptName=correction?'review-correction':stage==='compare'&&payload.mode==='identity-only'?'compare-identity':stage;
+    const instruction=scope+readFileSync(new URL(`./prompts/${promptName}.md`,import.meta.url),'utf8')+legalPolicy;
     const prompt=/\bjson\b/i.test(instruction)?instruction:'Return valid JSON only.\n'+instruction;
     const content=JSON.stringify(payload);if(content.length>160000)throw new Error('Model input exceeds limit');
     const cacheKey=hash({stage,prompt,content,model:this.model,...(images.length?{images,detail:'low'}:{})});
@@ -42,6 +43,7 @@ export class DeepSeek {
     // even for low detail, then account for actual reported tokens below.
     const reserve=((Buffer.byteLength(prompt+content+feedback)+1024*images.length)*prices.input+maxTokens*prices.output)/1e6;
     const id=this.store.reserveCost(stage,this.model,cacheKey,reserve,this.budget,new Date().toISOString(),this.campaignId??null);
+    this.store.log('model-request-metrics',String(id),{stage,model:this.model,mode:payload.mode??null,promptCharacters:prompt.length,inputCharacters:content.length,candidateCount:payload.candidates?.length??0,maxOutputTokens:maxTokens,attempt});
     try{
       const userContent=images.length?[{type:'text',text:content},...images.map(url=>({type:'image_url',image_url:{url,detail:'low'}}))]:content;
       const r=await this.fetcher('https://api.deepseek.com/chat/completions',{method:'POST',headers:{Authorization:`Bearer ${this.key}`,'Content-Type':'application/json'},body:JSON.stringify({model:this.model,thinking:{type:'disabled'},messages:[{role:'system',content:prompt+feedback},{role:'user',content:userContent}],response_format:{type:'json_object'},max_tokens:maxTokens,temperature:0}),signal:AbortSignal.timeout(this.model==='deepseek-v4-pro'?360000:90000)});

@@ -1,10 +1,10 @@
-import {compareBrief} from './dedup.mjs';
+import {compareBrief,comparisonFingerprint} from './dedup.mjs';
 import {setPublicHidden} from './admin-actions.mjs';
 import {stopEventJobs} from './editorial-workflow.mjs';
 
 // Existing records use the same cheap candidate selection and Flash merge as
 // incoming sources. Originals and revision histories remain recoverable.
-export async function consolidate(pipeline,{limit=30,eventIds,candidateIds}={}){
+export async function consolidate(pipeline,{limit=30,eventIds,candidateIds,confirmedComparison}={}){
   const store=pipeline.store,merged=[],checked=new Set();
   let calls=0;
   const rows=()=>store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().map(r=>store.event(r.id));
@@ -21,7 +21,11 @@ export async function consolidate(pipeline,{limit=30,eventIds,candidateIds}={}){
       const documents=[...new Map([...pipeline.eventDocuments(target.id),...pipeline.eventDocuments(duplicate.id)].map(d=>[`${d.id}:${d.contentHash}`,d])).values()];
       let result;
       try{
-        const comparison=await compareBrief(pipeline.model,duplicate.canonical,[target]);
+        // Reuse only the exact same directed comparison. Swapping retained
+        // and duplicate cards changes which facts are new and requires a call.
+        const reusable=confirmedComparison?.incomingId===duplicate.id&&confirmedComparison.targetId===target.id
+          &&confirmedComparison.fingerprint===comparisonFingerprint(duplicate.canonical,[target]);
+        const comparison=reusable?confirmedComparison.result:await compareBrief(pipeline.model,duplicate.canonical,[target]);
         if(comparison.decision==='new')continue;
         if(comparison.decision==='repeat'||[target,duplicate].some(e=>e.editorial_mark==='uninteresting')){
           result={sameEvent:comparison.decision!=='new',hasNewInformation:false,reason:comparison.reason};

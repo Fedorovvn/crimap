@@ -24,9 +24,12 @@ export function installEventIndex(db){
 const stop=new Set('a an the and or of in on at to by for from with as is was were has have had been after before into near between during this that man woman person people police budapest hungary hungarian district kerulet street utca korut megallo years year old died death killed injured incident reported said'.split(' '));
 const words=text=>[...new Set(String(text??'').normalize('NFD').replace(/\p{M}/gu,'').toLowerCase().match(/[\p{L}\p{N}]+/gu)??[])].filter(w=>w.length>=3&&!stop.has(w));
 const searchable=e=>[e.location?.label,e.title,e.summary,...(e.caseReferences??[]),...(e.participants??[]).map(p=>p.profile?.name)].join(' ');
-export function indexedCandidates(store,event,{excludeId,limit=12}={}){
+export function indexedCandidates(store,event,{excludeId,limit=12,documentId}={}){
   const rows=store.db.prepare("SELECT id FROM events WHERE merged_into IS NULL AND state!='excluded'").all().filter(r=>r.id!==excludeId).map(r=>store.event(r.id));
-  const direct=matchCandidates(event,rows);
+  // A known article can change language/title/date and can cover several
+  // incidents. Nominate all retained links, never merge on URL alone.
+  const linkedIds=documentId?new Set(store.db.prepare('SELECT event_id FROM observations WHERE document_id=?').all(documentId).map(r=>r.event_id)):new Set();
+  const direct=[...new Map([...rows.filter(r=>linkedIds.has(r.id)),...matchCandidates(event,rows)].map(r=>[r.id,r])).values()];
   const tokens=words(searchable(event)).slice(0,48);
   if(!tokens.length)return direct;
   // Parameterized, quoted words only: source content cannot inject FTS syntax.

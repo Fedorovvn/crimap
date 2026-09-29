@@ -1,6 +1,6 @@
 import { zodToJsonSchema } from 'zod-to-json-schema';
 import { z } from 'zod';
-import {matchCandidates,identify,compareBrief,comparisonCard,provisionalEvent} from './dedup.mjs';
+import {matchCandidates,identify,compareBrief,comparisonCard,comparisonFingerprint,provisionalEvent} from './dedup.mjs';
 import {consolidate} from './consolidate.mjs';
 import {completeDetails,detailFingerprint,validateLegalLinks} from './details.mjs';
 import {retainLocationCoordinates} from './map-surfaces.mjs';
@@ -167,7 +167,7 @@ export class Pipeline {
       if(!briefs.length){this.store.log('document-processed',`${doc.id}:${doc.contentHash}`,{events:0,filtered:true,irrelevantReason:'В статье не найдено отдельного подходящего происшествия'});return {documentId:doc.id,events:0,filtered:true};}
       focusIncidents=[];
       for(const brief of briefs){
-        const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},this.store.candidates(brief).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})));
+        const comparison=await compareBrief(this.model,{...brief,sourceKind:doc.sourceKind,sourceUrl:doc.url},this.store.candidates(brief,{documentId:doc.id}).map(r=>({...r,sourceKinds:this.eventDocuments(r.id).map(d=>d.sourceKind)})),{document:doc});
         if(comparison.decision!=='new'&&this.store.event(comparison.eventId)?.editorial_mark==='uninteresting')this.ignoreUpdate(comparison.eventId,doc,brief,comparison.reason);
         else if(comparison.decision==='repeat')this.store.log('repeat-skipped',comparison.eventId,{documentId:doc.id,contentHash:doc.contentHash,reason:comparison.reason});
         else if(comparison.decision==='new'&&!brief.occurredAt&&!deferredTraffic)undatedNew.push(brief);
@@ -209,7 +209,7 @@ export class Pipeline {
     const linked=published?rows.filter(r=>r.public_id===published.id):[];
     const confirmed=confirmedTarget?rows.find(r=>r.id===confirmedTarget):null;
     if(confirmedTarget&&!confirmed)throw new Error('Flash-matched event changed; retry identity check');
-    let candidates=confirmed?[confirmed]:(linked.length?linked:this.store.candidates(incoming));
+    let candidates=confirmed?[confirmed]:(linked.length?linked:this.store.candidates(incoming,{documentId:doc.id}));
     let identityMatched=!!confirmed;
     if(!confirmed&&candidates.length){
       const comparison=await compareBrief(this.model,incoming,candidates);
@@ -284,7 +284,9 @@ export class Pipeline {
       this.store.log('identity-gate-clear',key,{eventId:id,candidates:candidates.map(r=>r.id)});return false;
     }
     const scope=this.campaignId,modelScope=this.model.campaignId;
-    let result;try{result=await consolidate(this,{eventIds:[id],candidateIds:[comparison.eventId],limit:1});}
+    const matched=candidates.find(r=>r.id===comparison.eventId);
+    const confirmedComparison={incomingId:id,targetId:matched.id,fingerprint:comparisonFingerprint(row.canonical,[matched]),result:comparison};
+    let result;try{result=await consolidate(this,{eventIds:[id],candidateIds:[comparison.eventId],limit:1,confirmedComparison});}
     finally{this.campaignId=scope;this.model.campaignId=modelScope;}
     if(!result.merged.length)throw new Error('Flash identified a duplicate but merge needs retry; expensive preparation blocked');
     const current=this.store.event(id);
