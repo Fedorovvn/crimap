@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { LocaleProvider, useI18n } from "./i18n";
 import { dateLocales, localeNames, translateContent, type Locale } from "./locale";
 import { useCallback, useEffect, useMemo, useRef, useState, type SVGProps } from "react";
-import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon, XIcon } from "lucide-react";
+import { ArrowLeftIcon, BellRingIcon, CarFrontIcon, CrossIcon, InfoIcon, LocateFixedIcon, MapPinIcon, SearchIcon, ShieldAlertIcon, SkullIcon, SwordsIcon, TriangleAlertIcon, WalletCardsIcon, XIcon } from "lucide-react";
 import { filterIncidents, matchesSeverity, PERIODS, SEVERITIES, type Severity, selectVisibleIncident } from "./incidents-model";
 import { HandcuffsIcon } from "./incident-icons";
 import { IncidentParticipants } from "./incident-participants";
@@ -24,6 +24,9 @@ function MapLoading() { const {t}=useI18n(); return <div className="grid h-full 
 
 const LIVE_FEED_INTERVAL_MS = 15_000;
 const LIVE_FEED_LAST_SUCCESS_KEY = "crime-map-feed-last-success";
+const SAFETY_NOTICE_ACK_KEY = "crime-map-safety-notice-v1";
+const EUROSTAT_SAFETY_URL = "https://ec.europa.eu/eurostat/statistics-explained/SEPDF/cache/112347.pdf";
+const SOLO_TRAVEL_STUDY_URL = "https://www.timeout.com/news/revealed-the-safest-cities-for-solo-women-travellers-032823";
 
 export type IncidentView = {
   translations?: Partial<Record<"en" | "hu", Record<string, string>>>;
@@ -279,6 +282,33 @@ function IncidentLocation({ incident, placement }: { incident: IncidentView; pla
   </section>;
 }
 
+function SafetyNotice({ open, acknowledged, onAcknowledge, onClose }: { open: boolean; acknowledged: boolean; onAcknowledge: () => void; onClose: () => void }) {
+  const {t}=useI18n();
+  if (!open) return null;
+  return <div className="fixed inset-0 z-[1200] grid place-items-end bg-black/60 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={event => { if (acknowledged && event.target === event.currentTarget) onClose(); }}>
+    <section role="dialog" aria-modal="true" aria-labelledby="safety-notice-title" className="w-full max-w-md rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
+      <header className="flex items-start justify-between gap-4">
+        <div>
+          <p className="font-mono text-[11px] font-semibold uppercase tracking-[0.14em] text-[var(--subtle-text)]">Crime Map</p>
+          <h2 id="safety-notice-title" className="mt-1 text-xl font-semibold tracking-[-0.03em]">{t("Важный контекст")}</h2>
+        </div>
+        {acknowledged && <button type="button" onClick={onClose} aria-label={t("Закрыть")} className="grid size-9 place-items-center rounded-full border border-[var(--hairline)] text-[var(--muted-text)] transition hover:text-[var(--app-text)]"><XIcon aria-hidden="true" className="size-4" /></button>}
+      </header>
+      <p className="mt-5 text-sm leading-6 text-[var(--body-text)]">{t("Crime Map собирает редкие тяжёлые инциденты в одном месте. Поэтому лента намеренно показывает исключения, а не повседневную жизнь города.")}</p>
+      <p className="mt-3 text-sm leading-6 text-[var(--muted-text)]">{t("Это не оценка личного риска и не показатель реального уровня безопасности Будапешта: для большого города таких событий сравнительно мало.")}</p>
+      <section className="mt-5 rounded-2xl border border-[var(--hairline)] bg-[var(--control-bg)] p-4">
+        <h3 className="text-sm font-semibold">{t("Данные для контекста")}</h3>
+        <ul className="mt-2 space-y-2 text-xs leading-5 text-[var(--muted-text)]">
+          <li><a href={EUROSTAT_SAFETY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent-text)] hover:underline">Eurostat ↗</a>{" — "}{t("в Венгрии в 2022 году зарегистрировали 5,5 ограбления на 100 000 жителей — один из низких показателей среди стран ЕС.")}</li>
+          <li><a href={SOLO_TRAVEL_STUDY_URL} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent-text)] hover:underline">WayAway / Time Out ↗</a>{" — "}{t("в исследовании 2023 года Будапешт занял третье место среди городов для одиноких путешественниц. Это внешний туристический рейтинг, а не официальная статистика.")}</li>
+        </ul>
+      </section>
+      <p className="mt-4 text-xs leading-5 text-[var(--subtle-text)]">{t("Соблюдайте обычные меры предосторожности и обращайтесь в экстренные службы при непосредственной опасности.")}</p>
+      <button type="button" onClick={acknowledged ? onClose : onAcknowledge} className="mt-6 w-full rounded-xl bg-[var(--control-active)] px-4 py-3 text-sm font-semibold text-[var(--control-active-text)] transition hover:opacity-90">{t(acknowledged ? "Закрыть" : "Понятно, открыть карту")}</button>
+    </section>
+  </div>;
+}
+
 export function IncidentsView(props: { incidents: IncidentView[] }) {
   return <LocaleProvider><LocalizedIncidentsView {...props} /></LocaleProvider>;
 }
@@ -303,6 +333,8 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   const [locationState, setLocationState] = useState<"idle" | "locating" | "ready" | "error">("idle");
   const [pushState, setPushState] = useState<"idle" | "subscribing" | "enabled" | "disabled" | "install-required" | "unsupported" | "error">("idle");
   const [pushSettingsOpen, setPushSettingsOpen] = useState(false);
+  const [safetyNoticeOpen, setSafetyNoticeOpen] = useState(false);
+  const [safetyNoticeAcknowledged, setSafetyNoticeAcknowledged] = useState(false);
   const [pushPreferences, setPushPreferences] = useState<PushPreference>(DEFAULT_PUSH_PREFERENCES);
   const [pushCities, setPushCities] = useState<string[]>(DEFAULT_PUSH_PREFERENCES.cities);
   const feedRef = useRef<HTMLDivElement>(null);
@@ -384,6 +416,15 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   }, []);
 
   useEffect(() => {
+    const acknowledged = window.localStorage.getItem(SAFETY_NOTICE_ACK_KEY) === "accepted";
+    const task = window.setTimeout(() => {
+      setSafetyNoticeAcknowledged(acknowledged);
+      setSafetyNoticeOpen(!acknowledged);
+    }, 0);
+    return () => window.clearTimeout(task);
+  }, []);
+
+  useEffect(() => {
     try {
       const saved = JSON.parse(window.localStorage.getItem(PUSH_PREFERENCES_KEY) ?? "null");
       if (saved && ["all", "serious", "fatal"].includes(saved.severity) && Array.isArray(saved.cities) && saved.cities.every((city: unknown) => typeof city === "string")) setPushPreferences({ severity: saved.severity, cities: saved.cities });
@@ -424,6 +465,12 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
   function changeTheme(nextTheme: "day" | "night") {
     setTheme(nextTheme);
     window.localStorage.setItem("budapest-signal-theme", nextTheme);
+  }
+
+  function acknowledgeSafetyNotice() {
+    window.localStorage.setItem(SAFETY_NOTICE_ACK_KEY, "accepted");
+    setSafetyNoticeAcknowledged(true);
+    setSafetyNoticeOpen(false);
   }
 
   function openIncident(slug: string) {
@@ -583,6 +630,9 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
             >
               <BellRingIcon aria-hidden="true" className={pushState === "subscribing" ? "size-4 animate-pulse" : "size-4"} strokeWidth={2.1} />
             </button>
+            <button type="button" onClick={() => setSafetyNoticeOpen(true)} aria-label={t("О безопасности ленты")} title={t("О безопасности ленты")} className="grid h-8 w-8 place-items-center rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] text-[var(--subtle-text)] transition hover:text-[var(--app-text)]">
+              <InfoIcon aria-hidden="true" className="size-4" strokeWidth={2.1} />
+            </button>
             <div className="flex rounded-full border border-[var(--hairline)] bg-[var(--control-bg)] p-0.5 text-[11px] font-semibold" aria-label={t('Язык')}>
 {(["ru","en","hu"] as const).map(language=><button type="button" key={language} onClick={()=>setLocale(language)} aria-label={localeNames[language]} aria-pressed={locale===language} className={`rounded-full px-2 py-1 ${locale===language?"bg-[var(--control-active)] text-[var(--control-active-text)]":"text-[var(--subtle-text)]"}`}>{language.toUpperCase()}</button>)}
             </div>
@@ -598,6 +648,7 @@ function LocalizedIncidentsView({ incidents }: { incidents: IncidentView[] }) {
         </div>
       </header>
       {(pushState === "install-required" || pushState === "unsupported" || pushState === "error") && <p role="status" className="absolute right-5 top-[4.5rem] z-30 max-w-72 rounded-xl border border-[var(--hairline)] bg-[var(--card)] px-3 py-2 text-xs leading-5 text-[var(--muted-text)] shadow-lg">{t(pushState === "install-required" ? "На iPhone добавьте Crime Map на экран «Домой», откройте его с иконки и включите уведомления." : pushState === "unsupported" ? "Уведомления недоступны в этом браузере" : "Не удалось включить уведомления")}</p>}
+      <SafetyNotice open={safetyNoticeOpen} acknowledged={safetyNoticeAcknowledged} onAcknowledge={acknowledgeSafetyNotice} onClose={() => setSafetyNoticeOpen(false)} />
       {pushSettingsOpen && <div className="fixed inset-0 z-50 grid place-items-end bg-black/55 p-3 backdrop-blur-sm sm:place-items-center sm:p-5" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget && pushState !== "subscribing") setPushSettingsOpen(false); }}>
         <section role="dialog" aria-modal="true" aria-labelledby="push-settings-title" className="w-full max-w-md rounded-3xl border border-[var(--hairline)] bg-[var(--card)] p-5 text-[var(--app-text)] shadow-2xl sm:p-6">
           <header className="flex items-start justify-between gap-4">

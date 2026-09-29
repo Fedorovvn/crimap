@@ -104,7 +104,7 @@ const incidents: IncidentView[] = [
   },
 ];
 
-beforeEach(() => { vi.stubGlobal("matchMedia", (query: string) => ({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})); vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); });
+beforeEach(() => { vi.stubGlobal("matchMedia", (query: string) => ({matches:false,media:query,addEventListener:vi.fn(),removeEventListener:vi.fn()})); vi.spyOn(Date, "now").mockReturnValue(REFERENCE_TIME); window.history.replaceState(null,'','/'); window.localStorage.setItem("crime-map-safety-notice-v1","accepted"); });
 afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 
 afterEach(() => {
@@ -113,6 +113,21 @@ afterEach(() => {
 });
 
 describe("IncidentsView", () => {
+  it("requires a first-visit safety acknowledgement and keeps the context available in every language", async () => {
+    const user=userEvent.setup();
+    window.localStorage.removeItem("crime-map-safety-notice-v1");
+    render(<IncidentsView incidents={incidents} />);
+    expect(await screen.findByRole("dialog", {name:"Важный контекст"})).toBeTruthy();
+    expect(screen.getByText(/лента намеренно показывает исключения/i)).toBeTruthy();
+    await user.click(screen.getByRole("button", {name:"Понятно, открыть карту"}));
+    expect(window.localStorage.getItem("crime-map-safety-notice-v1")).toBe("accepted");
+    expect(screen.queryByRole("dialog", {name:"Важный контекст"})).toBeNull();
+    await user.click(screen.getByRole("button", {name:"English"}));
+    await user.click(screen.getByRole("button", {name:"About this safety context"}));
+    expect(screen.getByRole("dialog", {name:"Important context"})).toBeTruthy();
+    expect(screen.getByText(/not a personal risk assessment/i)).toBeTruthy();
+  });
+
   it("keeps language switching while hiding the paused missing-person section", async () => {
     const user=userEvent.setup();
     window.history.replaceState(null,'','/?section=missing');
