@@ -52,10 +52,13 @@ test('an update is delivered only after Pro marks it as materially significant',
     const blocked=await sendPublishedPushes(store,{eventId:3,revision:2},{send:async()=>assert.fail('routine update must not send')});
     assert.deepEqual(blocked,{skipped:true});
     store.db.prepare('UPDATE quality_reviews SET payload=? WHERE event_id=3 AND revision=2').run(JSON.stringify({verdict:'pass',publicationBaseline:'published-v1',notification:{send:true,reason:'Полиция задержала подозреваемого.'}}));
-    let sent=0;
-    const allowed=await sendPublishedPushes(store,{eventId:3,revision:2},{send:async()=>{sent++;}});
+    let sent=0,payload;
+    const allowed=await sendPublishedPushes(store,{eventId:3,revision:2},{send:async(_subscription,raw)=>{sent++;payload=JSON.parse(raw);}});
     assert.deepEqual(allowed,{sent:1,removed:0,failed:0});
     assert.equal(sent,1);
+    assert.equal(payload.kind,'update');
+    assert.equal(payload.title,'Обновление: '+event.title);
+    assert.match(payload.body,/Полиция задержала подозреваемого/);
   }finally{
     store.close();
     for(const [name,value] of Object.entries({VAPID_PUBLIC_KEY:previous.public,VAPID_PRIVATE_KEY:previous.private,VAPID_SUBJECT:previous.subject})) value===undefined?delete process.env[name]:process.env[name]=value;

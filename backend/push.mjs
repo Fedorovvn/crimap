@@ -68,6 +68,7 @@ export function removePushSubscription(store, raw) {
 }
 
 function localized(strings, locale, text) { return locale==='ru'?text:strings?.[locale]?.[text]??text; }
+const updatePrefix={ru:'Обновление: ',en:'Update: ',hu:'Frissítés: '};
 
 export async function sendPublishedPushes(store, {eventId,revision,publicationKind}, {send=webpush.sendNotification}={}) {
   const config=pushConfig();
@@ -91,7 +92,10 @@ export async function sendPublishedPushes(store, {eventId,revision,publicationKi
   const eligible=subscriptions.filter(subscription=>matchesPushPreferences(canonical,subscription)&&!delivered.has(subscription.endpoint));
   let sent=0,removed=0,failed=0;
   await Promise.all(eligible.map(async subscription => {
-    const payload=JSON.stringify({title:localized(translations,subscription.locale,card.title),body:localized(translations,subscription.locale,card.summary).slice(0,240),url:`/?incident=${encodeURIComponent(event.slug)}`,tag:`incident-${event.slug}`});
+    const title=localized(translations,subscription.locale,card.title);
+    const summary=localized(translations,subscription.locale,card.summary);
+    const reason=isUpdate&&subscription.locale==='ru'?`${reviewPayload.notification.reason} ${summary}`:summary;
+    const payload=JSON.stringify({title:isUpdate?updatePrefix[subscription.locale]+title:title,body:reason.slice(0,240),kind:isUpdate?'update':'new',url:`/?incident=${encodeURIComponent(event.slug)}`,tag:`incident-${event.slug}`});
     try {
       await send({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth}},payload,{TTL:3600,urgency:'high',topic:`incident-${eventId}`,vapidDetails:{subject:config.subject,publicKey:config.publicKey,privateKey:config.privateKey}});
       store.db.prepare('INSERT OR IGNORE INTO push_deliveries(event_id,revision,endpoint,delivered_at) VALUES(?,?,?,?)').run(eventId,revision,subscription.endpoint,new Date().toISOString());

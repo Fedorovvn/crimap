@@ -6,6 +6,7 @@ self.addEventListener('push', event => {
     data: { url: payload.url || '/' },
     icon: '/brand/v2/icon-192.png',
     badge: '/brand/v2/badge.png',
+    renotify: payload.kind === 'update',
   }));
 });
 
