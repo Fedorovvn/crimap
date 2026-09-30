@@ -6,7 +6,7 @@ import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {Store} from '../store.mjs';
 import {Pipeline} from '../pipeline.mjs';
-import {publish,migratePublic} from '../publish.mjs';
+import {publish,migratePublic,shouldSendPublicationPush} from '../publish.mjs';
 import {eventDetail,documentsFor} from '../editorial.mjs';
 import {readPublication,comparisonFor,publicationChanges,reviewChanges} from '../publication-comparison.mjs';
 import {queueEditorialPreparation} from '../editorial-workflow.mjs';
@@ -31,6 +31,12 @@ test('actual public projection has no false differences for sources, dates, tran
   assert.deepEqual(comparison.changes,[]);assert.equal(comparison.revision,1);assert.equal(current.snapshot.status,'Подозреваемые задержаны');
   const db=new DatabaseSync(f.path);db.prepare("UPDATE incident_metadata SET details=json_set(details,'$.hidden',1)").run();db.close();assert.equal(readPublication(f.path,'test'),null);
  }finally{f.close();}
+});
+
+test('only new events and Pro-approved material updates can enqueue a push',()=>{
+ assert.equal(shouldSendPublicationPush({isUpdate:false,review:{}}),true);
+ assert.equal(shouldSendPublicationPush({isUpdate:true,review:{notification:{send:false,reason:'Перевод'}}}),false);
+ assert.equal(shouldSendPublicationPush({isUpdate:true,review:{notification:{send:true,reason:'Подозреваемый задержан'}}}),true);
 });
 
 test('Flash skips a wording-only update before translations and Pro, without approving or losing the draft',async()=>{
@@ -75,7 +81,7 @@ test('Pro receives the real published version, saves a comparison baseline and c
  const f=fixture();try{
   const changed={...f.event,title:'Robbery suspect detained'};f.s.db.prepare('UPDATE events SET canonical=?,revision=2 WHERE id=1').run(JSON.stringify(changed));f.drafts(2,changed);
   let received=false;
-  const p=new Pipeline(f.s,{publicPath:f.path,model:{json:async(stage,_payload,{validate})=>{assert.equal(stage,'update-compare');return validate({decision:'changed',confidence:.99,reason:'Уточнение заголовка.'});}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{received=true;assert.ok(payload.schema.required.includes('publicationSummary'));assert.equal(payload.currentPublication.snapshot.title,f.event.title);assert.equal(payload.currentPublication.revision,1);assert.ok(payload.proposedPublicationChanges.some(c=>c.path==='title'));return validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'В заголовке уточнено задержание подозреваемого.',issues:[],requests:[],final:{}});}}});
+  const p=new Pipeline(f.s,{publicPath:f.path,model:{json:async(stage,_payload,{validate})=>{assert.equal(stage,'update-compare');return validate({decision:'changed',confidence:.99,reason:'Уточнение заголовка.'});}},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{received=true;assert.ok(payload.schema.required.includes('publicationSummary'));assert.ok(payload.schema.required.includes('notification'));assert.equal(payload.currentPublication.snapshot.title,f.event.title);assert.equal(payload.currentPublication.revision,1);assert.ok(payload.proposedPublicationChanges.some(c=>c.path==='title'));return validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'В заголовке уточнено задержание подозреваемого.',notification:{send:true,reason:'Подозреваемый задержан.'},issues:[],requests:[],final:{}});}}});
   await p.review(1,2);assert.ok(received);
   const detail=eventDetail(f.s,1,f.path);assert.equal(detail.comparison.reviewed,true);assert.equal(detail.blockers.length,0);assert.ok(detail.comparison.changes.some(c=>c.path==='title'));assert.equal(detail.published.title,f.event.title);
   const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET summary='Updated separately' WHERE slug='test'").run();db.close();
@@ -87,7 +93,7 @@ test('Pro receives the real published version, saves a comparison baseline and c
 test('publication changed during Pro processing invalidates the result rather than recording stale approval',async()=>{
  const f=fixture();try{
   f.s.db.prepare('UPDATE events SET revision=2 WHERE id=1').run();f.drafts(2);
-  const p=new Pipeline(f.s,{publicPath:f.path,model:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{const out=validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'Содержательных изменений нет.',issues:[],requests:[],final:{}});const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET title='Changed while reviewing'").run();db.close();return out;}}});
+  const p=new Pipeline(f.s,{publicPath:f.path,model:{},reviewer:{model:'pro',json:async(stage,payload,{validate})=>{const out=validate({legalCoverage:{status:'no-suspect',reason:'В источнике нет сведений о подозреваемом.',participants:[]},verdict:'pass',summary:'Проверено',publicationSummary:'Содержательных изменений нет.',notification:{send:false,reason:'Изменений фактов нет.'},issues:[],requests:[],final:{}});const db=new DatabaseSync(f.path);db.prepare("UPDATE incidents SET title='Changed while reviewing'").run();db.close();return out;}}});
   f.s.log('editorial-retry',1,{revision:2});
   await assert.rejects(p.review(1,2),/Published version changed/);assert.equal(f.s.db.prepare('SELECT count(*) n FROM quality_reviews WHERE revision=2').get().n,0);
  }finally{f.close();}

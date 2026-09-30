@@ -7,6 +7,9 @@ import { isPublishableLegal } from '../app/legal-model.ts';
 import { siteTranslations, displayStrings } from './site-localization.mjs';
 import { typeLabels,statusLabels as statuses,precisionLabels,verificationLabel,readPublication } from './publication-comparison.mjs';
 export { typeLabels } from './publication-comparison.mjs';
+export function shouldSendPublicationPush({isUpdate,review}){
+  return !isUpdate||review?.notification?.send===true;
+}
 export function migratePublic(path){
   const db=new DatabaseSync(path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; CREATE TABLE IF NOT EXISTS collector_migrations(name TEXT PRIMARY KEY)');
   try{for(const name of readdirSync(new URL('../drizzle/',import.meta.url)).filter(n=>n.endsWith('.sql')).sort()){
@@ -24,6 +27,7 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
   if(row.merged_into||row.state==='excluded')throw new Error('Event is merged or excluded');
   const review=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(eventId,row.revision);
   if(!review||JSON.parse(review.payload).verdict!=='pass')throw new Error('Current revision needs a passing quality review');
+  const reviewPayload=JSON.parse(review.payload);
   const translation=store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(eventId,row.revision);
   if(!translation)throw new Error('Current Russian translation is missing');
   const event=eventSchema.parse(JSON.parse(translation.payload));
@@ -38,8 +42,8 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
   const verification=verificationLabel(documents);
   const db=new DatabaseSync(path);db.exec('PRAGMA foreign_keys=ON; PRAGMA busy_timeout=5000; BEGIN IMMEDIATE');
   try{
-    const baseline=readPublication(db,row.slug);
-    if(baseline&&row.published_revision!==row.revision&&JSON.parse(review.payload).publicationBaseline!==baseline.fingerprint)throw new Error('Published event changed or has not been compared by Pro; review the update again');
+    const baseline=readPublication(db,row.slug),isUpdate=Boolean(baseline&&row.published_revision!==null);
+    if(baseline&&row.published_revision!==row.revision&&reviewPayload.publicationBaseline!==baseline.fingerprint)throw new Error('Published event changed or has not been compared by Pro; review the update again');
     db.prepare(`INSERT INTO incidents(slug,title,category,status,verification,district,location_label,location_precision,latitude,longitude,occurred_at,summary,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(slug) DO UPDATE SET title=excluded.title,category=excluded.category,status=excluded.status,verification=excluded.verification,district=excluded.district,location_label=excluded.location_label,location_precision=excluded.location_precision,latitude=excluded.latitude,longitude=excluded.longitude,occurred_at=excluded.occurred_at,summary=excluded.summary,updated_at=excluded.updated_at`).run(row.slug,event.title,typeLabels[event.type],statuses[event.status],verification,event.location.district??'Будапешт',event.location.label,precisionLabels[event.location.precision],event.location.latitude,event.location.longitude,event.occurredAt,event.summary,new Date().toISOString());
     const id=Number(db.prepare('SELECT id FROM incidents WHERE slug=?').get(row.slug).id);
     for(const table of ['incident_sources','incident_updates','incident_media','incident_participants','incident_context','incident_legal'])db.prepare(`DELETE FROM ${table} WHERE incident_id=?`).run(id);
@@ -55,7 +59,8 @@ export function publish(store,eventId,path,{includeContext=false,includeLegal=fa
     const translations=languages?Object.fromEntries(Object.entries(languages).map(([language,strings])=>[language,Object.fromEntries(Object.entries(strings).filter(([text])=>publicTexts.has(text)))])):undefined;
     db.prepare('INSERT OR REPLACE INTO incident_metadata VALUES(?,?)').run(id,JSON.stringify({eventType:event.type,signals:event.signals,contractVersion:'2.0',revision:row.revision,timePrecision:event.timePrecision,translations}));
     db.exec('COMMIT');
-    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=?,withdrawn_at=NULL WHERE id=?").run(row.revision,id,eventId);store.schedulePublishedRecheck(eventId);store.enqueue('push',`${eventId}:${row.revision}`,{eventId,revision:row.revision,publicId:id});store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal});};
+    const sendPush=shouldSendPublicationPush({isUpdate,review:reviewPayload});
+    const record=()=>{store.db.prepare("UPDATE events SET state='published',published_revision=?,public_id=?,withdrawn_at=NULL WHERE id=?").run(row.revision,id,eventId);store.schedulePublishedRecheck(eventId);if(sendPush)store.enqueue('push',`${eventId}:${row.revision}`,{eventId,revision:row.revision,publicId:id,publicationKind:isUpdate?'update':'new'});else store.log('push-skipped',eventId,{revision:row.revision,reason:'Update is not notification-worthy according to Pro',notification:reviewPayload.notification??null});store.log('published',eventId,{revision:row.revision,publicId:id,reviewer,includeContext,includeLegal,notification:sendPush?'queued':'skipped'});};
     if(store.db.isTransaction)record();else store.transaction(record);return id;
   }catch(e){if(db.isTransaction)db.exec('ROLLBACK');throw e;}finally{db.close();}
 }

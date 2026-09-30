@@ -69,28 +69,39 @@ export function removePushSubscription(store, raw) {
 
 function localized(strings, locale, text) { return locale==='ru'?text:strings?.[locale]?.[text]??text; }
 
-export async function sendPublishedPushes(store, {eventId,revision}, {send=webpush.sendNotification}={}) {
+export async function sendPublishedPushes(store, {eventId,revision,publicationKind}, {send=webpush.sendNotification}={}) {
   const config=pushConfig();
   if (!config) { store.log('push-skipped',eventId,{revision,reason:'VAPID is not configured'}); return {skipped:true}; }
   const event=store.db.prepare('SELECT slug,published_revision,canonical FROM events WHERE id=?').get(eventId);
   if (!event || event.published_revision!==revision) return {skipped:true};
+  const review=store.db.prepare('SELECT payload FROM quality_reviews WHERE event_id=? AND revision=?').get(eventId,revision);
+  const reviewPayload=JSON.parse(review?.payload??'{}');
+  // A queued update from before this policy may finish after deployment. It is
+  // safer to skip it than to send an unreviewed interruption.
+  const isUpdate=publicationKind==='update'||Boolean(reviewPayload.publicationBaseline);
+  if(isUpdate&&reviewPayload.notification?.send!==true){
+    store.log('push-skipped',eventId,{revision,reason:'Update has no Pro-approved significant change'});
+    return {skipped:true};
+  }
   const russian=store.db.prepare("SELECT payload FROM translations WHERE event_id=? AND revision=? AND language='ru'").get(eventId,revision);
   if (!russian) throw new Error('Published Russian text is missing for push notification');
   const card=JSON.parse(russian.payload),canonical=JSON.parse(event.canonical),translations=siteTranslations(store,eventId,revision);
   const subscriptions=store.db.prepare('SELECT endpoint,p256dh,auth,locale,severity,cities FROM push_subscriptions').all();
-  const eligible=subscriptions.filter(subscription=>matchesPushPreferences(canonical,subscription));
+  const delivered=new Set(store.db.prepare('SELECT endpoint FROM push_deliveries WHERE event_id=? AND revision=?').all(eventId,revision).map(row=>row.endpoint));
+  const eligible=subscriptions.filter(subscription=>matchesPushPreferences(canonical,subscription)&&!delivered.has(subscription.endpoint));
   let sent=0,removed=0,failed=0;
   await Promise.all(eligible.map(async subscription => {
     const payload=JSON.stringify({title:localized(translations,subscription.locale,card.title),body:localized(translations,subscription.locale,card.summary).slice(0,240),url:`/?incident=${encodeURIComponent(event.slug)}`,tag:`incident-${event.slug}`});
     try {
       await send({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth}},payload,{TTL:3600,urgency:'high',topic:`incident-${eventId}`,vapidDetails:{subject:config.subject,publicKey:config.publicKey,privateKey:config.privateKey}});
+      store.db.prepare('INSERT OR IGNORE INTO push_deliveries(event_id,revision,endpoint,delivered_at) VALUES(?,?,?,?)').run(eventId,revision,subscription.endpoint,new Date().toISOString());
       sent++;
     } catch (error) {
       if ([404,410].includes(error.statusCode)) { store.db.prepare('DELETE FROM push_subscriptions WHERE endpoint=?').run(subscription.endpoint); removed++; return; }
       failed++;
     }
   }));
-  store.log('push-delivery',eventId,{revision,subscriptions:subscriptions.length,eligible:eligible.length,skipped:subscriptions.length-eligible.length,sent,removed,failed});
+  store.log('push-delivery',eventId,{revision,subscriptions:subscriptions.length,eligible:eligible.length,alreadyDelivered:delivered.size,skipped:subscriptions.length-eligible.length,sent,removed,failed});
   if (failed && !sent) throw new Error('Push delivery failed');
   return {sent,removed,failed};
 }

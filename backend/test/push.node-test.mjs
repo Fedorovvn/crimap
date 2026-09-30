@@ -26,9 +26,36 @@ test('validated subscriptions receive one localized notification and expired end
     assert.equal(calls[0].payload.title,event.title);
     assert.equal(calls[0].payload.url,'/?incident=knife-attack');
     assert.equal(store.db.prepare('SELECT count(*) n FROM push_subscriptions').get().n,1);
+    const retry=await sendPublishedPushes(store,{eventId:1,revision:1},{send:async()=>calls.push('duplicate')});
+    assert.deepEqual(retry,{sent:0,removed:0,failed:0});
+    assert.equal(calls.length,1);
+    assert.equal(store.db.prepare('SELECT count(*) n FROM push_deliveries WHERE event_id=1 AND revision=1').get().n,1);
     assert.deepEqual(removePushSubscription(store,{endpoint:'https://push.example/current'}),{unsubscribed:true});
     assert.equal(store.db.prepare('SELECT count(*) n FROM push_subscriptions').get().n,0);
     assert.throws(()=>savePushSubscription(store,{endpoint:'http://not-secure.example',keys:{p256dh:'x'.repeat(24),auth:'y'.repeat(24)}}));
+  }finally{
+    store.close();
+    for(const [name,value] of Object.entries({VAPID_PUBLIC_KEY:previous.public,VAPID_PRIVATE_KEY:previous.private,VAPID_SUBJECT:previous.subject})) value===undefined?delete process.env[name]:process.env[name]=value;
+  }
+});
+
+test('an update is delivered only after Pro marks it as materially significant',async()=>{
+  const previous={public:process.env.VAPID_PUBLIC_KEY,private:process.env.VAPID_PRIVATE_KEY,subject:process.env.VAPID_SUBJECT};
+  const keys=webpush.generateVAPIDKeys();
+  process.env.VAPID_PUBLIC_KEY=keys.publicKey;process.env.VAPID_PRIVATE_KEY=keys.privateKey;process.env.VAPID_SUBJECT='mailto:test@example.com';
+  const store=new Store(':memory:');
+  try{
+    store.db.prepare('INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical,state,revision,published_revision) VALUES(3,?,?,?,?,?,?,?)').run('updated-attack',now,now,JSON.stringify(event),'published',2,2);
+    store.db.prepare('INSERT INTO translations VALUES(3,2,?,?,?,?)').run('ru',JSON.stringify(event),'fixture',now);
+    savePushSubscription(store,{endpoint:'https://push.example/update',keys:{p256dh:'u'.repeat(24),auth:'U'.repeat(24)},locale:'ru'});
+    store.db.prepare('INSERT INTO quality_reviews VALUES(3,2,?,?,?)').run('pro',JSON.stringify({verdict:'pass',publicationBaseline:'published-v1',notification:{send:false,reason:'Уточнён перевод, фактов нет.'}}),now);
+    const blocked=await sendPublishedPushes(store,{eventId:3,revision:2},{send:async()=>assert.fail('routine update must not send')});
+    assert.deepEqual(blocked,{skipped:true});
+    store.db.prepare('UPDATE quality_reviews SET payload=? WHERE event_id=3 AND revision=2').run(JSON.stringify({verdict:'pass',publicationBaseline:'published-v1',notification:{send:true,reason:'Полиция задержала подозреваемого.'}}));
+    let sent=0;
+    const allowed=await sendPublishedPushes(store,{eventId:3,revision:2},{send:async()=>{sent++;}});
+    assert.deepEqual(allowed,{sent:1,removed:0,failed:0});
+    assert.equal(sent,1);
   }finally{
     store.close();
     for(const [name,value] of Object.entries({VAPID_PUBLIC_KEY:previous.public,VAPID_PRIVATE_KEY:previous.private,VAPID_SUBJECT:previous.subject})) value===undefined?delete process.env[name]:process.env[name]=value;

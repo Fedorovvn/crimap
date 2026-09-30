@@ -492,7 +492,7 @@ export class Pipeline {
       const locationLookup={enabled,...(preparation?.locationReview??{}),maxQueries:2,requireSurface:true};
       let outputSchema=finalEditorSchema.required({legalCoverage:true});
       if(enabled&&!locationLookup.applied)outputSchema=outputSchema.required({locationResolution:true});
-      if(published)outputSchema=outputSchema.required({publicationSummary:true});
+      if(published)outputSchema=outputSchema.required({publicationSummary:true,notification:true});
       const priorError=this.store.db.prepare("SELECT detail FROM audit WHERE action='review-validation-retry' AND subject=? ORDER BY id DESC LIMIT 1").get(String(id));
       const previous=priorError?JSON.parse(priorError.detail):null;
       const payload={schema:zodToJsonSchema(outputSchema),previousValidationError:previous?.revision===event.revision?previous.error:null,event:event.canonical,russian:translationStrings(russian),translationPaths:Object.keys(translationStrings(event.canonical)),siteTranslations:translations,documents:sourceExcerpts(docs,event.canonical),preparation,locationLookup,verifiedLawCatalog:this.laws,
@@ -504,6 +504,7 @@ export class Pipeline {
           throw new Error('Final editor must APPLY these corrections itself and return pass with the corrected final card, or reject only for unsuitable/fundamentally unsupported news. Do not leave a revise verdict for the owner. Findings: '+JSON.stringify({summary:raw.summary,issues:raw.issues}).slice(0,2200));
         }
         if(published&&raw.verdict==='pass'&&!raw.publicationSummary?.trim())throw new Error('Include publicationSummary in Russian explaining final changes relative to currentPublication, including removals; say explicitly if there are no meaningful changes');
+        if(published&&raw.verdict==='pass'&&!raw.notification)throw new Error('For an update to a published event, decide notification.send and give a short Russian notification.reason. Only major new public-safety facts may set send=true.');
         const context={event:event.canonical,russian,translations,preparation,documents:docs,locationLookup,requireLegalCoverage:true,validateEvent:e=>this.validate(e,docs)};
         try{assembleFinal(raw,context);}catch(error){
           const missingDisplay=error.name==='ZodError'&&error.issues?.every(i=>i.path[0]==='strings');
