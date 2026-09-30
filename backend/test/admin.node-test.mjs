@@ -38,6 +38,9 @@ test('editor authenticates, rejects CSRF/stale edits and publishes only a review
     assert.equal((await request('events/1/review',{revision:1},{origin:'https://evil.example'})).status,403);
     assert.equal((await request('events')).status,200);
     const activity=await request('activity');assert.equal(activity.status,200);assert.ok(Array.isArray((await activity.json()).logs));
+    assert.equal((await request('activity?period=custom&from=invalid&to=invalid')).status,400);
+    const interval=await request('activity?'+new URLSearchParams({period:'custom',from:'2026-09-01T00:00:00Z',to:'2026-09-02T00:00:00Z'}));
+    assert.equal(interval.status,200);const ranged=await interval.json();assert.equal(ranged.until,'2026-09-02T00:00:00.000Z');assert.ok(Array.isArray(ranged.usage.series.points));
     assert.equal((await request('budget',{budget:30},{'X-CSRF-Token':''})).status,403);
     assert.equal((await request('budget',{budget:30})).status,200);
     assert.equal((await (await request('events')).json()).budget.limit,30);

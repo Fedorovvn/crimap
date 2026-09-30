@@ -1,5 +1,6 @@
 import {catalog,sourceFor} from './sources.mjs';
 import {usageDashboard} from './usage-dashboard.mjs';
+import {activityRange} from './activity-range.mjs';
 
 export const jobLabels={feed:'Обход источника',article:'Разбор статьи',archive:'Обход архива',gather:'Поиск дополнительных источников',prepare:'Подготовка карточки',review:'Финальная проверка Pro',repair:'Исправление карточки',translate:'Перевод Flash',localize:'Перевод EN/HU','resolve-date':'Уточнение даты',recheck:'Проверка обновлений'};
 const actions={
@@ -41,8 +42,8 @@ export function eventProcessing(store,event){
  const stopped=jobs.filter(j=>['failed','paused'].includes(j.state));
  return {stopped:stopped.length>0,issues:stopped.map(j=>({stage:jobLabels[j.kind]??'Обработка',reason:readableError(j.last_error)??'Задача приостановлена.',attempts:j.attempts,state:j.state})),retrying:jobs.some(j=>j.state==='queued'&&j.last_error)};
 }
-export function activityData(store,{now=new Date(),before=Infinity,category='all',source='all',period='day',queueState='all'}={}){
- const db=store.db,stamp=now.toISOString(),since=period==='all'?'1970-01-01T00:00:00Z':new Date(now.getTime()-(period==='week'?7:1)*86400000).toISOString();
+export function activityData(store,{now=new Date(),before=Infinity,category='all',source='all',period='day',from,to,queueState='all'}={}){
+ const db=store.db,stamp=now.toISOString(),{since,until,bounds}=activityRange(db,{now,period,from,to});
  const events=new Map(db.prepare(`SELECT e.id,e.merged_into,coalesce(json_extract(t.payload,'$.title'),json_extract(e.canonical,'$.title')) title FROM events e LEFT JOIN translations t ON t.event_id=e.id AND t.revision=e.revision AND t.language='ru'`).all().map(r=>[r.id,r]));
  const eventSources=new Map();for(const r of db.prepare('SELECT DISTINCT o.event_id,d.source_id FROM observations o JOIN documents d ON d.id=o.document_id').all()){const a=eventSources.get(r.event_id)??[];a.push(r.source_id);eventSources.set(r.event_id,a);}
  const eventInfo=id=>{let r=events.get(Number(id));const visited=new Set();while(r?.merged_into&&!visited.has(r.id)){visited.add(r.id);r=events.get(r.merged_into);}return r?{eventId:r.id,title:r.title}:{};};
@@ -62,7 +63,7 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
  const counts={};for(const j of queue)counts[j.state]=(counts[j.state]??0)+1;
  counts.retry=queue.filter(j=>j.reason&&['ready','scheduled'].includes(j.state)).length;
  const knownActions=Object.keys(actions),marks=knownActions.map(()=>'?').join(',');
- const raw=db.prepare(`SELECT * FROM audit WHERE id<? AND created_at>=? AND action IN (${marks}) ORDER BY id DESC LIMIT 1500`).all(Number.isFinite(before)?before:Number.MAX_SAFE_INTEGER,since,...knownActions);
+ const raw=db.prepare(`SELECT * FROM audit WHERE id<? AND julianday(created_at)>=julianday(?) AND julianday(created_at)<=julianday(?) AND action IN (${marks}) ORDER BY id DESC LIMIT 1500`).all(Number.isFinite(before)?before:Number.MAX_SAFE_INTEGER,since,until,...knownActions);
  const logs=[];let examined=null;
  for(const row of raw){
    examined=row.id;const d=parse(row.detail);let [group,label]=actions[row.action];
@@ -96,10 +97,10 @@ export function activityData(store,{now=new Date(),before=Infinity,category='all
    const own=polls.filter(p=>p.source_id===s.id),js=feeds.filter(j=>parse(j.payload).sourceId===s.id),times=own.map(p=>p.checked_at).sort();
    return {id:s.id,name:s.name,url:s.url,kind:s.kind??s.type,lastCheckedAt:times.at(-1)??null,nextCheckAt:js.map(j=>j.due_at).sort()[0]??null,intervalMinutes:Math.round((parse(js[0]?.payload).intervalSeconds??3600)/60),items:own.reduce((n,p)=>n+p.item_count,0),queued:own.reduce((n,p)=>n+p.queued_count,0),filtered:own.reduce((n,p)=>n+p.filtered_count,0),error:readableError(js.find(j=>j.last_error)?.last_error),running:js.some(j=>j.state==='running'),overdue:js.some(j=>Date.parse(j.due_at)<now.getTime()-15*60000)};
  });
- const summary=db.prepare("SELECT action,subject,detail FROM audit WHERE created_at>=? AND action IN ('feed-polled','events-merged','repeat-skipped','pro-final-editor','published','job-finished')").all(since).filter(r=>{if(source==='all')return true;const d=parse(r.detail);return r.subject===source||d.sourceId===source||eventSources.get(Number(d.eventId??r.subject))?.includes(source);});
+ const summary=db.prepare("SELECT action,subject,detail FROM audit WHERE julianday(created_at)>=julianday(?) AND julianday(created_at)<=julianday(?) AND action IN ('feed-polled','events-merged','repeat-skipped','pro-final-editor','published','job-finished')").all(since,until).filter(r=>{if(source==='all')return true;const d=parse(r.detail);return r.subject===source||d.sourceId===source||eventSources.get(Number(d.eventId??r.subject))?.includes(source);});
  const stats={newArticles:0,filtered:0,merged:0,repeats:0,reviewed:0,published:0,completed:0};
  for(const r of summary){const d=parse(r.detail);if(r.action==='feed-polled'){stats.newArticles+=d.queued??0;stats.filtered+=d.filtered??0;}if(r.action==='events-merged')stats.merged++;if(r.action==='repeat-skipped')stats.repeats++;if(r.action==='pro-final-editor')stats.reviewed++;if(r.action==='published')stats.published++;if(r.action==='job-finished'&&d.outcome==='complete')stats.completed++;}
- stats.filtered+=db.prepare("SELECT count(*) n FROM triage_log t JOIN documents d ON d.id=t.document_id WHERE t.keep=0 AND t.created_at>=? AND (?='all' OR d.source_id=?)").get(since,source,source).n;
+ stats.filtered+=db.prepare("SELECT count(*) n FROM triage_log t JOIN documents d ON d.id=t.document_id WHERE t.keep=0 AND julianday(t.created_at)>=julianday(?) AND julianday(t.created_at)<=julianday(?) AND (?='all' OR d.source_id=?)").get(since,until,source,source).n;
  const filteredQueue=queue.filter(j=>(queueState==='all'||j.state===queueState)&&(source==='all'||j.sourceId===source||j.sourceIds.includes(source)));
- return {generatedAt:stamp,since,budget:store.totalBudget(),usage:usageDashboard(store,since),counts,stats,queue:filteredQueue.slice(0,100),queueTotal:filteredQueue.length,logs,nextBefore:examined&&(logs.length===60||raw.length===1500)?examined:null,sources,lastPollAt:polls.map(p=>p.checked_at).sort().at(-1)??null,historyStartedAt:db.prepare("SELECT min(created_at) at FROM audit WHERE action='job-started'").get().at,archiveDiscoveryStopped:db.prepare('SELECT count(*) n FROM campaigns WHERE discovery_stopped=1').get().n>0};
+ return {generatedAt:stamp,since,until,bounds,budget:store.totalBudget(),usage:usageDashboard(store,since,until),counts,stats,queue:filteredQueue.slice(0,100),queueTotal:filteredQueue.length,logs,nextBefore:examined&&(logs.length===60||raw.length===1500)?examined:null,sources,lastPollAt:polls.map(p=>p.checked_at).sort().at(-1)??null,historyStartedAt:db.prepare("SELECT min(created_at) at FROM audit WHERE action='job-started'").get().at,archiveDiscoveryStopped:db.prepare('SELECT count(*) n FROM campaigns WHERE discovery_stopped=1').get().n>0};
 }

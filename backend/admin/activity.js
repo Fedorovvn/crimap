@@ -1,15 +1,16 @@
 import {renderUsage} from './usage-ui.mjs';
+import {setupRange,updateRange,rangeParams,rangeEditing} from './range-ui.mjs';
 const $=s=>document.querySelector(s),escape=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Budapest',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',second:'2-digit'}):'Ещё не было';
 const states={running:'Выполняется',ready:'В очереди',scheduled:'Запланировано',paused:'На паузе',failed:'Обработка остановлена','waiting-fatality':'ДТП: ожидает сведений о погибших','waiting-date':'Ожидает даты',stale:'Прервано'};
 const external=(url,label)=>/^https?:\/\//.test(url??'')?`<a href="${escape(url)}" target="_blank" rel="noopener noreferrer">${escape(label)} ↗</a>`:escape(label);
 const title=r=>r.eventId?`<a href="/admin/?event=${r.eventId}">${escape(r.title??`Событие №${r.eventId}`)}</a>`:external(r.url,r.title??r.sourceName??'Без отдельного события');
-let busy=false,nextBefore=null,older=false,view='queue',logs=[],sourceOptions='';
+let requestId=0,controller=null,nextBefore=null,older=false,view='queue',logs=[],sourceOptions='';
 function tab(name){view=name;$('#activity-stats').hidden=name==='usage';$('#activity-source').disabled=name==='usage';for(const v of ['queue','journal','sources','usage']){$('#panel-'+v).hidden=v!==name;$('#tab-'+v).setAttribute('aria-selected',String(v===name));}}
 for(const b of document.querySelectorAll('[data-view]'))b.addEventListener('click',()=>{tab(b.dataset.view);history.replaceState(null,'','#'+view);});
 document.querySelector('.activity-tabs').addEventListener('keydown',e=>{if(!['ArrowLeft','ArrowRight','Home','End'].includes(e.key))return;e.preventDefault();const vs=['queue','journal','sources','usage'],i=vs.indexOf(view),n=e.key==='Home'?0:e.key==='End'?3:(i+(e.key==='ArrowRight'?1:3))%4;tab(vs[n]);$('#tab-'+vs[n]).focus();});
 function render(data,append){
- renderUsage(data.usage);
+ updateRange(data);renderUsage(data.usage);
  $('#activity-updated').textContent='Обновлено '+date(data.generatedAt);
  const c=data.counts,b=data.budget;
  $('#activity-health').innerHTML=`<div class="activity-health-row"><span class="pill ${c.running?'good':''}">${c.running?`В работе: ${c.running}`:'Нет активных задач'}</span><span>Готовы к запуску: <strong>${c.ready??0}</strong></span><span>На паузе: <strong>${c.paused??0}</strong></span><span>Ожидают даты: <strong>${c['waiting-date']??0}</strong></span><span>Ошибки: <strong>${(c.failed??0)+(c.stale??0)}</strong></span><span>Ожидают повтора: <strong>${c.retry??0}</strong></span></div><p class="fact">Последний успешный обход: ${escape(date(data.lastPollAt))}. Источники проверяются каждый час.${data.archiveDiscoveryStopped?' Архивный сбор остановлен.':''} Время — Будапешт.</p>${b?`<p class="fact">Общий бюджет: $${b.limit.toFixed(2)} · Учтено $${b.spent.toFixed(3)} · Осталось <strong>$${b.remaining.toFixed(3)}</strong>. <a href="/admin/#budget">Изменить лимит</a></p>`:''}`;
@@ -27,21 +28,22 @@ function render(data,append){
  $('#activity-sources').innerHTML=data.sources.map(s=>`<article class="activity-source"><div class="activity-record-meta"><span class="pill ${s.error||s.overdue?'warn':'good'}">${s.error?'Ошибка':s.running?'Проверяется':s.overdue?'Обход задерживается':'Подключён'}</span><span>Каждые ${s.intervalMinutes} мин.</span></div><h3>${external(s.url,s.name)}</h3><dl><div><dt>Последний обход</dt><dd>${escape(date(s.lastCheckedAt))}</dd></div><div><dt>Следующий обход</dt><dd>${escape(date(s.nextCheckAt))}</dd></div></dl><p>В ленте <strong>${s.items}</strong> · новых <strong>${s.queued}</strong> · отсеяно <strong>${s.filtered}</strong></p>${s.error?`<p class="activity-reason">${escape(s.error)}</p>`:''}</article>`).join('')||'<p class="empty">Источники пока не подключены.</p>';
 }
 async function load(append=false){
- if(busy)return;busy=true;$('#activity-refresh').disabled=true;$('#activity-more').disabled=true;
+ if(append&&controller)return;controller?.abort();const own=++requestId;controller=new AbortController();$('#activity-page').setAttribute('aria-busy','true');$('#activity-refresh').disabled=true;$('#activity-more').disabled=true;
  try{
-  const params=new URLSearchParams({period:$('#activity-period').value,source:$('#activity-source').value,category:$('#activity-category').value,queueState:$('#activity-state').value});
+  const params=new URLSearchParams({period:$('#activity-period').value,source:$('#activity-source').value,category:$('#activity-category').value,queueState:$('#activity-state').value,...rangeParams()});
   if(append&&nextBefore)params.set('before',nextBefore);
-  const response=await fetch('/admin/api/activity?'+params);if(response.status===401){$('#activity-error').innerHTML='Сессия завершена. <a href="/admin/">Войти в редактор</a>';$('#activity-error').hidden=false;return;}
+  const response=await fetch('/admin/api/activity?'+params,{signal:controller.signal});if(response.status===401){$('#activity-error').innerHTML='Сессия завершена. <a href="/admin/">Войти в редактор</a>';$('#activity-error').hidden=false;return;}
   if(!response.ok)throw new Error('Не удалось обновить данные. Последние полученные результаты оставлены на экране.');
-  const data=await response.json();$('#activity-error').hidden=true;render(data,append);older=append;
- }catch(e){$('#activity-error').textContent=e.message;$('#activity-error').hidden=false;}finally{busy=false;$('#activity-refresh').disabled=false;$('#activity-more').disabled=false;}
+  const data=await response.json();if(own!==requestId)return;$('#activity-error').hidden=true;render(data,append);older=append;
+ }catch(e){if(e.name!=='AbortError'&&own===requestId){$('#activity-error').textContent=e.message;$('#activity-error').hidden=false;}}finally{if(own===requestId){controller=null;$('#activity-page').setAttribute('aria-busy','false');$('#activity-refresh').disabled=false;$('#activity-more').disabled=false;}}
 }
 $('#activity-refresh').addEventListener('click',()=>load());$('#activity-more').addEventListener('click',()=>load(true));
-for(const id of ['period','source','category','state'])$('#activity-'+id).addEventListener('change',()=>load());
-setInterval(()=>{if(!document.hidden&&$('#activity-auto').checked&&!older)load();},15000);
+for(const id of ['source','category','state'])$('#activity-'+id).addEventListener('change',()=>load());
+setInterval(()=>{if(!document.hidden&&$('#activity-auto').checked&&!older&&!controller&&!rangeEditing())load();},15000);
 if(['queue','journal','sources','usage'].includes(location.hash.slice(1)))tab(location.hash.slice(1));
 const requestedCategory=new URLSearchParams(location.search).get('category');
 if([...$('#activity-category').options].some(o=>o.value===requestedCategory))$('#activity-category').value=requestedCategory;
 const requestedQueue=new URLSearchParams(location.search).get('queueState');
 if([...$('#activity-state').options].some(o=>o.value===requestedQueue))$('#activity-state').value=requestedQueue;
+setupRange(()=>{older=false;load();});
 load();

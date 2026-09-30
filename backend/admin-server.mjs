@@ -66,7 +66,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       }
       // The shell contains no private data. Every API except login requires a valid session.
       const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/interest-reasons.mjs':['interest-reasons.mjs','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
-      Object.assign(assets,{'/admin/activity/':['activity.html','text/html; charset=utf-8'],'/admin/activity.js':['activity.js','text/javascript; charset=utf-8'],'/admin/usage-ui.mjs':['usage-ui.mjs','text/javascript; charset=utf-8']});
+      Object.assign(assets,{'/admin/activity/':['activity.html','text/html; charset=utf-8'],'/admin/activity.js':['activity.js','text/javascript; charset=utf-8'],'/admin/usage-ui.mjs':['usage-ui.mjs','text/javascript; charset=utf-8'],'/admin/charts.mjs':['charts.mjs','text/javascript; charset=utf-8'],'/admin/range-ui.mjs':['range-ui.mjs','text/javascript; charset=utf-8']});
       if (assets[path] && req.method==='GET') return send(200,readFileSync(new URL('./admin/'+assets[path][0],import.meta.url)),assets[path][1]);
       const token=req.headers.cookie?.match(/(?:^|;\s*)crimap_editor=([a-f0-9]{64})(?:;|$)/)?.[1];
       const session=token&&store.db.prepare('SELECT * FROM admin_sessions WHERE token_hash=? AND expires_at>?').get(hash(token),Date.now());
@@ -75,7 +75,7 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(path==='/admin/api/session'&&req.method==='GET')return send(200,{csrf:session.csrf,reviewer});
       if(path==='/admin/api/activity'&&req.method==='GET'){
         const q=new URL(req.url,origin).searchParams;
-        return send(200,activityData(store,{before:q.has('before')?Number(q.get('before')):Infinity,category:q.get('category')??'all',source:q.get('source')??'all',period:q.get('period')??'day',queueState:q.get('queueState')??'all'}));
+        return send(200,activityData(store,{before:q.has('before')?Number(q.get('before')):Infinity,category:q.get('category')??'all',source:q.get('source')??'all',period:q.get('period')??'day',from:q.get('from'),to:q.get('to'),queueState:q.get('queueState')??'all'}));
       }
       if(path==='/admin/api/logout'&&req.method==='POST'){
         store.db.prepare('DELETE FROM admin_sessions WHERE token_hash=?').run(hash(token));res.setHeader('Set-Cookie',cookie('',0));return send(200,{ok:true});

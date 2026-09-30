@@ -1,3 +1,4 @@
+import {chartMarkup,bindCharts} from './charts.mjs';
 const $=s=>document.querySelector(s),esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const number=n=>Number(n??0).toLocaleString('ru-RU'),compact=n=>Number(n??0).toLocaleString('ru-RU',{notation:'compact',maximumFractionDigits:1}),money=n=>'$'+Number(n??0).toFixed(4);
 const stageLabels={'update-compare':'Сравнение обновлений',triage:'Проверка тематики',identify:'Краткое описание события',compare:'Сравнение дублей',extract:'Извлечение фактов',merge:'Объединение сведений',research:'План поиска источников',details:'Полнота карточки',media:'Поиск фотографий','media-review':'Оценка фотографий','resolve-date':'Уточнение даты',translate:'Перевод на русский','site-translate':'Переводы EN/HU',review:'Финальная редактура',repair:'Исправление (старый этап)'};
@@ -9,7 +10,7 @@ function detail(){
 }
 function table(rows){return `<div class="usage-table-wrap"><table class="usage-table"><thead><tr><th>Этап / модель</th><th>Запросы</th><th>Входные</th><th>Выходные</th><th>Всего токенов</th><th>Стоимость</th><th>Резерв</th></tr></thead><tbody>${rows.map(r=>`<tr><th>${esc(stageLabels[r.stage]??r.stage??'Все этапы')}<small>${esc(r.model)}</small>${r.failed?`<small class="activity-reason">Ошибок запросов: ${r.failed}</small>`:''}</th><td>${number(r.calls)}</td><td>${number(r.input)}</td><td>${number(r.output)}</td><td><strong>${number(r.tokens??r.input+r.output)}</strong></td><td>${money(r.cost)}</td><td>${r.reserved?money(r.reserved):'—'}</td></tr>`).join('')}</tbody></table></div>`;}
 export function renderUsage(data){
- if(!data)return;current=data;const t=data.totals;
+ if(!data)return;current=data;$('#usage-charts').innerHTML=chartMarkup(data,metric,Math.max(300,$('#usage-charts').clientWidth-48));const t=data.totals;
  $('#usage-summary').innerHTML=[[number(t.tokens),'Всего токенов'],[number(t.input),'Входные токены'],[number(t.output),'Выходные токены'],[money(t.cost),'Оценка стоимости'],[money(t.reserved),'Незавершённые резервы'],[number(t.calls),'Попытки запросов']].map(([n,label])=>`<article><strong>${n}</strong><span>${label}</span></article>`).join('');
  const max=Math.max(1,...data.steps.map(s=>s[metric]));
  $('#usage-flow').innerHTML=data.steps.map((s,i)=>`<button class="usage-step" data-usage-step="${esc(s.id)}" aria-pressed="${selected===s.id}"><span class="usage-step-number">${i+1} · ${esc(s.engine)}</span><strong>${esc(s.label)}</strong><span class="usage-step-value">${metric==='cost'?money(s.cost):compact(s[metric])}<small>${metric==='tokens'?'токенов':metric==='cost'?'за период':'запросов'}</small></span><progress value="${s[metric]}" max="${max}" aria-label="${esc(s.label)} — ${metric==='tokens'?'токены':metric==='cost'?'стоимость':'запросы'}"></progress><span class="usage-step-result">${s.results.length?s.results.map(esc).join('<br>'):'Открыть детализацию'}</span></button>`).join('');
@@ -20,3 +21,7 @@ export function renderUsage(data){
 }
 $('#usage-flow').addEventListener('click',e=>{const b=e.target.closest('[data-usage-step]');if(b){selected=b.dataset.usageStep;detail();}});
 $('#usage-metric').addEventListener('change',e=>{metric=e.target.value;renderUsage(current);});
+
+bindCharts($('#usage-charts'),id=>{selected=id;detail();$('#usage-detail').scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'instant':'smooth',block:'center'});});
+
+let chartWidth=0;new ResizeObserver(entries=>{const width=Math.round(entries[0].contentRect.width);if(width>0&&width!==chartWidth){chartWidth=width;renderUsage(current);}}).observe($('#usage-charts'));
