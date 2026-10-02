@@ -10,7 +10,7 @@ const started=new Date('2026-09-27T09:00:00Z');
 test('detail prose uses English while Hungarian proper names and evidence remain allowed',()=>{
  const response={participants:[{note:'Police detained the man near Wesselényi utca.'}],context:[],legal:[],evidence:[{quote:'A férfit elfogták és előállították.'}]};
  validateDetailLanguage(response);
- assert.throws(()=>validateDetailLanguage({...response,participants:[{note:'A férfit elfogták és előállították.'}]}),/ENGLISH/);
+ assert.throws(()=>validateDetailLanguage({...response,participants:[{note:'A férfit elfogták és előállították.'}]}),/participants\.0\.note.*ENGLISH/);
 });
 const xml=(count,extra='')=>'<rss><channel>'+Array.from({length:count},(_,i)=>`<item><title>Budapesti késelés ${i}${extra}</title><link>https://www.police.hu/article-${i}</link><pubDate>Sun, 27 Sep 2026 10:00:00 GMT</pubDate><description>Budapest: egy férfit megszúrtak.</description></item>`).join('')+'</channel></rss>';
 test('free discovery reads beyond the first three, persists receipts and ignores changed metadata',async()=>{

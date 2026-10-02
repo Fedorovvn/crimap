@@ -12,10 +12,10 @@ export const detailsSchema=z.object({
 }).strict();
 const detailPath=path=>/^(participants|context|legal)(\.|$)/.test(path);
 export function validateDetailLanguage(result){
-  const prose=[...result.participants.map(p=>p.note??''),...result.context.map(c=>c.text),...result.legal.map(l=>l.offense)];
-  for(const text of prose){
+  const prose=[...result.participants.map((p,index)=>({path:`participants.${index}.note`,text:p.note??''})),...result.context.map((c,index)=>({path:`context.${index}.text`,text:c.text})),...result.legal.map((l,index)=>({path:`legal.${index}.offense`,text:l.offense}))];
+  for(const {path,text} of prose){
     const words=text.toLowerCase().split(/[^\p{L}]+/u).filter(w=>['az','egy','és','hogy','éves','férfi','férfit','sérült','sértett','rendőrök','szerint','ahol','majd','miatt','volt','előállították','elfogták'].includes(w));
-    if(words.length>=3&&new Set(words).size>=2)throw new Error('Write participant notes, context and offense prose in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian.');
+    if(words.length>=3&&new Set(words).size>=2)throw new Error(`Write ${path} in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian. Offending text: ${JSON.stringify(text).slice(0,500)}`);
   }
 }
 export function detailFingerprint(event,documents,laws){return hash({version:2,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
