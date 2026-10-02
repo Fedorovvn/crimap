@@ -4,6 +4,7 @@ import {eventSchema,evidenceSchema,fieldRequestSchema} from './contract.mjs';
 import {hash} from './store.mjs';
 
 const fields=eventSchema.innerType().shape;
+const hungarianSignals=new Set(['az','egy','és','hogy','éves','férfi','férfit','sérült','sértett','rendőrök','szerint','ahol','majd','miatt','volt','előállították','elfogták']);
 export const detailsSchema=z.object({
   participants:fields.participants,context:fields.context,legal:fields.legal,
   evidence:z.array(evidenceSchema).max(150),
@@ -11,11 +12,23 @@ export const detailsSchema=z.object({
   requests:z.array(fieldRequestSchema).max(10).default([]),
 }).strict();
 const detailPath=path=>/^(participants|context|legal)(\.|$)/.test(path);
+const looksHungarian=text=>{
+  const words=text.toLowerCase().split(/[^\p{L}]+/u).filter(word=>hungarianSignals.has(word));
+  return words.length>=3&&new Set(words).size>=2;
+};
+// Original Hungarian wording belongs in evidence. Flash occasionally adds it in
+// parentheses after an English explanation, which makes the public prose mixed.
+export function normalizeDetailLanguage(result){
+  const clean=text=>text.replace(/\s*\(([^()]*)\)/g,(whole,inside)=>looksHungarian(inside)?'':whole).replace(/\s{2,}/g,' ').trim();
+  result.participants.forEach(person=>{if(person.note)person.note=clean(person.note);});
+  result.context.forEach(claim=>{claim.text=clean(claim.text);});
+  result.legal.forEach(entry=>{entry.offense=clean(entry.offense);});
+  return result;
+}
 export function validateDetailLanguage(result){
   const prose=[...result.participants.map((p,index)=>({path:`participants.${index}.note`,text:p.note??''})),...result.context.map((c,index)=>({path:`context.${index}.text`,text:c.text})),...result.legal.map((l,index)=>({path:`legal.${index}.offense`,text:l.offense}))];
   for(const {path,text} of prose){
-    const words=text.toLowerCase().split(/[^\p{L}]+/u).filter(w=>['az','egy','és','hogy','éves','férfi','férfit','sérült','sértett','rendőrök','szerint','ahol','majd','miatt','volt','előállították','elfogták'].includes(w));
-    if(words.length>=3&&new Set(words).size>=2)throw new Error(`Write ${path} in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian. Offending text: ${JSON.stringify(text).slice(0,500)}`);
+    if(looksHungarian(text))throw new Error(`Write ${path} in ENGLISH, not Hungarian. Preserve only proper names and exact evidence quotes in Hungarian. Offending text: ${JSON.stringify(text).slice(0,500)}`);
   }
 }
 export function detailFingerprint(event,documents,laws){return hash({version:2,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
@@ -26,7 +39,7 @@ export function validateLegalLinks(event){
 }
 export async function completeDetails(model,event,documents,laws,validate){
   const raw=await model.json('details',{schema:zodToJsonSchema(detailsSchema),event,documents,verifiedLawCatalog:laws},{maxTokens:10000,validate:raw=>{
-    const result=detailsSchema.parse(raw);
+    const result=normalizeDetailLanguage(detailsSchema.parse(raw));
     validateDetailLanguage(result);
     // Some responses echo source evidence from the input. Only the replacement
     // fields belong to this stage; original evidence for other fields stays intact.

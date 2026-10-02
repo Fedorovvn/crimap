@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
 import {discoverFeed} from '../discovery.mjs';
-import {completeDetails,validateLegalLinks,detailFingerprint,validateDetailLanguage} from '../details.mjs';
+import {completeDetails,validateLegalLinks,detailFingerprint,normalizeDetailLanguage,validateDetailLanguage} from '../details.mjs';
 import {eventSchema,validateEvidence} from '../contract.mjs';
 const feed={url:'https://www.police.hu/hu/rss/feed',sourceId:'police-national'};
 const now=new Date('2026-09-27T12:00:00Z');
@@ -11,6 +11,9 @@ test('detail prose uses English while Hungarian proper names and evidence remain
  const response={participants:[{note:'Police detained the man near Wesselényi utca.'}],context:[],legal:[],evidence:[{quote:'A férfit elfogták és előállították.'}]};
  validateDetailLanguage(response);
  assert.throws(()=>validateDetailLanguage({...response,participants:[{note:'A férfit elfogták és előállították.'}]}),/participants\.0\.note.*ENGLISH/);
+ const normalized=normalizeDetailLanguage({participants:[{note:'Police detained him (elfogták és előállították).'}],context:[],legal:[]});
+ assert.equal(normalized.participants[0].note,'Police detained him.');
+ validateDetailLanguage(normalized);
 });
 const xml=(count,extra='')=>'<rss><channel>'+Array.from({length:count},(_,i)=>`<item><title>Budapesti késelés ${i}${extra}</title><link>https://www.police.hu/article-${i}</link><pubDate>Sun, 27 Sep 2026 10:00:00 GMT</pubDate><description>Budapest: egy férfit megszúrtak.</description></item>`).join('')+'</channel></rss>';
 test('free discovery reads beyond the first three, persists receipts and ignores changed metadata',async()=>{
