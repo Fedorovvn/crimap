@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
 import {Triage,cheapDecision} from '../triage.mjs';
-import {Geocoder,choosePlace,districtNumber} from '../geocode.mjs';
+import {Geocoder,choosePlace,districtNumber,isResidentialDistrictApproximation} from '../geocode.mjs';
 import {Archive,budapestDate,parsePoliceArchive} from '../archive.mjs';
 import {Preparation} from '../prepare.mjs';
 import {DeepSeek} from '../model.mjs';
@@ -45,6 +45,16 @@ test('geocoding is cached and failed requests do not create fake locations',asyn
     await g.locate({label:'Akácfa utca',district:'VII',precision:'street'});await g.locate({label:'Akácfa utca',district:'VII',precision:'street'});assert.equal(calls,1);
     await assert.rejects(new Geocoder(s,{delayMs:0,endpoint:'https://different.example/api/',request:async()=>({status:503})}).locate({label:'Missing',precision:'city'}),/503/);
   }finally{s.close();}
+});
+test('district-only apartment incidents use an urban residential approximation, not a boundary label point',async()=>{
+ const s=new Store(':memory:');
+ const apartment={properties:{name:'',osm_type:'N',osm_id:456,osm_key:'tourism',osm_value:'apartment',city:'Budapest',countrycode:'HU',postcode:'1027'},geometry:{type:'Point',coordinates:[19.03,47.514]}};
+ try{
+  const g=new Geocoder(s,{delayMs:0,request:async()=>({status:200,body:JSON.stringify({features:[apartment]})})});
+  const location={city:'Budapest',district:'II. kerület',label:'II. kerületi társasház',precision:'district'};
+  assert.equal(isResidentialDistrictApproximation(location),true);
+  assert.deepEqual(await g.locate(location),{latitude:47.514,longitude:19.03,precision:'district',provider:'photon-residential-district',label:'II. kerületi társasház',sourceUrl:'https://www.openstreetmap.org/node/456',approximation:'Точный дом не раскрыт; показана жилая часть указанного района'});
+ }finally{s.close();}
 });
 
 test('coordinate and road-geometry lookup continue beyond the former daily cap, retaining cache',async()=>{

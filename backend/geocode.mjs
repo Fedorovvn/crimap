@@ -4,6 +4,12 @@ import {surfaceCandidates} from './map-surfaces.mjs';
 import {readFileSync} from 'node:fs';
 const institutions=JSON.parse(readFileSync(new URL('./institution-addresses.json',import.meta.url),'utf8'));
 export const normalizePlace=s=>String(s??'').normalize('NFKD').replace(/\p{M}/gu,'').toLowerCase().replace(/[^a-z0-9 ]/g,' ').replace(/\s+/g,' ').trim();
+// A district boundary relation often has an arbitrary label coordinate (for
+// example, on a rural road at the edge of a large district).  When the source
+// tells us only that an unnamed apartment building is involved, a point in an
+// urban residential part of that district is a more honest visual
+// approximation. It is still deliberately kept at district precision.
+export const isResidentialDistrictApproximation=location=>location?.precision==='district'&&/\b(apartment|apartments|residential|tarsashaz|lako(?:haz|epulet)|lakas|многоквартир|жил(?:ой|ая)?\s+дом|квартир)/i.test(normalizePlace(location.label));
 const romans=['I','II','III','IV','V','VI','VII','VIII','IX','X','XI','XII','XIII','XIV','XV','XVI','XVII','XVIII','XIX','XX','XXI','XXII','XXIII'];
 export function districtNumber(s){const m=String(s??'').match(/(?:^|\b)([IVX]+|\d{1,2})\.?\s*(?:ker|district|[·(—-]|$)/i);if(!m)return null;const n=/^\d+$/.test(m[1])?Number(m[1]):romans.indexOf(m[1].toUpperCase())+1;return n>=1&&n<=23?n:null;}
 const bounds=(lat,lon)=>Number.isFinite(lat)&&Number.isFinite(lon)&&lat>=47.34&&lat<=47.62&&lon>=18.92&&lon<=19.34;
@@ -145,12 +151,34 @@ export class Geocoder{
     const data=JSON.parse(response.body);if(!Array.isArray(data.elements))throw new Error('Invalid OSM geometry response');
     this.store.db.prepare('INSERT OR REPLACE INTO geocode_cache VALUES(?,?,?)').run(key,JSON.stringify(data.elements),new Date().toISOString());return data.elements;
   }
+  async residentialDistrict(location){
+    if(!isResidentialDistrictApproximation(location))return null;
+    const district=districtNumber(location.district);
+    if(!district)return null;
+    const features=await this.query(`${location.district} apartment building, Budapest`);
+    const center={latitude:47.4979,longitude:19.0402};
+    const candidates=[];
+    for(const f of features){
+      const p=f.properties??{},[longitude,latitude]=f.geometry?.coordinates??[];
+      const candidateDistrict=/^1\d{3}$/.test(p.postcode??'')?Number(p.postcode.slice(1,3)):districtNumber(p.district);
+      const residential=(p.osm_key==='building'&&/apartments?|residential/.test(p.osm_value??''))
+        ||(p.osm_key==='tourism'&&p.osm_value==='apartment')
+        ||(p.osm_key==='landuse'&&p.osm_value==='residential');
+      if(!residential||candidateDistrict!==district||!bounds(latitude,longitude))continue;
+      candidates.push({latitude,longitude,distance:Math.hypot(latitude-center.latitude,(longitude-center.longitude)*.68),sourceUrl:`https://www.openstreetmap.org/${({N:'node',W:'way',R:'relation'})[p.osm_type]??'node'}/${p.osm_id}`});
+    }
+    candidates.sort((a,b)=>a.distance-b.distance);
+    const point=candidates[0];
+    return point&&{latitude:point.latitude,longitude:point.longitude,precision:'district',provider:'photon-residential-district',label:location.label,sourceUrl:point.sourceUrl,approximation:'Точный дом не раскрыт; показана жилая часть указанного района'};
+  }
   async locate(location){
     if(['exact','street','landmark'].includes(location.precision)){
       const found=choosePlace(await this.query(`${location.label}, ${location.district??''}, Budapest`),location);
       if(found)return found;
     }
     if(location.district){
+      const residential=await this.residentialDistrict(location);
+      if(residential)return residential;
       const found=choosePlace(await this.query(`${location.district}, Budapest`),location,'district');
       if(found)return {...found,approximation:'Адрес не удалось однозначно сопоставить; показан район'};
     }

@@ -1,7 +1,7 @@
 import { DatabaseSync } from 'node:sqlite';
 import { existsSync } from 'node:fs';
 import { checkedUrl } from './network.mjs';
-import { normalizePlace, Geocoder } from './geocode.mjs';
+import { normalizePlace, Geocoder,isResidentialDistrictApproximation } from './geocode.mjs';
 import { eventSchema } from './contract.mjs';
 import {decorativeMedia,reviewMedia} from './media-quality.mjs';
 export class Preparation{
@@ -19,7 +19,9 @@ export class Preparation{
     if(event.location.latitude===undefined){
       const incoming=normalizePlace(event.location.label),old=normalizePlace(existing?.location_label);
       const samePlace=existing&&incoming.length>4&&(incoming===old||old.startsWith(incoming+' '));
-      if(samePlace&&Number.isFinite(existing.latitude)&&Number.isFinite(existing.longitude)){
+      // Do not perpetuate a previously published arbitrary district-relation
+      // point when the only context is an unnamed residential building.
+      if(samePlace&&!isResidentialDistrictApproximation(event.location)&&Number.isFinite(existing.latitude)&&Number.isFinite(existing.longitude)){
         geocoding={latitude:existing.latitude,longitude:existing.longitude,precision:event.location.precision==='unknown'?'street':event.location.precision,provider:'published-card',label:existing.location_label};
       }else geocoding=await this.geocoder.locate(event.location);
       Object.assign(event.location,{latitude:geocoding.latitude,longitude:geocoding.longitude,precision:geocoding.precision});
