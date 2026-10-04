@@ -8,7 +8,7 @@ const date=s=>s?new Date(s).toLocaleString('ru-RU',{timeZone:'Europe/Budapest',d
 const names={detained:'Задержан',wanted:'Разыскивается','in-custody':'Под стражей',charged:'Предъявлено обвинение',convicted:'Осуждён',released:'Освобождён',deceased:'Погиб',injured:'Пострадал',unknown:'Неизвестно',suspect:'Подозреваемый',victim:'Потерпевший',involved:'Участник',male:'Мужчина',female:'Женщина',person:'Человек',group:'Группа',official:'Официальный источник',media:'СМИ',social:'Социальная сеть',pass:'Проверено Pro',revise:'Не готово к публикации',reject:'Не прошло проверку','traffic-accident':'ДТП',assault:'Нападение',fight:'Драка',robbery:'Ограбление',accident:'Несчастный случай',fire:'Пожар',rescue:'Спасательная операция','missing-person':'Пропавший человек','transport-disruption':'Транспорт',weather:'Непогода',other:'Происшествие',reported:'Сообщается',investigating:'В расследовании','suspects-detained':'Подозреваемые задержаны',resolved:'Разрешено',closed:'Закрыто',exact:'Точно',street:'Улица',landmark:'Ориентир (приблизительно)',district:'Район',city:'Город',hour:'До часа',day:'До дня'};
 const fieldNames={title:'Заголовок',summary:'Описание события',label:'Название',note:'Примечание',description:'Описание',offense:'Правонарушение',subjectLabel:'К кому относится',condition:'Условие',text:'Текст',detail:'Подробности',caption:'Подпись',participants:'Участник',updates:'Хронология',context:'Сообщение источника',legal:'Правовая информация',media:'Фотография',location:'Место',source:'Источник'};
 const labelFor=path=>path.split('.').map(p=>/^\d+$/.test(p)?Number(p)+1:fieldNames[p]??p).join(' · ');
-let csrf='',selected=null,events=[],tab='preview',dirty=false,activeBusy=false,messageTimer;
+let csrf='',selected=null,events=[],tab='preview',dirty=false,activeBusy=false,messageTimer,adminPushState='idle';
 let filters={...defaults};try{filters=readFilters(window.localStorage);}catch{}
 const filterControl=key=>$(key==='search'?'#search':`#${key}-filter`);
 function restoreControls(){for(const key of Object.keys(defaults))filterControl(key).value=filters[key];}
@@ -21,6 +21,44 @@ async function api(path,body){
   const result=await response.json();
   if(!response.ok){if(response.status===401){$('#login').hidden=false;$('#workspace').hidden=true;$('#logout').hidden=true;}throw new Error(result.error??'Ошибка запроса');}
   return result;
+}
+const isIos=()=>/iPhone|iPad|iPod/.test(navigator.userAgent)||(/Macintosh/.test(navigator.userAgent)&&(navigator.maxTouchPoints??0)>1);
+const standalone=()=>window.matchMedia?.('(display-mode: standalone)').matches||navigator.standalone===true;
+const fromVapidKey=key=>{const padded=key+'='.repeat((4-key.length%4)%4),text=atob(padded.replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(text,c=>c.charCodeAt(0));};
+function adminPushSupport(){if(isIos()&&!standalone())return 'install-required';return 'serviceWorker' in navigator&&'PushManager' in window&&'Notification' in window?'supported':'unsupported';}
+function renderAdminPush(){
+  const button=$('#admin-push'),status=$('#admin-push-status'),enable=$('#admin-push-enable'),disable=$('#admin-push-disable'),ios=$('#admin-push-ios');
+  if(!button||button.hidden)return;
+  const labels={enabled:'Уведомления включены',subscribing:'Включаем…','install-required':'Добавьте на экран',unsupported:'Недоступны',denied:'Разрешение заблокировано',error:'Ошибка уведомлений',idle:'Уведомления'};
+  button.textContent=labels[adminPushState]??labels.idle;button.dataset.state=adminPushState;
+  ios.hidden=adminPushState!=='install-required';
+  enable.hidden=adminPushState==='enabled'||adminPushState==='unsupported'||adminPushState==='denied';
+  disable.hidden=adminPushState!=='enabled';enable.disabled=adminPushState==='subscribing';
+  status.textContent=adminPushState==='enabled'?'Включены: оповестим, когда Pro подготовит новую карточку для вашей публикации.':adminPushState==='install-required'?'Сначала откройте добавленный на домашний экран редактор.':adminPushState==='unsupported'?'Этот браузер не поддерживает web push.':adminPushState==='denied'?'Разрешение заблокировано в настройках браузера.':adminPushState==='error'?'Не удалось сохранить подписку. Попробуйте ещё раз.':'Уведомления пока выключены.';
+}
+async function refreshAdminPush(){
+  const support=adminPushSupport();if(support!=='supported'){adminPushState=support;renderAdminPush();return;}
+  if(Notification.permission==='denied'){adminPushState='denied';renderAdminPush();return;}
+  const registration=await navigator.serviceWorker.getRegistration('/admin/');
+  adminPushState=await registration?.pushManager.getSubscription()?'enabled':'idle';renderAdminPush();
+}
+async function enableAdminPush(){
+  const support=adminPushSupport();if(support!=='supported'){adminPushState=support;renderAdminPush();return;}
+  if(Notification.permission==='denied'){adminPushState='denied';renderAdminPush();return;}
+  adminPushState='subscribing';renderAdminPush();
+  try{
+    const permission=Notification.permission==='granted'?'granted':await Notification.requestPermission();
+    if(permission!=='granted'){adminPushState='idle';renderAdminPush();return;}
+    const registration=await navigator.serviceWorker.register('/admin/push-worker.js',{scope:'/admin/'});
+    const config=await api('push/config');if(!config.enabled||!config.publicKey)throw new Error('Push is not configured');
+    const existing=await registration.pushManager.getSubscription();
+    const subscription=existing??await registration.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:fromVapidKey(config.publicKey)});
+    await api('push/subscriptions',({...subscription.toJSON(),locale:'ru'}));
+    adminPushState='enabled';
+  }catch(error){adminPushState='error';}renderAdminPush();
+}
+async function disableAdminPush(){
+  try{const registration=await navigator.serviceWorker.getRegistration('/admin/'),subscription=await registration?.pushManager.getSubscription();if(subscription){await api('push/subscriptions/cancel',{endpoint:subscription.endpoint});await subscription.unsubscribe();}adminPushState='idle';}catch(error){adminPushState='error';}renderAdminPush();
 }
 function badge(event){if(event.awaitingFatality)return '<span class="pill warn">ДТП: ждём сведений о погибших</span>';if(event.updateAssessment?.skip)return '<span class="pill">Нет новых сведений</span>';if(!event.occurred_at)return '<span class="pill warn">Ожидает даты</span>';const published=event.published_revision===event.revision;return `<span class="pill ${published||event.verdict==='pass'?'good':event.verdict?'warn':''}">${published?'Опубликовано':names[event.verdict]??'Ожидает проверки'}</span>`;}
 const isUpdate=e=>Boolean((e.public_id&&!e.withdrawn_at)||e.published);
@@ -99,10 +137,14 @@ function renderDetail(){if(!selected)return;const e=selected,queued=e.jobs.map(j
 }
 async function select(id){const switched=selected?.id!==id;selected=await api('events/'+id);if(switched)tab=selected.comparison&&selected.published_revision!==selected.revision?'changes':'preview';dirty=false;renderList();renderDetail();if(switched)$('#detail').scrollTop=0;}
 function discard(){return !dirty||window.confirm('Есть несохранённые правки. Оставить их и перейти?');}
-async function ready(){const session=await api('session');csrf=session.csrf;$('#login').hidden=true;$('#workspace').hidden=false;$('#logout').hidden=false;await loadList();const requested=Number(new URLSearchParams(location.search).get("event"));const list=visibleEvents();if(requested&&events.some(e=>e.id===requested)){await select(requested);if(!list.some(e=>e.id===requested))notify("Открыто событие из журнала. Сохранённые фильтры ленты не изменены.");}else if(list.length)await select(list[0].id);else clearSelection();if(location.hash==="#budget")document.querySelector(".campaign-summary").open=true;}
+async function ready(){const session=await api('session');csrf=session.csrf;$('#login').hidden=true;$('#workspace').hidden=false;$('#logout').hidden=false;$('#admin-push').hidden=false;void refreshAdminPush();await loadList();const requested=Number(new URLSearchParams(location.search).get("event"));const list=visibleEvents();if(requested&&events.some(e=>e.id===requested)){await select(requested);if(!list.some(e=>e.id===requested))notify("Открыто событие из журнала. Сохранённые фильтры ленты не изменены.");}else if(list.length)await select(list[0].id);else clearSelection();if(location.hash==="#budget")document.querySelector(".campaign-summary").open=true;}
 async function run(fn){if(activeBusy)return;activeBusy=true;try{await fn();}catch(e){notify(e.message,true);}finally{activeBusy=false;}}
 $('#login-form').addEventListener('submit',e=>{e.preventDefault();run(async()=>{const s=await api('login',{token:$('#token').value});$('#token').value='';csrf=s.csrf;await ready();});});
-$('#logout').onclick=()=>run(async()=>{if(!discard())return;await api('logout',{});csrf='';selected=null;dirty=false;$('#workspace').hidden=true;$('#detail').innerHTML='';$('#events').innerHTML='';$('#logout').hidden=true;$('#login').hidden=false;});
+$('#logout').onclick=()=>run(async()=>{if(!discard())return;await api('logout',{});csrf='';selected=null;dirty=false;$('#workspace').hidden=true;$('#detail').innerHTML='';$('#events').innerHTML='';$('#logout').hidden=true;$('#admin-push').hidden=true;$('#login').hidden=false;});
+$('#admin-push').onclick=()=>{$('#admin-push-dialog').showModal();void refreshAdminPush();};
+$('#admin-push-close').onclick=()=>$('#admin-push-dialog').close();
+$('#admin-push-enable').onclick=()=>void enableAdminPush();
+$('#admin-push-disable').onclick=()=>void disableAdminPush();
 for(const key of Object.keys(defaults))filterControl(key).addEventListener(key==='search'?'input':'change',()=>changeFilters());
 $('#reset-filters').onclick=()=>changeFilters(true);
 $('#refresh').onclick=()=>run(async()=>{if(!discard())return;await loadList();if(selected)await select(selected.id);notify('Лента обновлена');});

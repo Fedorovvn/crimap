@@ -12,6 +12,7 @@ import { readPublication } from './publication-comparison.mjs';
 import {activityData,eventProcessing} from './activity.mjs';
 import {currentUpdateAssessment} from './update-comparison.mjs';
 import {pushCities,pushConfig,removePushSubscription,savePushSubscription} from './push.mjs';
+import {removeAdminPushSubscription,saveAdminPushSubscription} from './admin-push.mjs';
 import {needsFatalityConfirmation,TRAFFIC_HOLD_REASON} from './traffic-policy.mjs';
 
 export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Редактор',secure=true}) {
@@ -20,7 +21,9 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
   if (secure && base.protocol!=='https:') throw new Error('HTTPS admin origin required');
   store.db.exec('CREATE TABLE IF NOT EXISTS admin_sessions(token_hash TEXT PRIMARY KEY,csrf TEXT NOT NULL,expires_at INTEGER NOT NULL)');
   const attempts = new Map();
-  const cookie = (token, age=28800) => `crimap_editor=${token}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${age}${secure?'; Secure':''}`;
+  // A home-screen editor app must survive ordinary browser restarts. It can
+  // still be revoked with "Выйти" or by clearing site data.
+  const cookie = (token, age=15_552_000) => `crimap_editor=${token}; HttpOnly; SameSite=Strict; Path=/admin; Max-Age=${age}${secure?'; Secure':''}`;
   return createServer(async (req,res) => {
     const send = (code,data,type='application/json; charset=utf-8') => {
       res.writeHead(code,{'Content-Type':type});res.end(type.startsWith('application/json')?JSON.stringify(data):data);
@@ -61,11 +64,11 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
         attempts.delete(ip);
         const token=randomBytes(32).toString('hex'),csrf=randomBytes(24).toString('hex');
         store.db.prepare('DELETE FROM admin_sessions WHERE expires_at<?').run(now);
-        store.db.prepare('INSERT INTO admin_sessions VALUES(?,?,?)').run(hash(token),csrf,now+28_800_000);
+        store.db.prepare('INSERT INTO admin_sessions VALUES(?,?,?)').run(hash(token),csrf,now+15_552_000_000);
         res.setHeader('Set-Cookie',cookie(token));return send(200,{csrf,reviewer});
       }
       // The shell contains no private data. Every API except login requires a valid session.
-      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/interest-reasons.mjs':['interest-reasons.mjs','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
+      const assets={'/admin/':['index.html','text/html; charset=utf-8'],'/admin/app.js':['app.js','text/javascript; charset=utf-8'],'/admin/push-worker.js':['push-worker.js','text/javascript; charset=utf-8'],'/admin/manifest.webmanifest':['manifest.webmanifest','application/manifest+json; charset=utf-8'],'/admin/interest-reasons.mjs':['interest-reasons.mjs','text/javascript; charset=utf-8'],'/admin/filters.mjs':['filters.mjs','text/javascript; charset=utf-8'],'/admin/changes.mjs':['changes.mjs','text/javascript; charset=utf-8'],'/admin/style.css':['style.css','text/css; charset=utf-8']};
       Object.assign(assets,{'/admin/activity/':['activity.html','text/html; charset=utf-8'],'/admin/activity.js':['activity.js','text/javascript; charset=utf-8'],'/admin/usage-ui.mjs':['usage-ui.mjs','text/javascript; charset=utf-8'],'/admin/charts.mjs':['charts.mjs','text/javascript; charset=utf-8'],'/admin/range-ui.mjs':['range-ui.mjs','text/javascript; charset=utf-8']});
       if (assets[path] && req.method==='GET') return send(200,readFileSync(new URL('./admin/'+assets[path][0],import.meta.url)),assets[path][1]);
       const token=req.headers.cookie?.match(/(?:^|;\s*)crimap_editor=([a-f0-9]{64})(?:;|$)/)?.[1];
@@ -73,6 +76,14 @@ export function createAdmin({store,publicPath,tokenHash,origin,reviewer='Ред�
       if(!session)fail(401,'Войдите в редактор');
       if(req.method==='POST'&&req.headers['x-csrf-token']!==session.csrf)fail(403,'Обновите страницу перед сохранением');
       if(path==='/admin/api/session'&&req.method==='GET')return send(200,{csrf:session.csrf,reviewer});
+      if(path==='/admin/api/push/config'&&req.method==='GET'){
+        const config=pushConfig();return send(200,{enabled:!!config,publicKey:config?.publicKey??null});
+      }
+      if(path==='/admin/api/push/subscriptions'&&req.method==='POST'){
+        if(!pushConfig())fail(503,'Уведомления пока не настроены');
+        return send(201,saveAdminPushSubscription(store,body));
+      }
+      if(path==='/admin/api/push/subscriptions/cancel'&&req.method==='POST')return send(200,removeAdminPushSubscription(store,body));
       if(path==='/admin/api/activity'&&req.method==='GET'){
         const q=new URL(req.url,origin).searchParams;
         return send(200,activityData(store,{before:q.has('before')?Number(q.get('before')):Infinity,category:q.get('category')??'all',source:q.get('source')??'all',period:q.get('period')??'day',from:q.get('from'),to:q.get('to'),queueState:q.get('queueState')??'all'}));

@@ -9,7 +9,7 @@ export const hash=value=>createHash('sha256').update(typeof value==='string'?val
 export function jobBudget(kind,payload,event){
   // Delivery has no model or search cost. It must not wait behind a finished
   // archive campaign after an approved incident has already been published.
-  const campaignId=['recheck','push'].includes(kind)||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
+  const campaignId=['recheck','push','admin-push-ready'].includes(kind)||payload.budgetScope==='daily'?null:payload.campaignId??event?.campaign_id??null;
   return {campaignId,budgetScope:campaignId?'archive':'daily'};
 }
 export class Store {
@@ -44,6 +44,8 @@ export class Store {
       CREATE TABLE IF NOT EXISTS site_translations(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,payload TEXT NOT NULL,created_at TEXT NOT NULL,PRIMARY KEY(event_id,revision));
       CREATE TABLE IF NOT EXISTS push_subscriptions(endpoint TEXT PRIMARY KEY,p256dh TEXT NOT NULL,auth TEXT NOT NULL,locale TEXT NOT NULL CHECK(locale IN ('ru','en','hu')),severity TEXT NOT NULL DEFAULT 'all' CHECK(severity IN ('all','serious','fatal')),cities TEXT NOT NULL DEFAULT '["Budapest"]',created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS push_deliveries(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,endpoint TEXT NOT NULL,delivered_at TEXT NOT NULL,PRIMARY KEY(event_id,revision,endpoint));
+      CREATE TABLE IF NOT EXISTS admin_push_subscriptions(endpoint TEXT PRIMARY KEY,p256dh TEXT NOT NULL,auth TEXT NOT NULL,locale TEXT NOT NULL CHECK(locale IN ('ru','en','hu')),created_at TEXT NOT NULL,updated_at TEXT NOT NULL);
+      CREATE TABLE IF NOT EXISTS admin_push_deliveries(event_id INTEGER NOT NULL,revision INTEGER NOT NULL,endpoint TEXT NOT NULL,delivered_at TEXT NOT NULL,PRIMARY KEY(event_id,revision,endpoint));
       CREATE TABLE IF NOT EXISTS geocode_cache(query_key TEXT PRIMARY KEY,payload TEXT NOT NULL,created_at TEXT NOT NULL);
       CREATE TABLE IF NOT EXISTS service_limits(service TEXT PRIMARY KEY,next_at INTEGER NOT NULL);
       CREATE TABLE IF NOT EXISTS archive_pages(campaign_id TEXT NOT NULL,source_id TEXT NOT NULL,url TEXT NOT NULL,earliest TEXT,latest TEXT,found INTEGER NOT NULL,filtered INTEGER NOT NULL,scanned_at TEXT NOT NULL,PRIMARY KEY(campaign_id,url));

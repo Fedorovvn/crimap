@@ -7,11 +7,12 @@ import {setEditorialMark} from '../admin-actions.mjs';
 import {matchCandidates} from '../dedup.mjs';
 import {filterEvents,normalizeFilters} from '../admin/filters.mjs';
 const day='2026-09-20T00:00:00+02:00';
+const fresh=()=>new Date().toISOString();
 const event={title:'Man stabbed aboard Budapest tram',summary:'A man was stabbed at Wesselényi utca.',type:'assault',status:'investigating',occurredAt:null,timePrecision:'unknown',location:{city:'Budapest',label:'Wesselényi utca',precision:'street'},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:[]};
 function seed(s,text='A man was stabbed at Wesselényi utca.'){
-  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('test','2026-09-26',JSON.stringify(event));
-  const d=s.saveDocument({url:'https://www.police.hu/test',sourceId:'police-brfk',sourceKind:'official',title:event.title,text,publishedAt:'2026-09-26T12:00:00Z'});
-  s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(1,?,?,?,?)').run(d.id,d.contentHash,'{}','2026-09-26');return d;
+  s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical) VALUES(1,?,?,?)').run('test',fresh(),JSON.stringify(event));
+  const d=s.saveDocument({url:'https://www.police.hu/test',sourceId:'police-brfk',sourceKind:'official',title:event.title,text,publishedAt:fresh()});
+  s.db.prepare('INSERT INTO observations(event_id,document_id,content_hash,extracted,created_at) VALUES(1,?,?,?,?)').run(d.id,d.contentHash,'{}',fresh());return d;
 }
 const unknown={occurredAt:null,timePrecision:'unknown',documentId:null,quote:'',reason:'Дата происшествия не указана'};
 test('date result needs a source quote and supported precision; future dates are rejected',()=>{

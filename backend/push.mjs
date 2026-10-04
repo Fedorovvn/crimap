@@ -45,7 +45,7 @@ export function normalizePushSubscription(raw) {
   return {endpoint,p256dh,auth,locale:locales.has(raw.locale)?raw.locale:'ru',severity,cities:normalizeCities(raw.cities)};
 }
 
-function normalizePushEndpoint(value) {
+export function normalizePushEndpoint(value) {
   const endpoint=typeof value==='string'&&value.length<=2048?value:'';
   let parsed;try { parsed=new URL(endpoint); } catch { throw new Error('Invalid push endpoint'); }
   if (parsed.protocol!=='https:' || !parsed.hostname) throw new Error('Invalid push endpoint');

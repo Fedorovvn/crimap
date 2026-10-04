@@ -42,3 +42,15 @@ test('automatic publication is limited to assaults and fatal outcomes',()=>{
   assert.equal(qualifiesForAutoPublication({type:'traffic-accident',signals:['death']}),true);
   assert.equal(qualifiesForAutoPublication({type:'traffic-accident',signals:['injury']}),false);
 });
+
+test('a Pro-approved nonfatal robbery queues an editor notice instead of auto-publication',()=>{
+ const store=new Store(':memory:');
+ try{
+  const robbery={...event,type:'robbery',signals:['suspect-detained']};
+  store.db.prepare('INSERT INTO events(id,slug,first_seen_at,occurred_at,canonical) VALUES(1,?,?,?,?)').run('manual-robbery',now,now,JSON.stringify(robbery));
+  const pipeline=new Pipeline(store,{autoPublish:true});
+  assert.equal(pipeline.queueAutoPublication(1,1),false);
+  assert.equal(pipeline.queueEditorialReadyNotice(1,1),true);
+  assert.equal(store.db.prepare("SELECT state FROM jobs WHERE kind='admin-push-ready' AND job_key='1:1'").get().state,'queued');
+ }finally{store.close();}
+});

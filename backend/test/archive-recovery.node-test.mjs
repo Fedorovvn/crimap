@@ -5,7 +5,7 @@ import {Pipeline} from '../pipeline.mjs';
 import {recoverArchive} from '../archive-recovery.mjs';
 const campaign=s=>s.db.prepare('INSERT INTO campaigns(id,from_date,to_date,budget_usd,created_at) VALUES(?,?,?,?,?)').run('archive','2026-07-01','2026-09-26',15,'2026-09-26');
 const event={title:'Robbery in Budapest',summary:'Police reported a robbery in Budapest.',type:'robbery',status:'investigating',occurredAt:'2026-09-20T12:00:00Z',timePrecision:'day',location:{city:'Budapest',label:'Budapest',precision:'city',latitude:47.5,longitude:19.05},signals:[],caseReferences:[],participants:[],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','occurredAt'].map(field=>({field,documentId:'1',quote:'Police reported a robbery in Budapest.'}))};
-function seed(s,id=1){s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,campaign_id) VALUES(?,?,?,?,?)').run(id,'test-'+id,'2026-09-26',JSON.stringify(event),'archive');}
+function seed(s,id=1){s.db.prepare('INSERT INTO events(id,slug,first_seen_at,canonical,campaign_id) VALUES(?,?,?,?,?)').run(id,'test-'+id,new Date().toISOString(),JSON.stringify(event),'archive');}
 
 test('final editing keeps retrying after the archive attempt cap without rejecting the article',async()=>{
  const s=new Store(':memory:');try{

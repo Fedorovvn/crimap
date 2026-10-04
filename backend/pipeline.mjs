@@ -25,6 +25,7 @@ import {correctFinalTranslations} from './final-corrections.mjs';
 import {comparePublicationUpdate,currentUpdateAssessment} from './update-comparison.mjs';
 import {publish} from './publish.mjs';
 import {sendPublishedPushes} from './push.mjs';
+import {sendAdminReadyPushes} from './admin-push.mjs';
 import {needsFatalityConfirmation,TRAFFIC_POLICY} from './traffic-policy.mjs';
 
 const iso=()=>new Date().toISOString();
@@ -374,6 +375,15 @@ export class Pipeline {
     this.store.log('auto-publication-queued',id,{revision,reason:event.canonical.type==='assault'?'assault':'fatal outcome'});
     return true;
   }
+  queueEditorialReadyNotice(id,revision){
+    const event=this.store.event(id);
+    // The owner needs an action only for a first publication that was reviewed
+    // successfully but deliberately falls outside the automatic rule.
+    if(!event||event.public_id||qualifiesForAutoPublication(event.canonical))return false;
+    this.store.enqueue('admin-push-ready',`${id}:${revision}`,{eventId:id,revision,budgetScope:'daily'});
+    this.store.log('admin-push-queued',id,{revision});
+    return true;
+  }
   publishAutomatically(id,revision){
     this.ensureActive(id);
     const event=this.store.event(id);
@@ -554,7 +564,10 @@ export class Pipeline {
       this.store.log('pro-final-editor',id,{revision:nextRevision,verdict:result.verdict,changed:nextRevision!==event.revision});
     });
     recordRequests(this.store,result.requests,{eventId:id,revision:nextRevision,model:this.reviewer.model});
-    if(final.review.verdict==='pass')this.queueAutoPublication(id,nextRevision);
+    if(final.review.verdict==='pass'){
+      this.queueAutoPublication(id,nextRevision);
+      this.queueEditorialReadyNotice(id,nextRevision);
+    }
     return final.review;
   }
   async repair(id,revision){
@@ -638,6 +651,7 @@ export class Pipeline {
       else if(job.kind==='review')await this.review(job.payload.eventId,job.payload.revision);
       else if(job.kind==='publish')await this.publishAutomatically(job.payload.eventId,job.payload.revision);
       else if(job.kind==='push')await sendPublishedPushes(this.store,job.payload);
+      else if(job.kind==='admin-push-ready')await sendAdminReadyPushes(this.store,job.payload);
       else if(job.kind==='recheck')next=await this.recheck(job.payload.eventId);
       else throw new Error('Unknown job kind');
       this.store.finish(job,next);
