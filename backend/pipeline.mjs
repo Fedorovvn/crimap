@@ -6,7 +6,7 @@ import {completeDetails,detailFingerprint,validateLegalLinks} from './details.mj
 import {retainLocationCoordinates} from './map-surfaces.mjs';
 import { readFileSync,existsSync } from 'node:fs';
 import { DatabaseSync } from 'node:sqlite';
-import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyTranslation } from './contract.mjs';
+import { eventSchema, extractionSchema, validateEvidence, translationStrings, applyEnglishCanonical, applyTranslation } from './contract.mjs';
 import { hash,jobBudget } from './store.mjs';
 import { nextCheck, nextPendingFactCheck, intervalFor, retryDelay } from './scheduler.mjs';
 import {discoverFeed,syncDiscoverySources} from './discovery.mjs';
@@ -80,6 +80,14 @@ export class Pipeline {
     validateLegalLinks(event);
     for(const image of event.media){if(!documents.some(d=>d.url===image.sourceUrl&&d.imageUrls.includes(image.imageUrl)))throw new Error('Image not present in source');image.rights='unknown';}
     return event;
+  }
+  async validateEnglishCanonical(event,documents){
+    try{return this.validate(event,documents);}
+    catch(error){
+      if(error.message!=='Canonical title, summary, labels, notes and update text MUST be written in ENGLISH, not copied in Hungarian. Only evidence quotes and proper names stay Hungarian.')throw error;
+      const translated=await this.model.json('canonical-english',{strings:translationStrings(event)},{maxTokens:3000,validate:raw=>applyEnglishCanonical(event,raw)});
+      return this.validate(translated,documents);
+    }
   }
   ensureActive(id=this.activeJob?.payload.eventId){
     const blocked=id&&this.store.event(id)?.editorial_mark==='uninteresting';
@@ -191,11 +199,16 @@ export class Pipeline {
       return {documentId:doc.id,events:events.length,deferredDate:events.length};
     }
     const input={schema:this.schema,focusIncidents,documents:[doc],firstSeenAt:iso(),verifiedLawCatalog:deferredTraffic?[]:this.laws,...(deferredTraffic?{mode:'deferred-traffic-minimal'}:{})};
-    const options={validate:raw=>{const parsed=extractionSchema.parse(raw);parsed.events=parsed.events.map(e=>this.validate(e,[doc]));checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
+    // Cache the schema-valid extraction before display-language repair. Some Hungarian
+    // reports make Flash mirror prose in Hungarian despite the extraction prompt; a
+    // narrow second Flash call translates only public canonical strings and leaves
+    // original evidence untouched.
+    const options={validate:raw=>{const parsed=extractionSchema.parse(raw);checkReview({verdict:'pass',summary:'Extraction suggestions',issues:[],requests:parsed.requests},[doc]);return parsed;}};
     const result=await this.model.json('extract',input,options),extractionModel=this.model.model;
     this.ensureActive();
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
-    const extracted=result.events.filter(e=>e.type!=='missing-person').map(event=>this.validate(event,[doc]));
+    const extracted=[];
+    for(const event of result.events)if(event.type!=='missing-person')extracted.push(await this.validateEnglishCanonical(event,[doc]));
     events.push(...extracted);
     for(const event of extracted){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&extracted.length===1?identityTargets[0]:undefined});firstId??=id;}
     if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
@@ -657,6 +670,9 @@ export class Pipeline {
       this.store.finish(job,next);
       this.archive?.settle();
     }catch(e){
+      if(job.kind==='article'&&/^Source HTTP (404|410)$/.test(e.message)){
+        this.store.finish(job);this.store.log('source-unavailable',job.id,{url:job.payload.url,status:Number(e.message.match(/\d+/)?.[0])});return true;
+      }
       if(e.code==='TRAFFIC_PENDING'){this.store.log('traffic-work-held',job.payload.eventId,{kind:job.kind});return true;}
       if(e.code==='DATE_PENDING'){this.store.log('date-hold',job.payload.eventId,{kind:job.kind});return true;}
       if(e.code==='EDITORIAL_STOP'||(job.payload.eventId&&this.store.event(job.payload.eventId)?.editorial_mark==='uninteresting')){this.store.log('editorial-work-stopped',job.payload.eventId,{kind:job.kind});this.archive?.settle();return true;}

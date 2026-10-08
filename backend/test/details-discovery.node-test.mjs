@@ -2,11 +2,18 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {Store} from '../store.mjs';
 import {discoverFeed} from '../discovery.mjs';
-import {completeDetails,validateLegalLinks,detailFingerprint,normalizeDetailLanguage,validateDetailLanguage} from '../details.mjs';
+import {completeDetails,validateLegalLinks,detailFingerprint,normalizeDetailEvidencePaths,normalizeDetailLanguage,validateDetailLanguage} from '../details.mjs';
 import {eventSchema,validateEvidence} from '../contract.mjs';
 const feed={url:'https://www.police.hu/hu/rss/feed',sourceId:'police-national'};
 const now=new Date('2026-09-27T12:00:00Z');
 const started=new Date('2026-09-27T09:00:00Z');
+test('detail evidence accepts participant keys and unknown status without inventing procedural proof',()=>{
+ const result=normalizeDetailEvidencePaths({participants:[{key:'unknown-perpetrators'}],evidence:[{field:'participants[unknown-perpetrators].note'},{field:'participants.unknown-perpetrators'}]});
+ assert.deepEqual(result.evidence.map(e=>e.field),['participants.0.note','participants.0']);
+ const quote='Unknown persons broke into the building.';
+ const event={title:'Break-in',summary:quote,type:'robbery',status:'reported',occurredAt:null,timePrecision:'unknown',location:{city:'Budapest',label:'Test utca',precision:'street'},signals:[],caseReferences:[],participants:[{key:'unknown-perpetrators',role:'suspect',label:'Unknown perpetrators',status:'unknown',profile:{kind:'group'},sourceUrl:'https://www.police.hu/test',sourceLabel:'police.hu',asOf:now.toISOString()}],context:[],legal:[],updates:[],media:[],evidence:['title','summary','type','status','location','participants.0'].map(field=>({field,documentId:'1',quote}))};
+ assert.ok(validateEvidence(eventSchema.parse(event),[{id:'1',url:'https://www.police.hu/test',sourceKind:'official',text:quote,imageUrls:[]}]));
+});
 test('detail prose uses English while Hungarian proper names and evidence remain allowed',()=>{
  const response={participants:[{note:'Police detained the man near Wesselényi utca.'}],context:[],legal:[],evidence:[{quote:'A férfit elfogták és előállították.'}]};
  validateDetailLanguage(response);

@@ -49,7 +49,7 @@ export function validateEvidence(event,documents){
   const required=['title','summary','type','location','status'];
   if(event.signals.length)required.push('signals');
   for(const list of ['participants','updates','context','legal'])event[list].forEach((_,i)=>required.push(`${list}.${i}`));
-  event.participants.forEach((p,i)=>{required.push(`participants.${i}.status`);if(p.profile.kind==='person')for(const k of ['name','age','gender','citizenship'])if(p.profile[k]!==undefined)required.push(`participants.${i}.profile.${k}`);});
+  event.participants.forEach((p,i)=>{if(p.status!=='unknown')required.push(`participants.${i}.status`);if(p.profile.kind==='person')for(const k of ['name','age','gender','citizenship'])if(p.profile[k]!==undefined)required.push(`participants.${i}.profile.${k}`);});
   for(const field of required)if(!event.evidence.some(e=>e.field===field||e.field.startsWith(field+'.')))throw new Error(`Missing evidence: ${field}`);
   if(event.occurredAt&&!event.evidence.some(e=>e.field==='occurredAt'))throw new Error('Missing occurrence-time evidence');
   for(let i=0;i<event.participants.length;i++)if(!event.evidence.some(e=>e.field===`participants.${i}`||e.field.startsWith(`participants.${i}.`)))throw new Error('Participant needs evidence');
@@ -72,6 +72,18 @@ export function translationStrings(event){
   }
   walk(event);return result;
 }
+export function applyEnglishCanonical(event,payload){
+  const strings=z.object({strings:z.record(z.string().max(12000))}).strict().parse(payload).strings, expected=translationStrings(event);
+  if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(expected).sort()))throw new Error('English canonical paths do not match');
+  const copy=structuredClone(event);
+  for(const [path,value] of Object.entries(strings)){
+    const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(x=>x.replace(',','.')).sort().join('|');
+    if(!value.trim()||numbers(value)!==numbers(expected[path]))throw new Error(`English canonical changed numbers at ${path}: preserve digit tokens [${numbers(expected[path])}], received [${numbers(value)}].`);
+    const parts=path.split('.');let parent=copy;for(const part of parts.slice(0,-1))parent=parent[part];parent[parts.at(-1)]=value;
+  }
+  return eventSchema.parse(copy);
+}
+
 export function applyTranslation(event,payload,{draft=false}={}){
   const {strings}=translationSchema.parse(payload), expected=translationStrings(event);
   if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(expected).sort()))throw new Error('Translation paths do not match');

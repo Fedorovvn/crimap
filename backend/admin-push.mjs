@@ -29,16 +29,20 @@ export async function sendAdminReadyPushes(store,{eventId,revision},{send=webpus
   if(!russian)throw new Error('Ready editor push requires Russian card');
   const card=JSON.parse(russian.payload),subscriptions=store.db.prepare('SELECT endpoint,p256dh,auth,locale FROM admin_push_subscriptions').all();
   const delivered=new Set(store.db.prepare('SELECT endpoint FROM admin_push_deliveries WHERE event_id=? AND revision=?').all(eventId,revision).map(row=>row.endpoint));
-  let sent=0,removed=0,failed=0;
+  let sent=0,removed=0,failed=0;const failures=[];
   await Promise.all(subscriptions.filter(s=>!delivered.has(s.endpoint)).map(async subscription=>{
     const locale=labels[subscription.locale]??labels.ru;
     const payload=JSON.stringify({title:locale.ready,body:String(card.title??'Crime Map').slice(0,220),kind:'editorial',url:`/admin/?event=${eventId}`,tag:`admin-ready-${eventId}-${revision}`});
     try{
       await send({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth}},payload,{TTL:3600,urgency:'high',topic:`admin-ready-${eventId}-${revision}`,vapidDetails:{subject:config.subject,publicKey:config.publicKey,privateKey:config.privateKey}});
       store.db.prepare('INSERT OR IGNORE INTO admin_push_deliveries(event_id,revision,endpoint,delivered_at) VALUES(?,?,?,?)').run(eventId,revision,subscription.endpoint,new Date().toISOString());sent++;
-    }catch(error){if([404,410].includes(error.statusCode)){store.db.prepare('DELETE FROM admin_push_subscriptions WHERE endpoint=?').run(subscription.endpoint);removed++;}else failed++;}
+    }catch(error){
+      const status=Number(error.statusCode)||null;
+      if([404,410].includes(status)){store.db.prepare('DELETE FROM admin_push_subscriptions WHERE endpoint=?').run(subscription.endpoint);removed++;}
+      else {failed++;failures.push({status,code:typeof error.code==='string'?error.code:null,message:String(error.message??'Push provider error').slice(0,180)});}
+    }
   }));
-  store.log('admin-push-delivery',eventId,{revision,subscriptions:subscriptions.length,alreadyDelivered:delivered.size,sent,removed,failed});
+  store.log('admin-push-delivery',eventId,{revision,subscriptions:subscriptions.length,alreadyDelivered:delivered.size,sent,removed,failed,failures});
   if(failed&&!sent)throw new Error('Admin push delivery failed');
   return {sent,removed,failed};
 }

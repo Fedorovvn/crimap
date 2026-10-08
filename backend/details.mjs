@@ -32,6 +32,15 @@ export function validateDetailLanguage(result){
   }
 }
 export function detailFingerprint(event,documents,laws){return hash({version:2,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
+export function normalizeDetailEvidencePaths(result){
+  const index=new Map(result.participants.map((participant,i)=>[participant.key,String(i)]));
+  result.evidence=result.evidence.map(e=>{
+    const match=String(e.field).match(/^participants(?:\[([a-z0-9_-]+)\]|\.([a-z][a-z0-9_-]*))(\..*)?$/i);
+    const key=match?.[1]??match?.[2],number=key&&index.get(key);
+    return number===undefined?e:{...e,field:`participants.${number}${match[3]??''}`};
+  });
+  return result;
+}
 export function validateLegalLinks(event){
   for(const law of event.legal){const p=event.participants.find(p=>p.key===law.participantKey);if(!p||!['suspect','convicted'].includes(p.role))throw new Error('Legal assessment must reference its supported suspect/convicted participantKey; never attach a charge to a victim or all suspects indiscriminately');
     if(p.profile.kind==='person'&&(p.profile.age!==undefined?p.profile.age<18:p.profile.ageGroup==='child'))throw new Error('Adult catalog sanctions cannot be assigned to a minor; request a verified juvenile-law mapping');
@@ -39,7 +48,7 @@ export function validateLegalLinks(event){
 }
 export async function completeDetails(model,event,documents,laws,validate){
   const raw=await model.json('details',{schema:zodToJsonSchema(detailsSchema),event,documents,verifiedLawCatalog:laws},{maxTokens:10000,validate:raw=>{
-    const result=normalizeDetailLanguage(detailsSchema.parse(raw));
+    const result=normalizeDetailEvidencePaths(normalizeDetailLanguage(detailsSchema.parse(raw)));
     validateDetailLanguage(result);
     // Some responses echo source evidence from the input. Only the replacement
     // fields belong to this stage; original evidence for other fields stays intact.
