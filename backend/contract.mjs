@@ -77,7 +77,10 @@ export function applyEnglishCanonical(event,payload){
   if(JSON.stringify(Object.keys(strings).sort())!==JSON.stringify(Object.keys(expected).sort()))throw new Error('English canonical paths do not match');
   const copy=structuredClone(event);
   for(const [path,value] of Object.entries(strings)){
-    const numbers=s=>(s.match(/\d+(?:[.,]\d+)?/g)??[]).map(x=>x.replace(',','.')).sort().join('|');
+    // English prose may render a Hungarian whole-hour expression (20 órakor)
+    // as 20:00. The added zero minutes carry no new numeric fact; all other
+    // numeric tokens remain exact.
+    const numbers=s=>(s.replace(/\b(\d{1,2}):00\b/g,'$1').match(/\d+(?:[.,]\d+)?/g)??[]).map(x=>x.replace(',','.')).sort().join('|');
     if(!value.trim()||numbers(value)!==numbers(expected[path]))throw new Error(`English canonical changed numbers at ${path}: preserve digit tokens [${numbers(expected[path])}], received [${numbers(value)}].`);
     const parts=path.split('.');let parent=copy;for(const part of parts.slice(0,-1))parent=parent[part];parent[parts.at(-1)]=value;
   }
