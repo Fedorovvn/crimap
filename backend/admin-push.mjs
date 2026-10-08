@@ -34,7 +34,7 @@ export async function sendAdminReadyPushes(store,{eventId,revision},{send=webpus
     const locale=labels[subscription.locale]??labels.ru;
     const payload=JSON.stringify({title:locale.ready,body:String(card.title??'Crime Map').slice(0,220),kind:'editorial',url:`/admin/?event=${eventId}`,tag:`admin-ready-${eventId}-${revision}`});
     try{
-      await send({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth}},payload,{TTL:3600,urgency:'high',topic:`admin-ready-${eventId}-${revision}`,vapidDetails:{subject:config.subject,publicKey:config.publicKey,privateKey:config.privateKey}});
+      await send({endpoint:subscription.endpoint,keys:{p256dh:subscription.p256dh,auth:subscription.auth}},payload,{TTL:3600,urgency:'high',vapidDetails:{subject:config.subject,publicKey:config.publicKey,privateKey:config.privateKey}});
       store.db.prepare('INSERT OR IGNORE INTO admin_push_deliveries(event_id,revision,endpoint,delivered_at) VALUES(?,?,?,?)').run(eventId,revision,subscription.endpoint,new Date().toISOString());sent++;
     }catch(error){
       const status=Number(error.statusCode)||null;
