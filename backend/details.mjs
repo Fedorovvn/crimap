@@ -33,11 +33,17 @@ export function validateDetailLanguage(result){
 }
 export function detailFingerprint(event,documents,laws){return hash({version:2,title:event.title,summary:event.summary,type:event.type,participants:event.participants,context:event.context,legal:event.legal,documents:documents.map(d=>({id:d.id,hash:d.contentHash??hash(d.text)})),laws});}
 export function normalizeDetailEvidencePaths(result){
-  const index=new Map(result.participants.map((participant,i)=>[participant.key,String(i)]));
-  result.evidence=result.evidence.map(e=>{
-    const match=String(e.field).match(/^participants(?:\[([a-z0-9_-]+)\]|\.([a-z][a-z0-9_-]*))(\..*)?$/i);
+  const normalize=(field,collection,keys)=>{
+    const index=new Map(keys.map((key,i)=>[key,String(i)]));
+    const match=String(field).match(new RegExp(`^${collection}(?:\\[([a-z0-9_-]+)\\]|\\.([a-z][a-z0-9_-]*))(\\..*)?$`,'i'));
     const key=match?.[1]??match?.[2],number=key&&index.get(key);
-    return number===undefined?e:{...e,field:`participants.${number}${match[3]??''}`};
+    return number===undefined?field:`${collection}.${number}${match[3]??''}`;
+  };
+  result.evidence=result.evidence.map(e=>{
+    let field=normalize(e.field,'participants',result.participants.map(p=>p.key));
+    field=normalize(field,'context',result.context.map(c=>c.key));
+    field=normalize(field,'legal',result.legal.map(l=>l.participantKey));
+    return field===e.field?e:{...e,field};
   });
   return result;
 }
