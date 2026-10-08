@@ -191,7 +191,7 @@ export class Pipeline {
     // date. Updates to an existing incident still use extraction: they may be
     // exactly the article that supplies the missing date or new facts.
     for(const brief of undatedNew){
-      const id=await this.upsert(this.validate(provisionalEvent(brief,doc),[doc]),doc);
+      const id=await this.upsert(await this.validateEnglishCanonical(provisionalEvent(brief,doc),[doc]),doc);
       firstId??=id;events.push(this.store.event(id).canonical);
     }
     if(focusIncidents?.length===0){

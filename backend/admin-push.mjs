@@ -39,7 +39,7 @@ export async function sendAdminReadyPushes(store,{eventId,revision},{send=webpus
     }catch(error){
       const status=Number(error.statusCode)||null;
       if([404,410].includes(status)){store.db.prepare('DELETE FROM admin_push_subscriptions WHERE endpoint=?').run(subscription.endpoint);removed++;}
-      else {failed++;failures.push({status,code:typeof error.code==='string'?error.code:null,message:String(error.message??'Push provider error').slice(0,180)});}
+      else {failed++;failures.push({status,code:typeof error.code==='string'?error.code:null,message:String(error.message??'Push provider error').slice(0,180),providerBody:String(error.body??'').slice(0,300)});}
     }
   }));
   store.log('admin-push-delivery',eventId,{revision,subscriptions:subscriptions.length,alreadyDelivered:delivered.size,sent,removed,failed,failures});
