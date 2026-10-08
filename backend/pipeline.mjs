@@ -208,7 +208,15 @@ export class Pipeline {
     this.ensureActive();
     // Validate every result before any event mutation: malformed multi-event responses are atomic failures.
     const extracted=[];
-    for(const event of result.events)if(event.type!=='missing-person')extracted.push(await this.validateEnglishCanonical(event,[doc]));
+    for(const event of result.events)if(event.type!=='missing-person'){
+      try{extracted.push(await this.validateEnglishCanonical(event,[doc]));}
+      catch(error){
+        // A mixed regional article may mention a non-Budapest incident alongside
+        // an in-scope story. Discard only that event; do not retry the entire URL.
+        if(error.message==='Outside Budapest scope'){this.store.log('incident-outside-scope',doc.id,{title:event.title,url:doc.url});continue;}
+        throw error;
+      }
+    }
     events.push(...extracted);
     for(const event of extracted){const id=await this.upsert(event,doc,{confirmedTarget:focusIncidents?.length===1&&extracted.length===1?identityTargets[0]:undefined});firstId??=id;}
     if(firstId&&result.requests?.length)recordRequests(this.store,result.requests,{eventId:firstId,revision:this.store.event(firstId).revision,model:extractionModel});
